@@ -1,0 +1,49 @@
+============================================================
+  HDZ STUDIO — Herramientas de terceros y sus licencias
+============================================================
+
+HDZ Studio usa (y el instalador descarga) estas herramientas
+externas. Cada una es propiedad de sus autores y se distribuye
+bajo su propia licencia. Se incluyen aquí los datos y enlaces;
+al redistribuirlas, conserva sus avisos de licencia.
+
+------------------------------------------------------------
+FFmpeg (ffmpeg.exe, ffprobe.exe)
+  Licencia : GPL/LGPL (según el build; el de BtbN es GPL)
+  Fuente   : https://ffmpeg.org/   |   builds: https://github.com/BtbN/FFmpeg-Builds
+  Licencia : https://www.ffmpeg.org/legal.html
+
+MKVToolNix (mkvmerge.exe, mkvextract.exe, mkvpropedit.exe)
+  Autor    : Moritz Bunkus
+  Licencia : GPLv2
+  Fuente   : https://mkvtoolnix.download/
+  Licencia : https://gitlab.com/mbunkus/mkvtoolnix/-/blob/main/COPYING
+
+MediaInfo (MediaInfo.exe, CLI)
+  Autor    : MediaArea.net
+  Licencia : BSD-2-Clause
+  Fuente   : https://mediaarea.net/en/MediaInfo
+  Licencia : https://mediaarea.net/en/MediaInfo/License
+
+dovi_tool (dovi_tool.exe)
+  Autor    : quietvoid
+  Licencia : MIT
+  Fuente   : https://github.com/quietvoid/dovi_tool
+  Licencia : https://github.com/quietvoid/dovi_tool/blob/main/LICENSE
+
+PowerShell 7 (runtime)
+  Autor    : Microsoft
+  Licencia : MIT
+  Fuente   : https://github.com/PowerShell/PowerShell
+
+7-Zip / 7zr.exe (solo usado por el instalador para extraer el
+  paquete .7z de MKVToolNix)
+  Autor    : Igor Pavlov
+  Licencia : LGPL (7zr es freeware redistribuible)
+  Fuente   : https://www.7-zip.org/
+
+------------------------------------------------------------
+Todas permiten la redistribución manteniendo sus avisos de
+licencia. Si distribuyes el bundle con los .exe ya incluidos en
+"bin", incluye también este fichero (y, recomendable, una copia
+de cada licencia completa).

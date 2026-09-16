@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 com desktop4 desktop5 rescap">
+  <Identity
+    Name="HDZEROStudio.ContextMenu"
+    Publisher="CN=HD ZERO Studio"
+    Version="1.16.32.0"
+    ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>HD ZERO Studio</DisplayName>
+    <PublisherDisplayName>HD ZERO Studio</PublisherDisplayName>
+    <Logo>HDZStudio.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26200.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="es-es" />
+  </Resources>
+  <Applications>
+    <Application
+      Id="HDZStudio"
+      Executable="instalacion\Salida\HD ZERO Studio.exe"
+      uap10:TrustLevel="mediumIL"
+      uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements
+        DisplayName="HD ZERO Studio"
+        Description="HD ZERO Studio"
+        BackgroundColor="#0C0C0F"
+        Square150x150Logo="HDZStudio.png"
+        Square44x44Logo="HDZStudio.png" />
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="HD ZERO Studio context menu">
+              <com:Class
+                Id="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D"
+                Path="modern-menu\HDZStudioModernMenu.comhost.dll"
+                ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type=".mkv">
+              <desktop5:Verb Id="HDZStudioCapturasMkv" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".mp4">
+              <desktop5:Verb Id="HDZStudioCapturasMp4" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".avi">
+              <desktop5:Verb Id="HDZStudioCapturasAvi" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".mov">
+              <desktop5:Verb Id="HDZStudioCapturasMov" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".m4v">
+              <desktop5:Verb Id="HDZStudioCapturasM4v" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".ts">
+              <desktop5:Verb Id="HDZStudioCapturasTs" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".m2ts">
+              <desktop5:Verb Id="HDZStudioCapturasM2ts" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".webm">
+              <desktop5:Verb Id="HDZStudioCapturasWebm" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".wmv">
+              <desktop5:Verb Id="HDZStudioCapturasWmv" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".flv">
+              <desktop5:Verb Id="HDZStudioCapturasFlv" Clsid="1A5C3DBA-0D08-4F09-9A80-0B0B0C2C0B0D" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>

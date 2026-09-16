@@ -1,0 +1,81 @@
+============================================================
+  HDZ STUDIO — Instalación
+============================================================
+
+PARA EL USUARIO (instalar y usar)
+------------------------------------------------------------
+1. Descomprime TODA la carpeta del programa donde quieras
+   (por ejemplo en el Escritorio o en Documentos).
+2. Entra en la carpeta "instalacion".
+3. Doble clic en  ->  "Instalar HDZ Studio.cmd"
+   - Acepta el aviso de administrador (es para poder instalar
+     PowerShell 7 si te falta).
+   - Espera a que termine (descarga las herramientas; tarda
+     unos minutos la primera vez).
+4. Cuando acabe, abre "HDZ Studio" desde el acceso directo
+   que aparece en el Escritorio (o en el Menú Inicio).
+
+No necesitas tener NADA instalado previamente. El instalador
+deja todas las herramientas en la carpeta "bin" del programa
+y el programa usa ESAS, así que da igual lo que tengas en tu
+equipo (versiones viejas, sin PATH, etc.).
+
+Si algo no se pudiera instalar solo (por ejemplo sin internet),
+el instalador te dirá EXACTAMENTE qué descargar y dónde copiarlo.
+
+
+¿QUÉ INSTALA?
+------------------------------------------------------------
+En la carpeta "bin" del programa (portable, sin tocar el resto
+del sistema):
+  - ffmpeg.exe, ffprobe.exe         (FFmpeg)
+  - mkvmerge.exe, mkvextract.exe,
+    mkvpropedit.exe                 (MKVToolNix)
+  - MediaInfo.exe                   (MediaInfo CLI)
+  - dovi_tool.exe                   (dovi_tool)
+Y, si te falta, instala PowerShell 7 (el motor que necesita
+el programa) DESDE EL PROPIO PAQUETE (lleva el MSI en bin\, no
+necesita internet); si no estuviera, lo baja con winget o el
+instalador oficial.
+
+Crea además el acceso directo "HDZ Studio" (Escritorio y Menú
+Inicio) con su icono, que arranca el programa SIN ventana de
+consola.
+
+
+ACTUALIZACIONES
+------------------------------------------------------------
+El programa busca actualizaciones al abrirse y, si hay una nueva,
+te avisa para instalarla con un clic (descarga solo lo que cambió
+y se reabre solo). También puedes forzarlo con
+"Actualizar HDZ Studio.cmd".
+Requiere que el desarrollador haya configurado el repositorio en
+HDZ-update.config.json (ver PUBLICAR.txt). Si no, no pasa nada:
+simplemente no busca actualizaciones.
+
+
+DESINSTALAR
+------------------------------------------------------------
+Doble clic en "Desinstalar HDZ Studio.cmd": quita el acceso
+directo y el lanzador. Pregunta si quieres borrar también la
+carpeta "bin". NO toca PowerShell 7, ni los scripts, ni tus
+ajustes/credenciales.
+
+
+PARA EL DESARROLLADOR (notas)
+------------------------------------------------------------
+- "instalacion" debe ir DENTRO de la carpeta del programa
+  (junto a HDZ-GUI.ps1). El instalador detecta la carpeta del
+  programa subiendo un nivel.
+- ffmpeg y dovi_tool se resuelven solos a la última versión.
+  MKVToolNix y MediaInfo llevan la versión en la URL: si quieres
+  fijar otra, edita $verMkvtoolnix y $verMediaInfo al inicio de
+  Instalar-HDZStudio.ps1.
+- Bundle 100% offline: si metes tú los .exe en "bin" antes de
+  repartir, el instalador los detecta y NO descarga nada (solo
+  se ocupa de PowerShell 7 y del acceso directo).
+- Distribución: comprime la carpeta del programa entera (con
+  "instalacion" dentro) y repártela como ZIP. Para un instalador
+  .exe con desinstalador, está el script opcional de Inno Setup
+  (HDZStudio.iss) — ver comentarios dentro.
+- Licencias de las herramientas incluidas: ver LICENCIAS.txt.
