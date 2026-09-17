@@ -1,5 +1,5 @@
 #requires -Version 7.0
-# Subida compartida: preferencia, respaldo, verificación y reanudación.
+# Subida compartida: original directo, preferencia, respaldo y reanudación.
 function ConvertTo-HdzImageUrl([string]$Value) {
     $u=$null
     if (-not [Uri]::TryCreate($Value,[UriKind]::Absolute,[ref]$u) -or $u.Scheme -ne 'https' -or $u.UserInfo -or -not $u.IsDefaultPort -or $Value -match '[\[\]\x00-\x20]') { throw 'El servidor devolvió un enlace de imagen no válido.' }
@@ -7,6 +7,15 @@ function ConvertTo-HdzImageUrl([string]$Value) {
     if (-not @($allowed|Where-Object { $u.DnsSafeHost -eq $_ -or $u.DnsSafeHost.EndsWith('.'+$_) }).Count) { throw 'El servidor devolvió un dominio de imagen no reconocido.' }
     return $u.AbsoluteUri
 }
+# Comprobación local del enlace, sin solicitudes ni descarga de imágenes.
+function Assert-HdzDirectImageLink($Item) {
+    $Item.Full=ConvertTo-HdzImageUrl "$($Item.Full)"
+    $uri=[Uri]$Item.Full
+    if($uri.AbsolutePath -notmatch '(?i)\.(png|jpe?g)$' -or ($uri.Host -match '(^|\.)pixhost\.(to|cc)$' -and $uri.AbsolutePath -like '/show/*')) {
+        throw 'El servidor no devolvió un enlace directo al original PNG o JPEG.'
+    }
+}
+# Herramientas de diagnóstico explícito; no se usan durante una subida normal.
 function Get-HdzImageBytes([string]$Url) {
     $safe=ConvertTo-HdzImageUrl $Url
     $handler=[Net.Http.HttpClientHandler]::new()
@@ -92,7 +101,7 @@ function Invoke-HdzHostUpload([string]$Provider,[string]$Path,$Settings,[string]
             if((Get-Item -LiteralPath $Path -Force).Length -gt 10MB){throw 'Pixhost admite imágenes de hasta 10 MB; no se reducirá el original.'}
             $form=@{img=(Get-Item -LiteralPath $Path -Force);content_type='0';max_th_size='350';optimize_for_web='0'}
             $r=Invoke-RestMethod 'https://api.pixhost.to/images' -Method Post -Form $form -Headers @{Accept='application/json'} -TimeoutSec 60 -ErrorAction Stop
-            $item.Page=ConvertTo-HdzImageUrl "$($r.show_url)"; $item.Thumb=ConvertTo-HdzImageUrl "$($r.th_url)"
+            $item.Page=ConvertTo-HdzImageUrl "$($r.show_url)"; $item.Thumb="$($r.th_url)"
             # La API publica página y miniatura. Resolver la imagen desde la página,
             # sin inventar direcciones del CDN ni activar optimización con pérdida.
             $html=(Invoke-WebRequest $item.Page -TimeoutSec 25 -ErrorAction Stop).Content
@@ -139,9 +148,9 @@ function Invoke-HdzImageUploadBatch {
             if($CacheDirectory){$cachePath=Join-Path $CacheDirectory ($cacheKey+'.json')}
             if($cachePath -and (Test-Path -LiteralPath $cachePath)) {
                 try {
-                    if($Sync){$Sync.Fase="Comprobando captura ya subida $($items.Count+1)/$(@($Paths).Count)…";if($OnProgress){& $OnProgress $Sync}}
+                    if($Sync){$Sync.Fase="Recuperando enlace de captura ya subida $($items.Count+1)/$(@($Paths).Count)…";if($OnProgress){& $OnProgress $Sync}}
                     $saved=Get-Content -LiteralPath $cachePath -Raw|ConvertFrom-Json -AsHashtable
-                    Assert-HdzHostedImage $saved $expected
+                    Assert-HdzDirectImageLink $saved
                     $item=$saved; $item.Ruta=$path
                 } catch {$item=$null}
             }
@@ -152,8 +161,9 @@ function Invoke-HdzImageUploadBatch {
                         if($Sync){$Sync.Fase="Subiendo $($items.Count+1)/$(@($Paths).Count) · $provider (intento $attempt/2)"; if($OnProgress){& $OnProgress $Sync}}
                         try {
                             $candidate=Invoke-HdzHostUpload $provider $path $Settings $Title $context
-                            if($Sync){$Sync.Fase="Verificando original y miniatura $($items.Count+1)/$(@($Paths).Count) · $provider";if($OnProgress){& $OnProgress $Sync}}
-                            Assert-HdzHostedImage $candidate $expected
+                            # La API ya aceptó el original. No descargarlo de nuevo ni
+                            # exigir miniaturas: solo necesitamos su enlace directo.
+                            Assert-HdzDirectImageLink $candidate
                             $item=$candidate
                             if($provider -ne $Preferred){$events.Add("$([IO.Path]::GetFileName($path)): guardada en $provider (preferido: $Preferred).")}
                             break
@@ -170,7 +180,7 @@ function Invoke-HdzImageUploadBatch {
                     if($Sync){$Sync.Fase="$provider no disponible; probando otro servidor…"}
                 }
             }
-            if(-not $item){throw 'Ningún servidor disponible pudo alojar la captura con su calidad original. Las subidas completadas se conservan para reintentar.'}
+            if(-not $item){throw 'Ningún servidor disponible devolvió el enlace de la captura original. Las subidas completadas se conservan para reintentar.'}
             if($cachePath) {
                 $tmp=$cachePath+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
                 try {

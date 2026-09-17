@@ -67,7 +67,7 @@ try {
     $rc=Invoke-HdzImageUploadBatch -Paths $rutas -Preferred $hostType -Settings $settings -Title "$($request.GalleryTitle)" -Sync $state -OnProgress {param($s) Set-HdzUploadProgress $s}
     $items=@($rc.Items); $result.Aviso=$rc.Aviso; $result.Gal=$rc.Gal
     $state.Error=$rc.Error
-    $state.Fase=if($rc.Error){'Subida con capturas pendientes.'}else{'Subida verificada.'}
+    $state.Fase=if($rc.Error){'Subida con capturas pendientes.'}else{'Subida completada.'}
     Set-HdzUploadProgress $state
 } catch {
     $state.Error = "Error preparando la subida: $($_.Exception.Message)"

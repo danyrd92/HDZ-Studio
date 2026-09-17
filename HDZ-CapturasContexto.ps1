@@ -3,7 +3,7 @@
 # =========================================================================
 # La captura la genera Capturas-MenuContextual.ps1 con HDZ-Capturas.ps1. Este
 # módulo aporta la segunda mitad del flujo de HDZ Studio: miniaturas,
-# selección, subida asíncrona y copia de BBCode con miniaturas enlazadas.
+# selección, subida asíncrona y BBCode con el enlace directo al original.
 
 function Get-HdzContextUploadSettings {
     $r = [ordered]@{
@@ -74,7 +74,7 @@ $script:hdzContextUploadWorker = {
         $settings=@{ImgbbKey=$ImgbbKey;ImgboxUser=$ImgboxUser;ImgboxPass=$ImgboxPass}
         $result=Invoke-HdzImageUploadBatch -Paths $Rutas -Preferred $HostType -Settings $settings -Title $GalleryTitle -Sync $Sync
         $Sync.Items=$result.Items; $Sync.Error=$result.Error; $Sync.Aviso=$result.Aviso; $Sync.Gal=$result.Gal
-        $Sync.Fase=if($result.Error){'Subida con capturas pendientes.'}else{'Subida verificada.'}
+        $Sync.Fase=if($result.Error){'Subida con capturas pendientes.'}else{'Subida completada.'}
     } catch {$Sync.Error=$_.Exception.Message}
     finally {$Sync.Fin=$true}
 }
@@ -151,14 +151,14 @@ function Complete-HdzContextUploadUi {
 
     $resultItems = if ($Result -and $Result.Items) { @($Result.Items) } else { @() }
     foreach ($item in $resultItems) {
-        if (-not $item.Full -or -not $item.Thumb -or -not $item.Page) { continue }
+        if (-not $item.Full -or $item.Error) { continue }
         $rowFound = @($Context.Rows | Where-Object { "$($_.Ruta)" -eq "$($item.Ruta)" } | Select-Object -First 1)
         if ($rowFound.Count -gt 0) {
             $rowFound[0].Subida = "$($item.Full)"
             $rowFound[0].Thumb = "$($item.Thumb)"
             $rowFound[0].Page = "$($item.Page)"
             $rowFound[0].Bbcode = Get-HdzContextScreenshotBbcode -Full $rowFound[0].Subida
-            $rowFound[0].Estado.Text = '✓ PNG subida · miniatura rectangular 350 px'
+            $rowFound[0].Estado.Text = '✓ Original subido · enlace directo'
         }
     }
 
@@ -170,7 +170,7 @@ function Complete-HdzContextUploadUi {
     }
 
     $errorText = if ($Result -and $Result.Error) { "$($Result.Error)" } else { $FallbackError }
-    $ok = @($resultItems | Where-Object { $_.Full -and $_.Thumb -and $_.Page }).Count
+    $ok = @($resultItems | Where-Object { $_.Full -and -not $_.Error }).Count
     if ($errorText) {
         $Context.LblEstado.Text = "Subidas $ok de $($Context.Total). $errorText"
         Write-HdzContextUploadLog "FIN ERROR ok=$ok total=$($Context.Total) detalle=$errorText"
@@ -178,7 +178,7 @@ function Complete-HdzContextUploadUi {
         $Context.LblEstado.Text = "✓ $ok PNG subidas; BBCode listo. $($Result.Aviso)"
         Write-HdzContextUploadLog "FIN AVISO ok=$ok total=$($Context.Total)"
     } else {
-        $Context.LblEstado.Text = "✓ $ok PNG subidas a $($Context.UiState.Host); BBCode con miniaturas listo."
+        $Context.LblEstado.Text = "✓ $ok PNG subidas a $($Context.UiState.Host); BBCode con originales listo."
         Write-HdzContextUploadLog "FIN OK ok=$ok total=$($Context.Total)"
     }
 
@@ -374,10 +374,10 @@ function Show-HdzCaptureGrid {
     $lblVideo.Text = [System.IO.Path]::GetFileName($VideoPath)
     $lblTotal.Text = "$($safeCaptures.Count) imagen(es)"
     $hostOptions = @(
-        @{ V = 'FREEIMAGE'; T = 'freeimage.host · rectangular 350 px' },
-        @{ V = 'IMGBB';     T = 'imgbb · rectangular 350 px' },
-        @{ V = 'IMGBOX';    T = 'imgbox · rectangular 350 px' },
-        @{ V = 'PIXHOST';   T = 'Pixhost · 350 px · hasta 10 MB' }
+        @{ V = 'FREEIMAGE'; T = 'freeimage.host · original' },
+        @{ V = 'IMGBB';     T = 'imgbb · original' },
+        @{ V = 'IMGBOX';    T = 'imgbox · original' },
+        @{ V = 'PIXHOST';   T = 'Pixhost · original · hasta 10 MB' }
     )
     $uiState = [hashtable]::Synchronized(@{
         Host = $cfg.HostImg
@@ -468,7 +468,7 @@ function Show-HdzCaptureGrid {
                 $bordeImg.BorderBrush = $window.Resources['CardBorderBrush']
                 $bordeImg.Opacity = 0.45
             }
-            if ($rowRef.Bbcode) { $rowRef.Estado.Text = '✓ PNG subida · miniatura rectangular 350 px' } else { $rowRef.Estado.Text = '' }
+            if ($rowRef.Bbcode) { $rowRef.Estado.Text = '✓ Original subido · enlace directo' } else { $rowRef.Estado.Text = '' }
         }.GetNewClosure()
         & $pintar
         $bordeImg.Add_MouseLeftButtonUp({ $cb.IsChecked = -not $cb.IsChecked }.GetNewClosure())
@@ -481,9 +481,10 @@ function Show-HdzCaptureGrid {
         $seleccionadas = @($rows | Where-Object { $_.Check.IsChecked -eq $true })
         $pendientes = @($seleccionadas | Where-Object { -not $_.Subida })
         $hostText = switch ($uiState.Host) {
-            'IMGBB'  { if ($cfg.ImgbbKey) { 'imgbb · rectangular 350 px' } else { 'imgbb · falta la clave en Ajustes' } }
-            'IMGBOX' { 'imgbox · rectangular 350 px' }
-            default  { 'freeimage.host · rectangular 350 px' }
+            'IMGBB'  { if ($cfg.ImgbbKey) { 'imgbb · original' } else { 'imgbb · falta la clave en Ajustes' } }
+            'IMGBOX' { 'imgbox · original' }
+            'PIXHOST' { 'Pixhost · original' }
+            default  { 'freeimage.host · original' }
         }
         $lblSeleccion.Text = "$($seleccionadas.Count) de $($rows.Count) seleccionada(s) · $($pendientes.Count) pendiente(s)"
         $lblHost.Text = $hostText
