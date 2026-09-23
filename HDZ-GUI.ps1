@@ -1630,7 +1630,12 @@ $xaml = @'
                   <TextBlock x:Name="bdgLogos" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
                 <TextBlock Style="{StaticResource D}" Text="Logos disponibles en TMDB para este título. Clic en uno para ponerlo como primera línea de la descripción con [img=700]."/>
-                <Button x:Name="btnActualizarLogos" Style="{StaticResource Ghost}" Content="↻ Actualizar logos" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                <Grid Margin="0,10,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <Button x:Name="btnActualizarLogos" Style="{StaticResource Ghost}" Content="↻ Actualizar logos" VerticalAlignment="Center"/>
+                  <TextBox x:Name="txtLogoPersonalizado" Style="{StaticResource Input}" Grid.Column="2" Margin="0" VerticalAlignment="Center" ToolTip="URL HTTPS directa de una imagen PNG, JPEG o WebP"/>
+                  <Button x:Name="btnUsarLogoPersonalizado" Style="{StaticResource Ghost}" Grid.Column="4" Content="Añadir URL" VerticalAlignment="Center" ToolTip="Añade esta imagen como logo de la descripción"/>
+                </Grid>
                 <WrapPanel x:Name="panLogos" Margin="0,11,0,0"/>
               </StackPanel>
             </Border>
@@ -1993,7 +1998,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "btnNuevaSubida","panTabsSubida","scrTabs","btnTabIzq","btnTabDer",
           "upTitulo","upCategoria","upTipo","upResolucion","panTV","upTemporada","upEpisodio","upKeywords",
           "btnBuscarTmdb","panResultadosTmdb","upTmdb","upImdb","upTvdb","upMal",
-          "cardLogos","bdgLogos","panLogos","btnActualizarLogos",
+          "cardLogos","bdgLogos","panLogos","btnActualizarLogos","txtLogoPersonalizado","btnUsarLogoPersonalizado",
           "bdgCapturas","btnCapColapsar","panCapturas","btnCapTodas","btnCapNinguna","btnCapInsertar","btnCapAnadir","btnCapGenerar","cmbNumCapturas",
           "upDescripcion","upMediainfo","btnMediaRefrescar","gridDesc","gripDesc","gridMediaInfo","gripMedia",
           "panBbToolbar","btnDescSubir","cardFirmas","bdgFirmas","panFirmas",
@@ -5261,6 +5266,25 @@ function Insert-LogoEnDescripcion($url) {
     }
 }
 
+# Una URL escrita a mano no se descarga ni se transforma: se inserta tal cual como
+# imagen directa. Esto admite, por ejemplo, image.tmdb.org/t/p/original/...png.
+function Get-HdzLogoPersonalizadoUrl([string]$url) {
+    $valor = "$url".Trim()
+    $uri = $null
+    if (-not [uri]::TryCreate($valor, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.UserInfo -or $valor -match '[\[\]\s]' -or $uri.AbsolutePath -notmatch '(?i)\.(png|jpe?g|webp)$') {
+        throw 'La URL del logo debe ser HTTPS y apuntar directamente a una imagen PNG, JPEG o WebP.'
+    }
+    return $valor
+}
+function Usar-LogoPersonalizado([string]$url = "$($ui.txtLogoPersonalizado.Text)") {
+    $url = Get-HdzLogoPersonalizadoUrl $url
+    Insert-LogoEnDescripcion $url
+    $script:logoSel = $url
+    Refresh-LogoSel
+    $ui.txtLogoPersonalizado.Text = ''
+    Set-Estado 'Logo personalizado añadido a la descripción.' 'ok'
+}
+
 # Imagen directa: 350 limita el ancho mostrado, sin enlace a la página del host.
 function Get-CapturaBbcode($url) {
     $uri=$null
@@ -5284,9 +5308,15 @@ function Add-HdzImageTags([string]$txt,$urls) {
     $bloque = $rows -join "`n"
     $idx = $txt.LastIndexOf("[/center]")
     if ($idx -ge 0) {
-        return $txt.Substring(0, $idx).TrimEnd() + "`n" + $bloque + "`n" + $txt.Substring($idx)
+        # No usar TrimEnd(): los saltos manuales antes de las capturas también forman
+        # parte de la descripción y el tracker los convierte en <br> al publicarla.
+        $antes = $txt.Substring(0, $idx)
+        if ($antes -notmatch "(?:\r?\n)$") { $antes += "`n" }
+        return $antes + $bloque + "`n" + $txt.Substring($idx)
     } else {
-        return $txt.TrimEnd() + "`n[center]$bloque[/center]"
+        $antes = $txt
+        if ($antes -and $antes -notmatch "(?:\r?\n)$") { $antes += "`n" }
+        return $antes + "[center]$bloque[/center]"
     }
 }
 
@@ -5327,7 +5357,6 @@ function Get-HdzCaptureDescription([string]$txt,$caps) {
     $txt = $txt -replace "   (\r?\n)", '$1'
     $txt = $txt -replace "(\r?\n)   ", '$1'
     $txt = $txt -replace "[ \t]+(\r?\n)", '$1'
-    $txt = $txt -replace "(\r?\n){3,}", "`n`n"
     # 3) Reinsertar SOLO las capturas marcadas y subidas, en orden.
     $urls = @($caps | Where-Object { $_.Marcada -and $_.Subida } | ForEach-Object { $_.Subida } | Select-Object -Unique)
     if ($urls.Count -gt 0) { return Add-HdzImageTags $txt $urls }
@@ -5437,6 +5466,7 @@ function Update-HdzTmdbLogos {
     } finally { $ui.btnActualizarLogos.IsEnabled=$true }
 }
 $ui.btnActualizarLogos.Add_Click({try { Update-HdzTmdbLogos } catch { Set-Estado $_.Exception.Message 'warn' }})
+$ui.btnUsarLogoPersonalizado.Add_Click({try { Usar-LogoPersonalizado } catch { Set-Estado $_.Exception.Message 'warn' }})
 
 # --- Firmas: imágenes de la carpeta «firmas» junto al script ---
 $script:firmaSel = $null          # ruta de la firma elegida (o $null)
@@ -6801,7 +6831,10 @@ function Invoke-SubidaTracker {
         Rehacer-CapturasDescripcion
 
         # --- 2. Descripción: siempre centrada ---
-        $desc = "$($ui.upDescripcion.Text)".Trim()
+        # No recortar: los saltos de línea que el usuario escribió son parte del BBCode.
+        # El parser del tracker transforma los EOL normales a <br> al renderizar.
+        $desc = "$($ui.upDescripcion.Text)"
+        if ([string]::IsNullOrWhiteSpace($desc)) { $desc = $script:descVacia }
         if ($desc -notmatch '(?i)\[center\]') { $desc = "[center]`n$desc`n[/center]" }
 
         # --- 2b. Firma elegida: subir y añadir antes del último [/center] ---
@@ -6813,8 +6846,15 @@ function Invoke-SubidaTracker {
                 if ($urlFirma -and "$desc" -notlike "*$urlFirma*") {
                     $tagFirma = "[img=350]$urlFirma" + "[/img]"
                     $idx = $desc.LastIndexOf("[/center]")
-                    if ($idx -ge 0) { $desc = $desc.Substring(0, $idx).TrimEnd() + "`n" + $tagFirma + "`n" + $desc.Substring($idx) }
-                    else { $desc = $desc.TrimEnd() + "`n$tagFirma" }
+                    if ($idx -ge 0) {
+                        $antesFirma = $desc.Substring(0, $idx)
+                        if ($antesFirma -notmatch "(?:\r?\n)$") { $antesFirma += "`n" }
+                        $desc = $antesFirma + $tagFirma + "`n" + $desc.Substring($idx)
+                    } else {
+                        $antesFirma = $desc
+                        if ($antesFirma -and $antesFirma -notmatch "(?:\r?\n)$") { $antesFirma += "`n" }
+                        $desc = $antesFirma + $tagFirma
+                    }
                 }
             } catch {
                 Set-SubidaEstado "No se pudo subir la firma: $($_.Exception.Message)" "error"; $ui.btnSubir.IsEnabled = $true; return
@@ -9041,6 +9081,7 @@ function Componer-EstadoAgente {
     }
     $est.logos = $lgs
     $est.logoRefresh = $true
+    $est.customLogo = $true
     $est.protocol = 2
     $est.tmdbResults = @($script:tmdbSearchResults | ForEach-Object { @{id="$($_.Id)";titulo="$($_.Titulo)";fecha="$($_.Fecha)"} })
     $est.carpetas = @(Get-CarpetasEntrada)
@@ -9195,6 +9236,7 @@ function Aplicar-ComandoAgente($c) {
             "sel_captura" { $i = [int]$c.idx; if ($i -ge 0 -and $i -lt @($script:capRows).Count) { $script:capRows[$i].Check.IsChecked = [bool]$c.value } }
             "cap_todas"   { foreach ($cr in @($script:capRows)) { $cr.Check.IsChecked = [bool]$c.value } }
             "sel_logo"    { $u = "$($c.url)"; if ($u) { $script:logoSel = $u; Insert-LogoEnDescripcion $u; Refresh-LogoSel } }
+            "set_custom_logo" { Usar-LogoPersonalizado "$($c.url)" }
             "click"       {
                 # Solo botones que NO abren dialogos nativos (esos no sirven en remoto). Lista blanca.
                 if ("$($c.name)" -eq 'btnActualizarLogos') { Update-HdzTmdbLogos; break }
