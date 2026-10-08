@@ -1142,7 +1142,9 @@ function Get-SubsUnicosArchivo($rutasArchivosMkv, $incluirExternos = $false, $pr
             $langCode = Get-LanguageCode $langCode $tituloPista
             # Decisión por pista de la GUI: resuelve el idioma 'und' antes de clasificar
             # el sub (así los grupos y las preguntas usan ya el idioma correcto).
-            if ($langCode -eq "und") {
+            if ($global:undPistasGui.ContainsKey("$ruta|$idReal|Sub")) {
+                $langCode = Get-LanguageCode $global:undPistasGui["$ruta|$idReal|Sub"] ""
+            } elseif ($langCode -eq "und") {
                 if ($global:undPistasGui.ContainsKey("$ruta|$idReal|Sub")) {
                     $langCode = Get-LanguageCode $global:undPistasGui["$ruta|$idReal|Sub"] ""
                 } else {
@@ -1273,13 +1275,18 @@ function Get-IdiomasSubsArchivo($rutasArchivosMkv) {
     foreach ($ruta in @($rutasArchivosMkv)) {
         $mi = Get-MediainfoJson $ruta
         if (-not $mi) { continue }
+        $idMap = Get-MkvmergeTrackIdMap $ruta
+        $ordinal = 0
         foreach ($p in $mi.media.track) {
             if ($p.'@type' -ne "Text") { continue }
+            $ordinal++
             $lang = "$($p.Language)"; if ([string]::IsNullOrWhiteSpace($lang)) { $lang = "und" }
             $titulo = "$($p.Title)"
             $cod = Get-LanguageCode $lang $titulo
+            $id = if ($idMap.ContainsKey("Text+$ordinal")) { $idMap["Text+$ordinal"] } else { $p.ID - 1 }
+            if ($global:undPistasGui.ContainsKey("$ruta|$id|Sub")) { $cod = Get-LanguageCode $global:undPistasGui["$ruta|$id|Sub"] '' }
             if (-not $vistos.ContainsKey($cod)) {
-                $vistos[$cod] = [PSCustomObject]@{ CodLang = $cod; NomLang = (Get-LanguageName $cod $titulo) }
+                $vistos[$cod] = [PSCustomObject]@{ CodLang = $cod; NomLang = (Get-LanguageName $cod '') }
             }
         }
     }
@@ -1951,6 +1958,8 @@ function Get-CalidadMetadata($ruta) {
 # decisión 'und' (caso habitual), la aplicamos sin ambigüedad en vez de abrir la consola. Si hay
 # varias pistas 'und' del mismo tipo con idiomas distintos, no se puede desambiguar -> $null.
 function Get-IdiomaUndGui($rutaArchivo, $tipo) {
+    # Las nuevas decisiones usan IDs reales: nunca extrapolar a otra pista del archivo.
+    if (Get-CfgGui 'IdiomasPistasExactos') { return $null }
     $cand = @()
     foreach ($k in $global:undPistasGui.Keys) {
         $pk = "$k" -split "\|"
@@ -2803,12 +2812,19 @@ function Invoke-ExtraccionPGS($origenPistas, $idiomasSubsMantener = $null, $pref
     $probeSubs = $null
     try { $probeSubs = ffprobe -v error -select_streams s -show_entries stream=index,codec_name:stream_tags=language -of json $origenPistas 2>$null | Out-String | ConvertFrom-Json } catch {}
     $pistasPGS = @()
+    $idMap = Get-MkvmergeTrackIdMap $origenPistas
+    $ordinal = 0
     if ($probeSubs -and $probeSubs.streams) {
-        $pistasPGS = @($probeSubs.streams | Where-Object { "$($_.codec_name)" -match "(?i)pgs" } | ForEach-Object {
+        $pistasPGS = @($probeSubs.streams | ForEach-Object {
+            $ordinal++
+            if ("$($_.codec_name)" -notmatch "(?i)pgs") { return }
+            $id = if ($idMap.ContainsKey("Text+$ordinal")) { $idMap["Text+$ordinal"] } else { $_.index }
+            $lang = if ($_.tags -and $_.tags.language) { "$($_.tags.language)" } else { '' }
+            if ($global:undPistasGui.ContainsKey("$origenPistas|$id|Sub")) { $lang = $global:undPistasGui["$origenPistas|$id|Sub"] }
             [PSCustomObject]@{
                 Index = $_.index
                 Codec = "$($_.codec_name)"
-                Lang  = if ($_.tags -and $_.tags.language) { "$($_.tags.language)" } else { "" }
+                Lang  = $lang
             }
         })
     }
@@ -2920,12 +2936,16 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                 if ($memoriaIdiomas.ContainsKey($llaveMemoria)) { $langCode = $memoriaIdiomas[$llaveMemoria] }
                 if ([string]::IsNullOrWhiteSpace($langCode)) { $langCode = "und" }
                 # Normalizamos: si es español + title indica Latino → "es-419"
-                $langCode = Get-LanguageCode $langCode $tituloPista
+                $tipoIdioma = if ($pista.'@type' -eq 'Text') { 'Sub' } else { 'Audio' }
+                $idiomaManual = $global:undPistasGui.ContainsKey("$rutaArchivo|$idMkvmerge|$tipoIdioma")
+                if ($idiomaManual) {
+                    $langCode = Get-LanguageCode $global:undPistasGui["$rutaArchivo|$idMkvmerge|$tipoIdioma"] ""
+                } else { $langCode = Get-LanguageCode $langCode $tituloPista }
 
                 # Si la pista quedó como 'und', aplicamos el idioma que el usuario eligió en el
                 # pre-escaneo del lote (uno global para audios, otro para subs). Para subs, además,
                 # se respeta la decisión por archivo concreto si existe (clave "<archivo>|Text").
-                if ($langCode -eq "und") {
+                if ($langCode -eq "und" -and -not $idiomaManual) {
                     if ($pista.'@type' -eq "Text") {
                         # La decisión de idioma se guardó con el formato REAL del sub ("Text" o
                         # "PGS", antes se buscaba siempre "|Text" y los PGS nunca la encontraban)
@@ -2951,7 +2971,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                         }
                     }
                 }
-                $lNom = Get-LanguageName $langCode $tituloPista
+                $lNom = Get-LanguageName $langCode $(if ($idiomaManual) { '' } else { $tituloPista })
 
                 # Bug 8: capturar flag de mediainfo si existe
                 $forcedFlag = $false

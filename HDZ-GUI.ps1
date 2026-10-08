@@ -368,13 +368,28 @@ $idiomasFiltro = @(
     @{Cod="por";    Nom="Portugués"},
     @{Cod="jpn";    Nom="Japonés"},
     @{Cod="chi";    Nom="Chino"},
-    @{Cod="kor";    Nom="Coreano"}
+    @{Cod="kor";    Nom="Coreano"},
+    @{Cod="tha";    Nom="Tailandés"},
+    @{Cod="rus";    Nom="Ruso"},
+    @{Cod="nld";    Nom="Neerlandés"},
+    @{Cod="ara";    Nom="Árabe"},
+    @{Cod="pol";    Nom="Polaco"},
+    @{Cod="hin";    Nom="Hindi"},
+    @{Cod="tur";    Nom="Turco"},
+    @{Cod="ell";    Nom="Griego"},
+    @{Cod="ukr";    Nom="Ucraniano"},
+    @{Cod="swe";    Nom="Sueco"},
+    @{Cod="dan";    Nom="Danés"},
+    @{Cod="nor";    Nom="Noruego"},
+    @{Cod="fin";    Nom="Finés"},
+    @{Cod="heb";    Nom="Hebreo"}
 )
 $nombresIdioma = @{
     "es"="Castellano"; "es-419"="Latino"; "eng"="Inglés"; "fre"="Francés"; "ger"="Alemán"
     "ita"="Italiano"; "por"="Portugués"; "jpn"="Japonés"; "chi"="Chino"; "kor"="Coreano"
     "tha"="Tailandés"; "cat"="Catalán"; "glg"="Gallego"; "eus"="Euskera"; "und"="Indeterminado"
 }
+foreach ($idioma in $idiomasFiltro) { $nombresIdioma[$idioma.Cod] = $idioma.Nom }
 function NombreIdioma($cod) { if ($nombresIdioma.ContainsKey("$cod")) { $nombresIdioma["$cod"] } else { "$cod" } }
 
 function ConvCanon($lang, $title = "") {
@@ -400,8 +415,24 @@ function ConvCanon($lang, $title = "") {
     return $l
 }
 
-$opcionesIdiomaUnd = @(@{T="Dejar como indeterminado (und)"; V="und"}) +
+$script:idiomasManuales = @{}
+function Get-IdiomaPistaGui($pista, $tipo) {
+    $id = if ($null -ne $pista.TrackId) { $pista.TrackId } else { $pista.Index }
+    $clave = "$($pista.Ruta)|$id|$tipo"
+    if ($script:idiomasManuales.ContainsKey($clave)) { return ConvCanon $script:idiomasManuales[$clave] "" }
+    return ConvCanon $pista.Lang $pista.Title
+}
+$opcionesIdiomaUnd = @(@{T="Automático (idioma del archivo)"; V="AUTO"}, @{T="Indeterminado (und)"; V="und"}) +
                      @($idiomasFiltro | ForEach-Object { @{T="$($_.Nom)  ·  $($_.Cod)"; V=$_.Cod} })
+$codigosSelector = @($opcionesIdiomaUnd | ForEach-Object { $_.V })
+foreach ($culture in [Globalization.CultureInfo]::GetCultures([Globalization.CultureTypes]::NeutralCultures) | Sort-Object DisplayName) {
+    if (-not $culture.Name -or $culture.ThreeLetterISOLanguageName -eq 'ivl') { continue }
+    $codigo = ConvCanon $culture.ThreeLetterISOLanguageName ''
+    if ($codigo -in $codigosSelector) { continue }
+    $opcionesIdiomaUnd += @{ T = "$($culture.DisplayName) · $codigo"; V = $codigo }
+    $codigosSelector += $codigo
+    if (-not $nombresIdioma.ContainsKey($codigo)) { $nombresIdioma[$codigo] = $culture.DisplayName }
+}
 
 $plataformasGui = @("NF — Netflix","AMZN — Amazon Prime","DSNP — Disney+","MVSTP — Movistar+",
     "SKST — SkyShowtime","FLMN — Filmin","ATVP — Apple TV+","iT — iTunes","HMAX — HBO Max",
@@ -1437,10 +1468,10 @@ $xaml = @'
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="Audios sin idioma definido"/>
+                  <TextBlock Style="{StaticResource H}" Text="Corregir idioma de las pistas de audio"/>
                   <TextBlock x:Name="bdgUndAudio" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Estas pistas de audio no declaran idioma. Asigna el de cada una, o déjalas como indeterminado (und)."/>
+                <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier pista, aunque el archivo indique otro. Automático conserva la identificación original. No modifica el archivo de origen."/>
                 <StackPanel x:Name="panUndAudio" Margin="0,10,0,0"/>
               </StackPanel>
             </Border>
@@ -1479,10 +1510,10 @@ $xaml = @'
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="Subtítulos sin idioma definido"/>
+                  <TextBlock Style="{StaticResource H}" Text="Corregir idioma de las pistas de subtítulos"/>
                   <TextBlock x:Name="bdgUndSub" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Estos subtítulos no declaran idioma. Asigna el de cada uno, o déjalos como indeterminado (und)."/>
+                <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier subtítulo, aunque su código sea erróneo. Automático conserva la identificación original. No modifica el archivo de origen."/>
                 <StackPanel x:Name="panUndSub" Margin="0,10,0,0"/>
               </StackPanel>
             </Border>
@@ -2354,6 +2385,13 @@ $scanWorker = {
             $raw = & ffprobe -v error -show_streams -of json "$ruta" 2>$null | Out-String
             $json = $raw | ConvertFrom-Json
             if (-not $json -or -not $json.streams) { throw "ffprobe no devolvió datos" }
+            # ffprobe y mkvmerge no siempre usan los mismos IDs (MP4/TS, por ejemplo).
+            $trackIds = @{ audio = @(); subtitle = @() }
+            $ident = & mkvmerge -J "$ruta" 2>$null | Out-String | ConvertFrom-Json
+            if ($ident -and $ident.tracks) {
+                $trackIds.audio = @($ident.tracks | Where-Object type -eq 'audio' | ForEach-Object { [int]$_.id })
+                $trackIds.subtitle = @($ident.tracks | Where-Object type -eq 'subtitles' | ForEach-Object { [int]$_.id })
+            }
             foreach ($s in $json.streams) {
                 $tipo = "$($s.codec_type)"
                 $lang  = ""
@@ -2385,9 +2423,11 @@ $scanWorker = {
                     $canales = [int]"0$($s.channels)"
                     $chLayout = ""
                     if ($s.PSObject.Properties.Name -contains "channel_layout") { $chLayout = "$($s.channel_layout)" }
-                    $fila.Audios += @{ Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Profile = "$($s.profile)"; Lang = $lang; Title = $title; Forced = $forced; Channels = $canales; ChannelLayout = $chLayout }
+                    $trackId = if ($fila.Audios.Count -lt $trackIds.audio.Count) { $trackIds.audio[$fila.Audios.Count] } else { [int]$s.index }
+                    $fila.Audios += @{ Ruta = $ruta; TrackId = $trackId; Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Profile = "$($s.profile)"; Lang = $lang; Title = $title; Forced = $forced; Channels = $canales; ChannelLayout = $chLayout }
                 } elseif ($tipo -eq "subtitle") {
-                    $fila.Subs += @{ Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Lang = $lang; Title = $title; Forced = $forced
+                    $trackId = if ($fila.Subs.Count -lt $trackIds.subtitle.Count) { $trackIds.subtitle[$fila.Subs.Count] } else { [int]$s.index }
+                    $fila.Subs += @{ Ruta = $ruta; TrackId = $trackId; Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Lang = $lang; Title = $title; Forced = $forced
                                      EsPGS = ("$($s.codec_name)" -match "pgs") }
                 }
             }
@@ -2555,16 +2595,50 @@ function Construir-FilasUnd($panel, $pistas, $tipo) {
         $tipoCap = $tipo
         $cmbMaestra.Add_SelectionChanged({
             $idx = $cmbMaestra.SelectedIndex
-            foreach ($r in $script:undRows) {
-                if ($r.Tipo -eq $tipoCap) { $r.Combo.SelectedIndex = $idx }
+            foreach ($fila in $panel.Children) {
+                $destino = $fila.Children[1]
+                if ($destino -is [Windows.Controls.ComboBox] -and $destino -ne $cmbMaestra) { $destino.SelectedIndex = $idx }
             }
         }.GetNewClosure())
     }
     foreach ($p in $pistas) {
         $cmb = & $nuevaFila $p.Etiqueta $false
-        $script:undRows += [PSCustomObject]@{ Archivo = $p.Archivo; Id = $p.Id; Tipo = $tipo; Combo = $cmb }
+        $clave = "$($p.Archivo)|$($p.Id)|$tipo"
+        if ($script:idiomasManuales.ContainsKey($clave)) { Set-ComboValor $cmb $script:idiomasManuales[$clave] }
+        $script:undRows += [PSCustomObject]@{ Archivo = $p.Archivo; Id = $p.Id; Tipo = $tipo; Combo = $cmb; Etiqueta = $p.Etiqueta }
+        $mapaIdiomas = $script:idiomasManuales
+        $timerIdiomas = $script:timerIdiomasManuales
+        $cmb.Add_SelectionChanged({
+            $valor = Get-ComboValor $cmb
+            if (-not $valor) { return }
+            if ($valor -eq 'AUTO') { [void]$mapaIdiomas.Remove($clave) }
+            else { $mapaIdiomas[$clave] = "$valor" }
+            $timerIdiomas.Stop(); $timerIdiomas.Start()
+        }.GetNewClosure())
     }
 }
+
+# Recalcula filtros sin reiniciar la selección, la cola ni las pestañas.
+$script:timerIdiomasManuales = [Windows.Threading.DispatcherTimer]::new()
+$script:timerIdiomasManuales.Interval = [TimeSpan]::FromMilliseconds(300)
+function Actualizar-IdiomasManuales {
+    $script:timerIdiomasManuales.Stop()
+    if (@($script:ultimoScan).Count -eq 0) { return }
+    $d = Snapshot-DecisionesTab
+    $scope = @($script:ultimoScan | Where-Object { $script:seleccion[$_.Nombre] -ne $false })
+    if ((Get-ChipValor 'modoLote') -eq 'HETEROGENEO' -and $script:tabProyActual -ge 0) {
+        $nombres = @($script:tabsProy[$script:tabProyActual].Archivos)
+        $scope = @($scope | Where-Object { $nombres -contains $_.Nombre })
+    }
+    Construir-Adaptacion $scope
+    # Los idiomas recién corregidos deben quedar disponibles y seleccionados.
+    $d.AudioLangs = @($d.AudioLangs) + @($script:idiomasManuales.Values)
+    $d.FiltroLangs = @($d.FiltroLangs) + @($script:idiomasManuales.Values)
+    Restore-DecisionesTab $d
+    if ($ui.swRemezcla.IsChecked) { Construir-PistasRemezcla }
+    Construir-ListadoLote
+}
+$script:timerIdiomasManuales.Add_Tick({ Actualizar-IdiomasManuales })
 
 # =========================================================================
 # CONVERSOR DE AUDIO MANUAL (por pista) — sustituye a la antigua conversión DTS.
@@ -2756,7 +2830,7 @@ function Construir-Conversor($scope) {
     }
     $script:convTrackOpts = @()
     foreach ($a in $rep.Audios) {
-        $lng  = ConvCanon $a.Lang $a.Title
+        $lng  = Get-IdiomaPistaGui $a 'Audio'
         $nomL = if ($lng -eq "und") { "sin idioma" } else { NombreIdioma $lng }
         $cc   = Get-CodecComercial $a.Codec $a.Profile
         $lay  = Get-NombreLayout $a.Channels
@@ -3190,7 +3264,7 @@ function Construir-ListadoLote {
                         "^dts$"    { if ("$($a.Profile)" -match "MA") { "DTS-HD MA" } else { "DTS" } }
                         default    { "$($a.Codec)".ToUpper() }
                     }
-                    $lA = ConvCanon $a.Lang $a.Title
+        $lA = Get-IdiomaPistaGui $a 'Audio'
                     $resAud += "$cA $(if ($lA -eq 'und') { '¿?' } else { $lA })"
                 }
                 if ($resAud.Count -gt 0) { [void]$wp.Children.Add((New-Pill ("♪ " + (($resAud | Select-Object -First 4) -join " · ") + $(if ($resAud.Count -gt 4) { " +$($resAud.Count-4)" } else { "" })))) }
@@ -3318,31 +3392,33 @@ function Aplicar-Analisis($filas) {
     $idiomasSubs = [ordered]@{}
     foreach ($f in $sel) {
         foreach ($a in $f.Audios) {
-            $cAudio = ConvCanon $a.Lang $a.Title
-            if ($cAudio -eq "und") {
+            $cAudio = Get-IdiomaPistaGui $a 'Audio'
+            # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndAudio[$f.Nombre] = $true
                 $etCodec = switch -Regex ("$($a.Codec)") {
                     "^eac3$" { "DD+" } "^ac3$" { "DD" } "^truehd$" { "TrueHD" }
                     "^dts$"  { if ("$($a.Profile)" -match "MA") { "DTS-HD MA" } else { "DTS" } }
                     default  { "$($a.Codec)".ToUpper() }
                 }
-                $etiq = "$($f.Nombre)  —  pista $($a.Index) · $etCodec"
+                $etiq = "$($f.Nombre)  —  pista $($a.Index) · $etCodec · detectado: $(NombreIdioma (ConvCanon $a.Lang $a.Title))"
                 if ($a.Title) { $etiq += " · «$($a.Title)»" }
-                $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $a.Index; Etiqueta = $etiq }
-            } else {
+                $id = if ($null -ne $a.TrackId) { $a.TrackId } else { $a.Index }
+                $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+            if ($cAudio -ne 'und') {
                 if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
                 $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
             }
         }
         foreach ($s in $f.Subs) {
-            $c = ConvCanon $s.Lang $s.Title
-            if ($c -eq "und") {
+            $c = Get-IdiomaPistaGui $s 'Sub'
+            # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndSub[$f.Nombre] = $true
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Texto" }
-                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt"
+                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $(NombreIdioma (ConvCanon $s.Lang $s.Title))"
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
-                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $s.Index; Etiqueta = $etiq }
-            } else {
+                $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
+                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+            if ($c -ne 'und') {
                 if (-not $idiomasSubs.Contains($c)) { $idiomasSubs[$c] = 0 }
                 $idiomasSubs[$c] = $idiomasSubs[$c] + 1
             }
@@ -3356,7 +3432,7 @@ function Aplicar-Analisis($filas) {
         $porIdioma = @{}
         foreach ($f in $gruposSel[$k]) {
             foreach ($a in $f.Audios) {
-                $lng = ConvCanon $a.Lang $a.Title
+        $lng = Get-IdiomaPistaGui $a 'Audio'
                 if (-not $porIdioma.ContainsKey($lng)) { $porIdioma[$lng] = @{ DTS = $false; Dolby = $false; AC3 = $false } }
                 if ($a.Codec -match "dts") { $porIdioma[$lng].DTS = $true }
                 if ($a.Codec -match "^(ac3|eac3|truehd)$") { $porIdioma[$lng].Dolby = $true }
@@ -3378,7 +3454,7 @@ function Aplicar-Analisis($filas) {
         $combos = @{}
         foreach ($f in $gruposSel[$k]) {
             foreach ($s in $f.Subs) {
-                $c = ConvCanon $s.Lang $s.Title
+        $c = Get-IdiomaPistaGui $s 'Sub'
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Text" }
                 $kk = "$c|$fmt"
                 if (-not $combos.ContainsKey($kk)) { $combos[$kk] = @() }
@@ -3796,31 +3872,33 @@ function Construir-Adaptacion($selScope) {
     $idiomasAudio = [ordered]@{}; $idiomasSubs = [ordered]@{}
     foreach ($f in $selScope) {
         foreach ($a in $f.Audios) {
-            $cAudio = ConvCanon $a.Lang $a.Title
-            if ($cAudio -eq "und") {
+            $cAudio = Get-IdiomaPistaGui $a 'Audio'
+            # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndAudio[$f.Nombre] = $true
                 $etCodec = switch -Regex ("$($a.Codec)") {
                     "^eac3$" { "DD+" } "^ac3$" { "DD" } "^truehd$" { "TrueHD" }
                     "^dts$"  { if ("$($a.Profile)" -match "MA") { "DTS-HD MA" } else { "DTS" } }
                     default  { "$($a.Codec)".ToUpper() }
                 }
-                $etiq = "$($f.Nombre)  —  pista $($a.Index) · $etCodec"
+                $etiq = "$($f.Nombre)  —  pista $($a.Index) · $etCodec · detectado: $(NombreIdioma (ConvCanon $a.Lang $a.Title))"
                 if ($a.Title) { $etiq += " · «$($a.Title)»" }
-                $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $a.Index; Etiqueta = $etiq }
-            } else {
+                $id = if ($null -ne $a.TrackId) { $a.TrackId } else { $a.Index }
+                $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+            if ($cAudio -ne 'und') {
                 if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
                 $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
             }
         }
         foreach ($s in $f.Subs) {
-            $c = ConvCanon $s.Lang $s.Title
-            if ($c -eq "und") {
+            $c = Get-IdiomaPistaGui $s 'Sub'
+            # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndSub[$f.Nombre] = $true
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Texto" }
-                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt"
+                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $(NombreIdioma (ConvCanon $s.Lang $s.Title))"
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
-                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $s.Index; Etiqueta = $etiq }
-            } else {
+                $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
+                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+            if ($c -ne 'und') {
                 if (-not $idiomasSubs.Contains($c)) { $idiomasSubs[$c] = 0 }
                 $idiomasSubs[$c] = $idiomasSubs[$c] + 1
             }
@@ -3831,7 +3909,7 @@ function Construir-Adaptacion($selScope) {
         $porIdioma = @{}
         foreach ($f in $gruposScope[$k]) {
             foreach ($a in $f.Audios) {
-                $lng = ConvCanon $a.Lang $a.Title
+        $lng = Get-IdiomaPistaGui $a 'Audio'
                 if (-not $porIdioma.ContainsKey($lng)) { $porIdioma[$lng] = @{ DTS = $false; Dolby = $false; AC3 = $false } }
                 if ($a.Codec -match "dts") { $porIdioma[$lng].DTS = $true }
                 if ($a.Codec -match "^(ac3|eac3|truehd)$") { $porIdioma[$lng].Dolby = $true }
@@ -3850,7 +3928,7 @@ function Construir-Adaptacion($selScope) {
         $combos = @{}
         foreach ($f in $gruposScope[$k]) {
             foreach ($s in $f.Subs) {
-                $c = ConvCanon $s.Lang $s.Title
+        $c = Get-IdiomaPistaGui $s 'Sub'
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Text" }
                 $kk = "$c|$fmt"
                 if (-not $combos.ContainsKey($kk)) { $combos[$kk] = @() }
@@ -4442,14 +4520,14 @@ function Construir-PistasRemezcla {
     $audMap = @{}; $subMap = @{}
     foreach ($f in @($script:ultimoScan)) {
         foreach ($a in @($f.Audios)) {
-            $cod = ConvCanon $a.Lang $a.Title
+        $cod = Get-IdiomaPistaGui $a 'Audio'
             if (-not $audMap.ContainsKey($cod)) {
                 $cc = Get-CodecComercial $a.Codec $a.Profile
                 $audMap[$cod] = "$(if ($cod -eq 'und') { 'sin idioma' } else { NombreIdioma $cod }) · $cc $(Get-NombreLayout $a.Channels)"
             }
         }
         foreach ($s in @($f.Subs)) {
-            $cod = ConvCanon $s.Lang $s.Title
+        $cod = Get-IdiomaPistaGui $s 'Sub'
             if (-not $subMap.ContainsKey($cod)) { $subMap[$cod] = $(if ($cod -eq 'und') { 'sin idioma' } else { NombreIdioma $cod }) }
         }
     }
@@ -7255,6 +7333,7 @@ function Arrancar-JobMontaje($job) {
 #   'todos'  -> heterogéneo: cada película que aún NO se haya lanzado, como trabajo propio, en cola.
 # Cada película lanzada se anota en $script:gruposLanzados para no encolarla dos veces.
 function Iniciar-Montaje($scope) {
+    if ($script:timerIdiomasManuales.IsEnabled) { Actualizar-IdiomasManuales }
     if (-not (Test-Path -LiteralPath $rutaScript)) {
         Set-Estado "No se encuentra HDZnew.ps1 junto a esta interfaz ($rutaScript)." "error"
         return
@@ -7393,10 +7472,11 @@ function Iniciar-Montaje($scope) {
     $undSeleccion = @()
     foreach ($r in $script:undRows) {
         $vU = Get-ComboValor $r.Combo
-        if ($null -ne $vU) {
+        if ($null -ne $vU -and $vU -ne 'AUTO') {
             $undSeleccion += [ordered]@{ Archivo = $r.Archivo; Id = $r.Id; Tipo = $r.Tipo; Idioma = $vU }
         }
     }
+    $cfg.IdiomasPistasExactos = $true
     if ($undSeleccion.Count -gt 0) { $cfg.IdiomasUndPistas = @($undSeleccion) }
     $v = Get-ChipValor "extraerPGS";   if ($null -ne $v) { $cfg.ExtraerPGS = $v }
     $v = Get-ChipValor "conservarPGS"; if ($null -ne $v) { $cfg.DecisionConservarPGS = $v }
@@ -7540,7 +7620,7 @@ function Iniciar-Montaje($scope) {
             }
             if ($d.Und) {
                 foreach ($k in $d.Und.Keys) {
-                    if ($null -eq $d.Und[$k]) { continue }
+                    if ($null -eq $d.Und[$k] -or $d.Und[$k] -eq 'AUTO') { continue }
                     $p = "$k" -split "\|"
                     if ($p.Count -ge 3) { $undTodos += [ordered]@{ Archivo = $p[0]; Id = $p[1]; Tipo = $p[2]; Idioma = $d.Und[$k] } }
                 }
@@ -7953,6 +8033,8 @@ $script:expHistorial.Add_Expanded({ Actualizar-HistorialVisible })
 [void]$ui.panGeneral.Children.Add($script:expHistorial)
 function Reset-Todo {
     if ($script:networkBusy) { throw 'Espera a que termine la petición de red antes de reiniciar; no se duplica ni interrumpe una subida incierta.' }
+    $script:timerIdiomasManuales.Stop()
+    $script:idiomasManuales = @{}
     Remove-HdzJobConfig $script:colaMontaje
     # Detener el lector antes de cancelar: un resultado antiguo no puede resucitar el lote.
     if ($script:timerProgreso) { $script:timerProgreso.Stop() }
@@ -8912,7 +8994,7 @@ function Componer-EstadoAgente {
     $undAg = @()
     foreach ($r in @($script:undRows)) {
         $undAg += [ordered]@{ archivo = "$($r.Archivo)"; id = "$($r.Id)"; tipo = "$($r.Tipo)"
-                               etiqueta = "$($r.Tipo) · $([System.IO.Path]::GetFileName("$($r.Archivo)")) · pista $($r.Id)"
+                               etiqueta = "$($r.Etiqueta)"
                                valor = "$(Get-ComboValor $r.Combo)"
                                opciones = @(@($r.Combo.Tag) | ForEach-Object { @{ t = "$($_.T)"; v = "$($_.V)" } }) }
     }
@@ -9022,7 +9104,7 @@ function Componer-EstadoAgente {
                         "^dts$"  { if ("$($a.Profile)" -match "MA") { "DTS-HD MA" } else { "DTS" } }
                         default  { "$($a.Codec)".ToUpper() }
                     }
-                    $lA = ConvCanon $a.Lang $a.Title
+        $lA = Get-IdiomaPistaGui $a 'Audio'
                     $resAud += "$cA $(if ($lA -eq 'und') { '¿?' } else { $lA })"
                 }
                 if ($resAud.Count -gt 0) { $bdg += @{ t = ("♪ " + (($resAud | Select-Object -First 4) -join " · ") + $(if ($resAud.Count -gt 4) { " +$($resAud.Count-4)" } else { "" })); s = "gris" } }
