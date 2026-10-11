@@ -2894,7 +2894,7 @@ function Actualizar-ListaRapida {
         [void]$ui.panListado.Children.Add($t)
         return
     }
-    $vids = Get-VideosCarpeta $carpeta
+    $vids = if (@($script:videosElegidos).Count -gt 0) { @($script:videosElegidos | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Item -LiteralPath $_ }) } else { @(Get-VideosCarpeta $carpeta) }
     $nuevos = @($vids | Where-Object { $_.Name -notmatch "-HDZ" })
     $hdz    = @($vids | Where-Object { $_.Name -match "-HDZ" })
     $ui.lblResumen.Text = "$($nuevos.Count) por procesar · $($hdz.Count) con -HDZ"
@@ -2918,6 +2918,7 @@ function Actualizar-ListaRapida {
 
 # --- Selección de archivos: qué vídeos del análisis se procesarán ---
 $script:seleccion = @{}        # nombre de archivo -> $true/$false (ausente = seleccionado)
+$script:videosElegidos = @()
 $script:restringirSeleccion = $null   # si es una lista de nombres, SOLO esos quedan marcados tras el análisis
                                        # (lo usa «Elegir vídeos…»); se aplica una vez y se limpia
 $script:ultimoScan = @()       # último resultado de análisis (para re-adaptar sin re-escanear)
@@ -2960,6 +2961,7 @@ function Set-CarpetasTemporadas($carpetas) {
         }
     }
     $script:carpetasTemporadas = @($unicas)
+    $script:videosElegidos = @()
     $script:restringirSeleccion = $null
     $script:seleccion = @{}
     $script:gruposLanzados = @{}
@@ -4160,11 +4162,13 @@ function Lanzar-Escaneo {
         }
         # Elegir nuevos/reproceso POR CARPETA: una temporada que solo tenga -HDZ no debe desaparecer
         # porque otra carpeta del lote sí contenga archivos nuevos.
-        $objetivo = @($carpetas | ForEach-Object {
+        $objetivo = if (@($script:videosElegidos).Count -gt 0) {
+            @($script:videosElegidos | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Item -LiteralPath $_ })
+        } else { @($carpetas | ForEach-Object {
             $vidsCp = @(Get-VideosCarpeta $_)
             $nuevosCp = @($vidsCp | Where-Object { $_.Name -notmatch "-HDZ" })
             if ($nuevosCp.Count -gt 0) { $nuevosCp } else { $vidsCp }
-        })
+        }) }
         if ($objetivo.Count -eq 0) { Set-Estado "No hay vídeos que analizar en las carpetas seleccionadas."; return }
         if ($carpetas.Count -gt 1) {
             $duplicados = @($objetivo | Group-Object Name | Where-Object Count -gt 1 | Select-Object -ExpandProperty Name)
@@ -4330,9 +4334,10 @@ function Set-VideosElegidos([string[]]$archivos) {
     $nombres = @($rutas | ForEach-Object { Split-Path $_ -Leaf })
     $misma = ("$($ui.txtCarpeta.Text)".Trim() -eq "$carpeta".Trim()) -and (@(Get-CarpetasEntrada).Count -eq 1)
     Set-CarpetasTemporadas @($carpeta)
+    $script:videosElegidos = @($rutas)
     $script:restringirSeleccion = $nombres
     if ($misma) {
-        if (@($script:ultimoScan).Count -gt 0) { Refrescar-Adaptacion } else { Lanzar-Escaneo }
+        Lanzar-Escaneo
     } else {
         if ($script:modoTest) { Lanzar-Escaneo } else { $script:debounceTimer.Stop(); $script:debounceTimer.Start() }
     }
@@ -4703,6 +4708,7 @@ $ui.txtCarpeta.Add_TextChanged({
     # Una ruta escrita/pegada manualmente pasa a ser el único origen.
     $pManual = "$($ui.txtCarpeta.Text)".Trim()
     $script:carpetasTemporadas = if ($pManual) { @($pManual) } else { @() }
+    $script:videosElegidos = @()
     $script:restringirSeleccion = $null
     Actualizar-DescripcionCarpetas
     Actualizar-ListaRapida
@@ -7421,7 +7427,7 @@ function Iniciar-Montaje($scope) {
 
     $cfg = [ordered]@{}
     # Si se ha deseleccionado algún archivo, el script procesará SOLO los marcados
-    if (-not $remezclaOn -and $todosNombresScan.Count -gt 0 -and $marcadosSel.Count -lt $todosNombresScan.Count) {
+    if (-not $remezclaOn -and $todosNombresScan.Count -gt 0 -and ($marcadosSel.Count -lt $todosNombresScan.Count -or @($script:videosElegidos).Count -gt 0)) {
         $cfg.ArchivosSeleccionados = @($marcadosSel)
     }
     # Plan de remezcla: el motor combina las carpetas (vídeo de una + audios/subs de otras) antes de montar.
@@ -8086,6 +8092,7 @@ function Reset-Todo {
     $script:carpetaScan = $null
     $script:restringirSeleccion = $null
     $script:gruposLote = @(); $script:gruposRender = $null; $script:clavesHibRender = @()
+    $script:videosElegidos = @()
     $script:gruposProy = @(); $script:tabsProy = @(); $script:tabProyActual = -1
     $script:gruposLanzados = @{}; $script:episodiosMap = @{}; $script:salidaMap = @{}
     $script:epTextboxes = @{}; $script:salidaBtns = @{}
