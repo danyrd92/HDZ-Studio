@@ -903,7 +903,8 @@ $xaml = @'
     </Style>
     <Style x:Key="GhostMini" TargetType="Button">
       <Setter Property="Foreground" Value="#C8C8CE"/>
-      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="MinHeight" Value="36"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Template">
@@ -4293,6 +4294,7 @@ function Aplicar-Sidebar {
     # su columna derecha, con la versión a la izquierda.
     [System.Windows.Controls.Grid]::SetColumnSpan($ui.btnColapsar, $(if ($col) { 2 } else { 1 }))
     $ui.btnColapsar.HorizontalAlignment = if ($col) { "Center" } else { "Right" }
+    if (Get-Command Set-HdzNavigationDesign -ErrorAction SilentlyContinue) { Set-HdzNavigationDesign }
 }
 $ui.btnColapsar.Add_Click({ $script:sidebarColapsado = -not $script:sidebarColapsado; Aplicar-Sidebar })
 
@@ -9545,6 +9547,8 @@ Construir-Firmas
 if ([string]::IsNullOrWhiteSpace($ui.upDescripcion.Text)) { Reset-Descripcion }
 . (Join-Path $PSScriptRoot 'HDZ-Interface.ps1')
 Initialize-HdzInterface
+. (Join-Path $PSScriptRoot 'HDZ-Design.ps1')
+Initialize-HdzDesign
 Init-Tabs
 Actualizar-PanelHost
 Set-Estado "Elige la carpeta de los vídeos: las opciones se adaptarán a lo que se detecte."

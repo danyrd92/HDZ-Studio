@@ -1,5 +1,6 @@
 {
-  "version": "1.17.21",
+  "version": "1.17.22",
+  "schema": 1,
   "files": [
     {
       "bytes": 204274688,
@@ -41,6 +42,5 @@
       "sha256": "4f574fddb567f4d0756094424a1e4e2b2bbdde21de9f0965c0f988d24dc658e4",
       "name": "PowerShell-7.6.3-win-x64.msi"
     }
-  ],
-  "schema": 1
+  ]
 }
