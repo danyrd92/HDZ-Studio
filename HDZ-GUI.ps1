@@ -307,6 +307,7 @@ function Get-UltimoLog {
 }
 
 function Enviar-LogSoporte {
+    param([switch]$ConfirmadoRemoto)
     if ([string]::IsNullOrWhiteSpace($script:soporteUrl)) { Cargar-SoporteCfg }
     if ([string]::IsNullOrWhiteSpace($script:soporteUrl)) {
         Set-Estado "El envío de logs a soporte aún no está configurado." "warn"; return
@@ -314,9 +315,9 @@ function Enviar-LogSoporte {
     $log = Get-UltimoLog
     if (-not $log) { Set-Estado "Todavía no hay ningún log que enviar (procesa o sube algo primero)." "warn"; return }
     $proyecto = if ($script:logCarpeta) { Split-Path $script:logCarpeta -Leaf } else { [System.IO.Path]::GetFileNameWithoutExtension($log) }
-    $confirm = Show-DialogoHDZ -Owner $win -Icono "📤" -Titulo "Enviar log a soporte" `
+    $confirm = if ($ConfirmadoRemoto) { $true } else { Show-DialogoHDZ -Owner $win -Icono "📤" -Titulo "Enviar log a soporte" `
         -Mensaje "Se enviará el log del proyecto «$proyecto» al soporte para diagnóstico.`n`nLas claves (token, passkey, contraseña) van censuradas en el log. ¿Enviar?" `
-        -BotonSi "Enviar" -BotonNo "Cancelar"
+        -BotonSi "Enviar" -BotonNo "Cancelar" }
     if (-not $confirm) { return }
     $sanitizedLog = Join-Path $env:TEMP ('hdz_support_' + [guid]::NewGuid().ToString('N') + '.log')
     try {
@@ -3139,6 +3140,11 @@ function Construir-ListadoRemezcla($escaneo) {
             [void]$wp.Children.Add((New-Pill "♪ $(@($f.Audios).Count) audio(s)"))
             [void]$wp.Children.Add((New-Pill "💬 $(@($f.Subs).Count) sub(s)"))
             [void]$sp.Children.Add($wp)
+            foreach($sourceCfg in @($cfgSerie | Where-Object { -not $_.Video -and ($_.Audio -or $_.Subs) })) {
+                foreach($donor in @($escaneo | Where-Object { (Split-Path $_.Ruta -Parent).TrimEnd('\') -eq "$($sourceCfg.Ruta)".TrimEnd('\') -and (Test-HdzEpisodeMatch (Get-ClaveRemezcla ([IO.Path]::GetFileNameWithoutExtension($_.Nombre))) $ep) })) {
+                    $sourceText=[Windows.Controls.TextBlock]::new();$sourceText.Text="↳ $($donor.Nombre) · $(if($sourceCfg.Audio){'Audio '})$(if($sourceCfg.Subs){'Subtítulos'})";$sourceText.Foreground=$win.Resources['SubBrush'];$sourceText.TextWrapping='Wrap';$sourceText.Margin='26,3,0,3';[void]$sp.Children.Add($sourceText)
+                }
+            }
             $rowSal = New-Object System.Windows.Controls.StackPanel
             $rowSal.Orientation = "Horizontal"; $rowSal.Margin = [System.Windows.Thickness]::new(26, 5, 0, 0)
             $lblSal = New-Object System.Windows.Controls.TextBlock
@@ -3274,7 +3280,7 @@ function Construir-ListadoLote {
                 $nTxt = @($f.Subs | Where-Object { -not $_.EsPGS }).Count
                 if ($f.Subs.Count -gt 0) { [void]$wp.Children.Add((New-Pill "💬 $nTxt texto · $nPgs PGS")) }
                 if ($clavesHibridas -contains $k) { [void]$wp.Children.Add((New-Pill "PAREJA HÍBRIDA DV+HDR10" "warn")) }
-                $undsArchivo = @($f.Audios | Where-Object { (ConvCanon $_.Lang $_.Title) -eq "und" }).Count + @($f.Subs | Where-Object { (ConvCanon $_.Lang $_.Title) -eq "und" }).Count
+                $undsArchivo = @($f.Audios | Where-Object { (Get-IdiomaPistaGui $_ 'Audio') -eq "und" }).Count + @($f.Subs | Where-Object { (Get-IdiomaPistaGui $_ 'Sub') -eq "und" }).Count
                 if ($undsArchivo -gt 0) { [void]$wp.Children.Add((New-Pill "$undsArchivo pista(s) sin idioma" "warn")) }
             }
             [void]$sp.Children.Add($wp)
@@ -3526,7 +3532,7 @@ function Aplicar-Analisis($filas) {
     if ($pistasUndAudio.Count -gt 0) {
         $ui.cardUndAudio.Visibility = "Visible"
         Construir-FilasUnd $ui.panUndAudio $pistasUndAudio "Audio"
-        Set-Badge "bdgUndAudio" "$($pistasUndAudio.Count) pista(s) en $($archUndAudio.Keys.Count) archivo(s)" "warn"
+        Set-Badge "bdgUndAudio" "$($pistasUndAudio.Count) pista(s) editables en $($archUndAudio.Keys.Count) archivo(s)" "muted"
     } else {
         $ui.cardUndAudio.Visibility = "Collapsed"
         $ui.panUndAudio.Children.Clear()
@@ -3534,7 +3540,7 @@ function Aplicar-Analisis($filas) {
     if ($pistasUndSub.Count -gt 0) {
         $ui.cardUndSub.Visibility = "Visible"
         Construir-FilasUnd $ui.panUndSub $pistasUndSub "Sub"
-        Set-Badge "bdgUndSub" "$($pistasUndSub.Count) subtítulo(s) en $($archUndSub.Keys.Count) archivo(s)" "warn"
+        Set-Badge "bdgUndSub" "$($pistasUndSub.Count) subtítulo(s) editables en $($archUndSub.Keys.Count) archivo(s)" "muted"
     } else {
         $ui.cardUndSub.Visibility = "Collapsed"
         $ui.panUndSub.Children.Clear()
@@ -3965,11 +3971,11 @@ function Construir-Adaptacion($selScope) {
     }
     if ($pistasUndAudio.Count -gt 0) {
         $ui.cardUndAudio.Visibility = "Visible"; Construir-FilasUnd $ui.panUndAudio $pistasUndAudio "Audio"
-        Set-Badge "bdgUndAudio" "$($pistasUndAudio.Count) pista(s) en $($archUndAudio.Keys.Count) archivo(s)" "warn"
+        Set-Badge "bdgUndAudio" "$($pistasUndAudio.Count) pista(s) editables en $($archUndAudio.Keys.Count) archivo(s)" "muted"
     } else { $ui.cardUndAudio.Visibility = "Collapsed"; $ui.panUndAudio.Children.Clear() }
     if ($pistasUndSub.Count -gt 0) {
         $ui.cardUndSub.Visibility = "Visible"; Construir-FilasUnd $ui.panUndSub $pistasUndSub "Sub"
-        Set-Badge "bdgUndSub" "$($pistasUndSub.Count) subtítulo(s) en $($archUndSub.Keys.Count) archivo(s)" "warn"
+        Set-Badge "bdgUndSub" "$($pistasUndSub.Count) subtítulo(s) editables en $($archUndSub.Keys.Count) archivo(s)" "muted"
     } else { $ui.cardUndSub.Visibility = "Collapsed"; $ui.panUndSub.Children.Clear() }
     if ($idiomasSubs.Keys.Count -gt 0) {
         $ui.cardFiltro.Visibility = "Visible"
@@ -4114,6 +4120,7 @@ function Combinar-EscaneoRemezcla($res, $folders) {
 }
 
 function Lanzar-Escaneo {
+    $script:remixPresentationKey=$null
     $script:scanGen++
     # Una carpeta/lote nuevo empieza conservando todos sus idiomas. Las reconstrucciones dentro del
     # mismo análisis sí preservan después cualquier cambio explícito del usuario.
@@ -4218,10 +4225,12 @@ function Mostrar-Panel($nombre) {
     # (y no «Iniciar montaje»); la consola del montaje solo aplica a la rama de montaje.
     $esSubida = ($nombre -eq "panSubida")
     if ($ui.btnSubir)   { $ui.btnSubir.Visibility   = if ($esSubida) { "Visible" } else { "Collapsed" } }
-    if ($ui.btnIniciar) { $ui.btnIniciar.Visibility = if ($esSubida) { "Collapsed" } else { "Visible" } }
-    if ($ui.btnIniciarTodos -and $esSubida) { $ui.btnIniciarTodos.Visibility = "Collapsed" }
-    if ($ui.btnConsola) { $ui.btnConsola.Visibility = if ($esSubida) { "Collapsed" } else { "Visible" } }
-    if (-not $esSubida -and (Get-Command Actualizar-BotonesIniciar -EA SilentlyContinue)) { Actualizar-BotonesIniciar }   # fuera de subida: etiquetas/estado según modo
+    $esProyecto = ($nombre -eq 'panCrear')
+    if ($ui.btnIniciar) { $ui.btnIniciar.Visibility = if ($esProyecto) { "Visible" } else { "Collapsed" } }
+    if ($ui.btnIniciarTodos -and -not $esProyecto) { $ui.btnIniciarTodos.Visibility = "Collapsed" }
+    if ($ui.btnConsola) { $ui.btnConsola.Visibility = if ($esProyecto) { "Visible" } else { "Collapsed" } }
+    if ($script:barraEntrada) { $script:barraEntrada.Visibility = if ($esProyecto) { 'Visible' } else { 'Collapsed' } }
+    if ($esProyecto -and (Get-Command Actualizar-BotonesIniciar -EA SilentlyContinue)) { Actualizar-BotonesIniciar }
     # «Ver en la web» solo en subida y si ya hay un torrent subido en esta pestaña.
     if ($ui.btnVerWeb) { $ui.btnVerWeb.Visibility = if ($esSubida -and $script:urlTorrentWeb) { "Visible" } else { "Collapsed" } }
     if ($ui.btnAbrirTorrent) { $ui.btnAbrirTorrent.Visibility = if ($esSubida -and $script:rutaTorrentTracker -and (Test-Path -LiteralPath $script:rutaTorrentTracker)) { "Visible" } else { "Collapsed" } }
@@ -4455,6 +4464,7 @@ function Actualizar-PreviewRemezcla {
     if (Es-RemezclaSeriePorEpisodio $cs) {
         $serie = Test-RemezclaSeriePorEpisodio $cs
         $ui.lblRemezclaInfo.Text = if ($serie.Ok) { "Remezcla de serie: $($serie.Mensaje) El título se ignora; se une solo por el número de episodio." } else { "Remezcla de serie: $($serie.Mensaje)" }
+        if (Get-Command Show-HdzRemixPairs -ErrorAction SilentlyContinue) { Show-HdzRemixPairs }
         if ($ui.swRemezcla -and $ui.swRemezcla.IsChecked -and -not $script:modoTest) { $script:debounceTimer.Stop(); $script:debounceTimer.Start() }
         return
     }
@@ -7824,7 +7834,7 @@ function Actualizar-BotonesIniciar {
     if ("$($ui.btnIniciar.Visibility)" -ne "Visible") { return }   # en «Subida» el botón está oculto: no tocar
     $het = (("$(Get-ChipValor 'modoLote')") -eq "HETEROGENEO") -and (@($script:tabsProy).Count -gt 0)
     if ($het) {
-        $ui.btnIniciar.Content = "▶   Procesar esta"
+        $ui.btnIniciar.Content = "▶   Procesar este trabajo"
         if ($ui.btnIniciarTodos) { $ui.btnIniciarTodos.Visibility = "Visible" }
         $curLanzada = $false
         if ($script:tabProyActual -ge 0 -and $script:tabProyActual -lt @($script:tabsProy).Count) {
@@ -7834,7 +7844,7 @@ function Actualizar-BotonesIniciar {
         $quedan = @(@($script:tabsProy) | Where-Object { -not $script:gruposLanzados.ContainsKey("$($_.Principal)") }).Count
         if ($ui.btnIniciarTodos) { $ui.btnIniciarTodos.IsEnabled = ($quedan -gt 0) }
     } else {
-        $ui.btnIniciar.Content = "▶   Iniciar montaje"
+        $ui.btnIniciar.Content = "▶   Procesar este trabajo"
         $ui.btnIniciar.IsEnabled = $true
         if ($ui.btnIniciarTodos) { $ui.btnIniciarTodos.Visibility = "Collapsed" }
     }
@@ -8041,6 +8051,9 @@ function Reset-Todo {
     if ($script:networkBusy) { throw 'Espera a que termine la petición de red antes de reiniciar; no se duplica ni interrumpe una subida incierta.' }
     $script:timerIdiomasManuales.Stop()
     $script:idiomasManuales = @{}
+    $script:remixPresentationKey = $null
+    $script:remixPresentation = @()
+    if ($script:remixPairsPanel) { $script:remixPairsPanel.Children.Clear() }
     Remove-HdzJobConfig $script:colaMontaje
     # Detener el lector antes de cancelar: un resultado antiguo no puede resucitar el lote.
     if ($script:timerProgreso) { $script:timerProgreso.Stop() }
@@ -8134,6 +8147,7 @@ function Reset-Todo {
 
     # Torrent (la URL de anuncio NO se borra: es configuración persistente de Ajustes)
     $ui.txtPackNombre.Text = ""
+    $ui.txtLogoPersonalizado.Text = ""
     $ui.txtSalidaArchivo.Text = ""; $ui.txtSalidaTorrent.Text = ""
 
     # Subida al tracker
@@ -9027,14 +9041,18 @@ function Componer-EstadoAgente {
     $loteAnalisisAg = @($script:ultimoScan)
     if ($loteRemezclaAg) {
         foreach ($cfgRz in @(Leer-RemezclaCarpetas)) {
-            if (-not "$($cfgRz.Archivo)" -or (-not $cfgRz.Video -and -not $cfgRz.Audio -and -not $cfgRz.Subs)) { continue }
-            $rolesRemezclaPorArchivo["$($cfgRz.Archivo)"] = $cfgRz
+            if (-not $cfgRz.Video -and -not $cfgRz.Audio -and -not $cfgRz.Subs) { continue }
+            if ("$($cfgRz.Archivo)") { $rolesRemezclaPorArchivo["$($cfgRz.Archivo)"] = $cfgRz }
+            else { foreach($source in @($script:remixScanCrudo | Where-Object { (Split-Path $_.Ruta -Parent).TrimEnd('\') -eq "$($cfgRz.Ruta)".TrimEnd('\') })) { $rolesRemezclaPorArchivo["$($source.Ruta)"]=$cfgRz } }
         }
         $loteAnalisisAg = @($script:remixScanCrudo | Where-Object { $rolesRemezclaPorArchivo.ContainsKey("$($_.Ruta)") })
+        $loteFiltro=$null
     }
     # Tareas auxiliares fuera del montaje: se comparten con la barra global del programa y el móvil.
     $tareasAg = @(Get-TareasAuxiliares)
     $est = [ordered]@{
+        interfaz = Get-HdzInterfaceState
+        torrentRuta = "$($ui.txtTorrentSubir.Text)"
         v = Get-VersionLocal; equipo = "$env:COMPUTERNAME"; carpeta = "$($ui.txtCarpeta.Text)"
         # Cambia solo cuando el Dispatcher WPF está vivo. El worker puede seguir haciendo sync con
         # un estado viejo si un diálogo modal bloquea la interfaz; el panel detecta así ese caso.
@@ -9119,12 +9137,12 @@ function Componer-EstadoAgente {
                 $nTxtB = @($f.Subs | Where-Object { -not $_.EsPGS }).Count
                 if (@($f.Subs).Count -gt 0) { $bdg += @{ t = "💬 $nTxtB texto · $nPgsB PGS"; s = "gris" } }
                 if (@(Miembros-GrupoDe $nm).Count -gt 1) { $bdg += @{ t = "PAREJA HÍBRIDA DV+HDR10"; s = "warn" } }
-                $undsB = @($f.Audios | Where-Object { (ConvCanon $_.Lang $_.Title) -eq "und" }).Count + @($f.Subs | Where-Object { (ConvCanon $_.Lang $_.Title) -eq "und" }).Count
+                $undsB = @($f.Audios | Where-Object { (Get-IdiomaPistaGui $_ 'Audio') -eq "und" }).Count + @($f.Subs | Where-Object { (Get-IdiomaPistaGui $_ 'Sub') -eq "und" }).Count
                 if ($undsB -gt 0) { $bdg += @{ t = "$undsB pista(s) sin idioma"; s = "warn" } }
             }
             [ordered]@{ nombre = $nm; sel = $(if ($loteRemezclaAg) { $true } else { $script:seleccion[$nm] -ne $false }); ep = "$epv"; salida = "$sal"; principal = $(if ($cfgRz) { [bool]$cfgRz.Video } else { Es-PrincipalGrupo $nm }); fijo = $loteRemezclaAg; badges = $bdg }
         })
-        resumen = $(if ($loteRemezclaAg) { "$(@($loteAnalisisAg).Count) fuente(s) de remezcla · 1 archivo final" } else { "$($ui.lblResumen.Text)" })
+        resumen = $(if ($loteRemezclaAg) { "$(@($loteAnalisisAg).Count) archivos fuente · $(@($script:ultimoScan).Count) archivo(s) final(es)" } else { "$($ui.lblResumen.Text)" })
         estado  = "$($ui.lblEstado.Text)"
     }
     # Capturas: miniatura base64 + estado de seleccion (la casilla decide que va en la descripcion).
@@ -9217,6 +9235,7 @@ function Aplicar-ComandoAgente($c) {
                 Set-Estado 'Torrent original disponible en el botón de descarga de la web.' 'ok'
             }
             "ping"        { }
+            "send_log" { if (-not $c.confirmed) { throw 'Confirma el envío del registro desde la web.' }; Enviar-LogSoporte -ConfirmadoRemoto }
             "actualizar"  { Request-HdzUpdate $commandId }
             "reset"       { Reset-Todo }
             "iniciar"     { _agClick $ui.btnIniciar }
@@ -9240,6 +9259,12 @@ function Aplicar-ComandoAgente($c) {
             "add_captura" {
                 if ([IO.Path]::GetExtension("$($c.path)") -notin @('.png','.jpg','.jpeg') -or -not (Test-Path -LiteralPath "$($c.path)" -PathType Leaf)) { throw 'Selecciona una imagen PNG o JPEG existente.' }
                 Construir-Capturas (@($script:capRows | ForEach-Object { $_.Ruta }) + @("$($c.path)"))
+            }
+            "description_image" {
+                if ([IO.Path]::GetExtension("$($c.path)") -notin @('.png','.jpg','.jpeg') -or -not (Test-Path -LiteralPath "$($c.path)" -PathType Leaf)) { throw 'Selecciona una imagen PNG o JPEG existente.' }
+                $ownerId=$script:subidaTabId
+                $onDone={param($urls) Complete-HdzDescriptionImages $ownerId @($urls)}.GetNewClosure()
+                Start-SubidaAsync @("$($c.path)") $onDone @($ui.btnDescSubir)
             }
             "set_chip"    { if ($c.grupo) { Set-ChipValor "$($c.grupo)" $c.value } }
             "set_audio_lang" {
@@ -9304,11 +9329,11 @@ function Aplicar-ComandoAgente($c) {
             "set_combo"   { $m = _agMapCombo; if ($m.ContainsKey("$($c.name)")) { Set-ComboValor $m["$($c.name)"] $c.value } }
             "set_input"   {
                 $n = "$($c.name)"; $val = "$($c.value)"
-                if     ($n -eq "cfgImgboxPass")  { $ui.cfgImgboxPass.Password = $val }
-                elseif ($n -eq "cfgTrackerToken"){ $ui.cfgTrackerToken.Text = $val }
-                elseif ($n -eq "cfgTmdbKey")     { $ui.cfgTmdbKey.Text = $val }
-                elseif ($n -eq "cfgImgbbKey")    { $ui.cfgImgbbKey.Text = $val }
-                elseif ($n -eq "announce")       { $ui.txtAnnounce.Text = $val }
+                if     ($n -eq "cfgImgboxPass")  { if ($val.Trim()) { $ui.cfgImgboxPass.Password = $val } }
+                elseif ($n -eq "cfgTrackerToken"){ if ($val.Trim()) { $ui.cfgTrackerToken.Text = $val } }
+                elseif ($n -eq "cfgTmdbKey")     { if ($val.Trim()) { $ui.cfgTmdbKey.Text = $val } }
+                elseif ($n -eq "cfgImgbbKey")    { if ($val.Trim()) { $ui.cfgImgbbKey.Text = $val } }
+                elseif ($n -eq "announce")       { if ($val.Trim()) { $ui.txtAnnounce.Text = $val } }
                 else {
                     $m = _agMapInput
                     if ($m.Contains($n)) {
@@ -9518,6 +9543,8 @@ Actualizar-ModoLote
 Actualizar-TipoCategoria
 Construir-Firmas
 if ([string]::IsNullOrWhiteSpace($ui.upDescripcion.Text)) { Reset-Descripcion }
+. (Join-Path $PSScriptRoot 'HDZ-Interface.ps1')
+Initialize-HdzInterface
 Init-Tabs
 Actualizar-PanelHost
 Set-Estado "Elige la carpeta de los vídeos: las opciones se adaptarán a lo que se detecte."
