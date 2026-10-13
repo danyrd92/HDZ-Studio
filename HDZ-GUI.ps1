@@ -1100,7 +1100,7 @@ $xaml = @'
             </StackPanel>
           </Grid>
           <TextBlock x:Name="lblCarpetaDesc" Style="{StaticResource D}" Margin="2,8,0,0"
-                     Text="«Carpeta…» elige la primera temporada; «+ Temporada…» añade más carpetas y las procesa una tras otra."/>
+                     Text="Elige una carpeta o vídeos concretos. Añade temporadas para procesarlas en el mismo lote."/>
           <!-- Aviso: hay originales renombrados «.procesado» en la carpeta. Botón para revertirlos. -->
           <Border x:Name="panProcesado" Visibility="Collapsed" Background="#1C1407" BorderBrush="{StaticResource WarnBrush}"
                   BorderThickness="1" CornerRadius="8" Padding="13,11" Margin="2,11,0,2">
@@ -2948,7 +2948,7 @@ function Actualizar-DescripcionCarpetas {
         $ui.lblCarpetaDesc.Text = "Lote de $($cs.Count) temporadas: $($nombres -join ' · '). Se analizarán juntas y se procesarán en cola, una carpeta por trabajo."
         $ui.lblCarpetaDesc.ToolTip = ($cs -join "`n")
     } else {
-        $ui.lblCarpetaDesc.Text = "«Carpeta…» elige la primera temporada; «+ Temporada…» añade más carpetas y las procesa una tras otra."
+        $ui.lblCarpetaDesc.Text = "Elige una carpeta o vídeos concretos. Añade temporadas para procesarlas en el mismo lote."
         $ui.lblCarpetaDesc.ToolTip = $null
     }
 }
@@ -4240,7 +4240,7 @@ function Mostrar-Panel($nombre) {
         $ui.lblCarpetaDesc.Text = switch ($nombre) {
             "panSubida"  { "Carpeta de trabajo: aquí se buscan por defecto los .torrent y las capturas al subir (botón «Último creado» y al localizar el vídeo de un torrent)." }
             "panAjustes" { "Carpeta de trabajo (común a todo el programa). No se usa en Ajustes; configura aquí tus claves." }
-            default      { "Carpeta con los vídeos a procesar. Las opciones se adaptan a lo que se detecte; el resultado se monta desde aquí." }
+            default      { "Elige una carpeta o vídeos concretos. Añade temporadas para procesarlas en el mismo lote." }
         }
         if ($nombre -eq "panCrear" -and @(Get-CarpetasEntrada).Count -gt 1) { Actualizar-DescripcionCarpetas }
     }

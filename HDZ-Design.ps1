@@ -15,7 +15,7 @@ function New-HdzOutlineIcon($key) {
  $p=[Windows.Shapes.Path]::new();$p.Data=[Windows.Media.Geometry]::Parse($script:hdzIcons[$key]);$p.Width=18;$p.Height=18;$p.Stretch='Uniform';$p.Stroke=$win.Resources['SubBrush'];$p.StrokeThickness=1.7;$p.StrokeStartLineCap='Round';$p.StrokeEndLineCap='Round';$p.StrokeLineJoin='Round';$p.VerticalAlignment='Center';return $p
 }
 function New-HdzSectionHeader($title,$icon,$summary,$chevron) {
- $grid=[Windows.Controls.Grid]::new();$grid.MinHeight=54
+ $grid=[Windows.Controls.Grid]::new();$grid.MinHeight=44
  foreach($width in @('40','*','Auto','28')){$c=[Windows.Controls.ColumnDefinition]::new();$c.Width=[Windows.GridLengthConverter]::new().ConvertFromString($width);[void]$grid.ColumnDefinitions.Add($c)}
  [void]$grid.Children.Add((New-HdzOutlineIcon $icon))
  $title.FontSize=15;$title.FontWeight='SemiBold';$title.Foreground=$win.Resources['TextBrush'];$title.VerticalAlignment='Center';$title.TextTrimming='CharacterEllipsis';[Windows.Controls.Grid]::SetColumn($title,1);[void]$grid.Children.Add($title)
@@ -48,14 +48,14 @@ function Initialize-HdzDesign {
  $resources=@'
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <Style x:Key="HdzSectionHeader" TargetType="Border">
-  <Setter Property="Background" Value="#131316"/><Setter Property="BorderBrush" Value="#303038"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="14,0"/><Setter Property="Margin" Value="0,6,0,12"/>
+  <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#303038"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="CornerRadius" Value="0"/><Setter Property="Padding" Value="8,0"/><Setter Property="Margin" Value="0,4,0,10"/>
   <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1A1A20"/><Setter Property="BorderBrush" Value="#52525E"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="#EF4444"/><Setter Property="BorderThickness" Value="2"/></Trigger></Style.Triggers>
  </Style>
  <Style x:Key="HdzSection" TargetType="Expander">
-  <Setter Property="Margin" Value="0,6,0,12"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+  <Setter Property="Margin" Value="0,4,0,10"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander"><StackPanel>
    <ToggleButton Content="{TemplateBinding Header}" IsChecked="{Binding IsExpanded,Mode=TwoWay,RelativeSource={RelativeSource TemplatedParent}}" HorizontalContentAlignment="Stretch">
-    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="outline" Background="#131316" BorderBrush="#303038" BorderThickness="1" CornerRadius="10" Padding="14,0"><ContentPresenter HorizontalAlignment="Stretch"/></Border>
+    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="outline" Background="Transparent" BorderBrush="#303038" BorderThickness="0,0,0,1" CornerRadius="0" Padding="8,0"><ContentPresenter HorizontalAlignment="Stretch"/></Border>
      <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="outline" Property="Background" Value="#1A1A20"/><Setter TargetName="outline" Property="BorderBrush" Value="#52525E"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="outline" Property="BorderBrush" Value="#EF4444"/><Setter TargetName="outline" Property="BorderThickness" Value="2"/></Trigger></ControlTemplate.Triggers>
     </ControlTemplate></ToggleButton.Template>
    </ToggleButton>
@@ -87,6 +87,7 @@ function Initialize-HdzDesign {
  foreach($control in $ui.Values){if($control -is [Windows.Controls.Control]){$control.FocusVisualStyle=$dict['HdzKeyboardFocus'];if($control -is [Windows.Controls.Button] -or $control -is [Windows.Controls.Primitives.ToggleButton]){$control.MinHeight=36}}}
  $ui.lblVersion.Foreground=$win.Resources['SubBrush'];$ui.lblPie.Foreground=$win.Resources['SubBrush'];$ui.lblPie.FontSize=12;$ui.lblSecMontaje.Text='MONTAJE';$ui.lblSecTorrent.Text='PUBLICACIÓN'
  $ui.btnReset.Content='Empezar de Zero';$ui.btnElegirVideos.Content='Elegir vídeos';$ui.btnExaminar.Content='Elegir carpeta';$ui.btnAnadirTemporada.Content='+ Añadir temporada'
+ $ui.lblPie.Text='PGS: el OCR manual requiere Subtitle Edit en el PC.'
  $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada);$main.MaxWidth=1320;$main.HorizontalAlignment='Stretch'
  Set-HdzNavigationDesign;$script:hdzDesignReady=$true;Update-HdzDesignState
  Initialize-HdzProduct
@@ -97,22 +98,24 @@ function New-HdzProductText($text,$size,$brush) {
 function Initialize-HdzProduct {
  $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada)
  $top=[Windows.Controls.StackPanel]::new();[void]$main.Children.Remove($script:barraEntrada);[Windows.Controls.Grid]::SetRow($top,0)
- $hero=[Windows.Controls.Grid]::new();$hero.Margin='0,0,0,20'
- $left=[Windows.Controls.StackPanel]::new();$left.Margin='0,0,210,0'
+ $hero=[Windows.Controls.Grid]::new();$hero.Margin='0,0,0,12'
+ $left=[Windows.Controls.StackPanel]::new()
  $script:productKicker=New-HdzProductText 'ESPACIO DE TRABAJO' 10.5 'SubBrush';$script:productKicker.FontWeight='SemiBold'
- $script:productTitle=New-HdzProductText 'Proyecto' 26 'TextBrush';$script:productTitle.FontWeight='SemiBold';$script:productTitle.Margin='0,3,0,4'
+ $script:productTitle=New-HdzProductText 'Proyecto' 20 'TextBrush';$script:productTitle.FontWeight='SemiBold';$script:productTitle.Margin='0,0,0,0'
  $script:productSubtitle=New-HdzProductText '' 13 'SubBrush'
+ $script:productKicker.Visibility='Collapsed';$script:productSubtitle.Visibility='Collapsed'
  foreach($child in @($script:productKicker,$script:productTitle,$script:productSubtitle)){[void]$left.Children.Add($child)}
  [void]$hero.Children.Add($left)
  $script:productBadge=New-HdzProductText 'Sin archivos' 12 'SubBrush';$script:productBadge.MaxWidth=180
  $badgeFrame=[Windows.Controls.Border]::new();$badgeFrame.HorizontalAlignment='Right';$badgeFrame.VerticalAlignment='Center';$badgeFrame.Background=$win.Resources['ChipBrush'];$badgeFrame.BorderBrush=$win.Resources['CardBorderBrush'];$badgeFrame.BorderThickness='1';$badgeFrame.CornerRadius='16';$badgeFrame.Padding='12,6';$badgeFrame.Child=$script:productBadge
+ $badgeFrame.Visibility='Collapsed'
  [void]$hero.Children.Add($badgeFrame);[void]$top.Children.Add($hero);[void]$top.Children.Add($script:barraEntrada);[void]$main.Children.Add($top)
  $overview=[Windows.Controls.Border]::new();$overview.Background=$win.Resources['CardBrush'];$overview.BorderBrush=$win.Resources['CardBorderBrush'];$overview.BorderThickness='1';$overview.CornerRadius='12';$overview.Margin='0,0,0,12';$overview.Padding='16,12'
  $columns=[Windows.Controls.Primitives.UniformGrid]::new();$columns.Columns=3;$script:productMetrics=@()
  foreach($caption in @('ENTRADA','TRABAJO','DESTINO')){
   $column=[Windows.Controls.StackPanel]::new();$column.Margin='0,0,16,0';$label=New-HdzProductText $caption 10.5 'SubBrush';$value=New-HdzProductText '' 14 'TextBrush';$value.FontWeight='SemiBold';$value.TextWrapping='NoWrap';$value.TextTrimming='CharacterEllipsis';$value.Margin='0,4,0,0';[void]$column.Children.Add($label);[void]$column.Children.Add($value);[void]$columns.Children.Add($column);$script:productMetrics+=,$value
  }
- $overview.Child=$columns;$ui.panCrear.Children.Insert(0,$overview)
+ $overview.Child=$columns;$overview.Visibility='Collapsed';$ui.panCrear.Children.Insert(0,$overview)
  $jumps=[Windows.Controls.WrapPanel]::new();$jumps.Margin='0,0,0,16'
  foreach($entry in @(@('Tracker','cfgTrackerUrl'),@('TMDB','cfgTmdbKey'),@('Imágenes','cfgImgbbKey'),@('Carpetas','cfgCarpetaTorrent'),@('Soporte','cfgUsuarioSoporte'))){
   $button=[Windows.Controls.Button]::new();$button.Style=$win.Resources['GhostMini'];$button.Content=$entry[0];$button.Margin='0,0,8,6';$button.Tag=Get-HdzCard $ui[$entry[1]];$button.Add_Click({param($sender) if($sender.Tag){$sender.Tag.BringIntoView()}});[void]$jumps.Children.Add($button)
@@ -123,6 +126,7 @@ function Initialize-HdzProduct {
 function Update-HdzProductState {
  if(-not $script:productReady){return}
  $project=$ui.panCrear.Visibility -eq 'Visible';$upload=$ui.panSubida.Visibility -eq 'Visible'
+ $ui.btnConsola.Visibility=if($project -and $ui.btnConsola.IsEnabled){'Visible'}else{'Collapsed'}
  $script:productTitle.Text=if($project){'Proyecto'}elseif($upload){'Torrent y subida'}else{'Ajustes'}
  $script:productKicker.Text=if($project){'ESPACIO DE TRABAJO'}elseif($upload){'PUBLICACIÓN'}else{'CONFIGURACIÓN'}
  $script:productSubtitle.Text=if($project){'Prepara tus fuentes, revisa las pistas y define el resultado.'}elseif($upload){'Revisa la ficha, la descripción y los recursos antes de publicar.'}else{'Gestiona tus conexiones, preferencias y carpetas predeterminadas.'}
