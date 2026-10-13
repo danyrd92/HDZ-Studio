@@ -98,6 +98,7 @@ function Initialize-HdzDesign {
  }
  Set-HdzNavigationDesign;$script:hdzDesignReady=$true;Update-HdzDesignState
  Initialize-HdzProduct
+ Initialize-HdzWorkspace
 }
 function New-HdzProductText($text,$size,$brush) {
  $block=[Windows.Controls.TextBlock]::new();$block.Text=$text;$block.FontSize=$size;$block.Foreground=$win.Resources[$brush];$block.TextWrapping='Wrap';return $block
@@ -144,4 +145,109 @@ function Update-HdzProductState {
  $script:productMetrics[2].Text=if($ui.txtSalidaArchivo.Text){$ui.txtSalidaArchivo.Text}else{'Carpeta de origen'}
  foreach($value in $script:productMetrics){$value.ToolTip=$value.Text}
  if(-not $count){foreach($text in @(Get-HdzUiTexts $ui.panListado)){if($text.Text -like 'No hay vídeos*'){$text.Text='Todavía no hay vídeos en el análisis. Elige una carpeta o archivos concretos para comenzar.';$text.FontSize=14;$text.TextWrapping='Wrap';$text.Margin='0,10,0,0'}}}
+ if($script:workspaceReady){
+  foreach($key in @('audio','subs')){
+   $wrap=$script:workspaceStages[$key].body.Children[0];$available=@($wrap.Children|Where-Object Visibility -eq 'Visible').Count -gt 0
+   $script:workspaceEmpty[$key].Visibility=if($available){'Collapsed'}else{'Visible'}
+  }
+  $script:workspaceNav.Visibility=if($project){'Visible'}else{'Collapsed'}
+  $script:workspaceHeading.Visibility=if($project){'Visible'}else{'Collapsed'}
+  $script:barraEntrada.Visibility=if($project -and $script:workspaceStage -eq 'general'){'Visible'}else{'Collapsed'}
+ }
+}
+
+# A task-oriented workspace: one inspector at a time, with the same authoritative controls.
+function Set-HdzWorkspaceStage($name) {
+ if(-not $script:workspaceStages.Contains($name)){return}
+ $script:workspaceStage=$name
+ foreach($key in $script:workspaceStages.Keys){
+  $stage=$script:workspaceStages[$key];$active=$key -eq $name
+  $stage.body.Visibility=if($active){'Visible'}else{'Collapsed'}
+  if($stage.body -is [Windows.Controls.Expander]){$stage.body.IsExpanded=$active}
+  $stage.button.Background=if($active){$win.Resources['AccentSoftBrush']}else{[Windows.Media.Brushes]::Transparent}
+  $stage.button.BorderBrush=if($active){$win.Resources['AccentHoverBrush']}else{[Windows.Media.Brushes]::Transparent}
+  $stage.button.Foreground=if($active){$win.Resources['TextBrush']}else{$win.Resources['SubBrush']}
+ }
+ $script:workspaceHeadingTitle.Text=$script:workspaceStages[$name].title
+ $script:workspaceHeadingNote.Text=$script:workspaceStages[$name].note
+ Update-HdzProductState
+ if($script:workspaceScroll){$script:workspaceScroll.ScrollToTop()}
+}
+function New-HdzWorkspaceColumns($owner,$wideCards=@()) {
+ $wrap=[Windows.Controls.WrapPanel]::new();$wrap.HorizontalAlignment='Stretch';$wrap.Tag=@($wideCards)
+ $children=@($owner.Children);$owner.Children.Clear()
+ foreach($child in $children){$child.VerticalAlignment='Top';[void]$wrap.Children.Add($child)}
+ [void]$owner.Children.Add($wrap)
+ $wrap.Add_SizeChanged({param($sender)
+  $available=$sender.ActualWidth;if($available -le 0){return}
+  $columns=if($available -ge 1050){2}else{1};$half=($available-16)/2
+  foreach($child in $sender.Children){
+   $wide=$child -isnot [Windows.Controls.Border] -or @($sender.Tag) -contains $child -or $child -eq (Get-HdzCard $ui.panListado) -or $child -eq (Get-HdzCard $ui.panRemezcla) -or $child -eq $ui.cardConvAudio -or $child -eq $ui.cardUndAudio -or $child -eq $ui.cardUndSub
+   $child.Width=if($columns -eq 1 -or $wide){$available}else{$half}
+   $child.Margin=if($columns -eq 2 -and -not $wide){'0,0,16,16'}else{'0,0,0,16'}
+   # Remove the trailing gutter from every second half-width card.
+  }
+  $index=0;foreach($child in $sender.Children){if($child.Width -lt $available){if($index%2 -eq 1){$child.Margin='0,0,0,16'};$index++}else{$index=0}}
+ })
+ return $wrap
+}
+function Initialize-HdzWorkspace {
+ $stageStyle=[Windows.Markup.XamlReader]::Parse(@'
+<Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="Button">
+ <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Name="frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="frame" Property="BorderBrush" Value="#EF4444"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="frame" Property="BorderBrush" Value="#EF4444"/><Setter TargetName="frame" Property="BorderThickness" Value="2"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+</Style>
+'@)
+ foreach($pair in @(@('BgBrush','#101318'),@('SidebarBrush','#0B0E12'),@('CardBrush','#181D24'),@('CardBorderBrush','#303844'),@('FieldBrush','#11161D'),@('FieldBorderBrush','#36404D'),@('ChipBrush','#222A34'),@('ChipBorderBrush','#36404D'),@('SubBrush','#ABB7C6'),@('MutedBrush','#8491A2'),@('AccentSoftBrush','#322029'))){
+  $brush=$win.Resources[$pair[0]];if($brush -and -not $brush.IsFrozen){$brush.Color=[Windows.Media.ColorConverter]::ConvertFromString($pair[1])}
+ }
+ foreach($key in @('CardBgGrad','CardBorderGrad')){foreach($stop in $win.Resources[$key].GradientStops){if(-not $stop.IsFrozen){$stop.Color=[Windows.Media.ColorConverter]::ConvertFromString($(if($key -eq 'CardBgGrad'){'#181D24'}else{'#303844'}))}}}
+ function Style-HdzWorkspaceCards($node){
+  if($node -is [Windows.Controls.Border] -and $node.Style -eq $win.Resources['Card']){$node.CornerRadius='12';$node.Padding='20,18';$node.Background=$win.Resources['CardBrush'];$node.BorderBrush=$win.Resources['CardBorderBrush']}
+  foreach($child in [Windows.LogicalTreeHelper]::GetChildren($node)){if($child -is [Windows.DependencyObject]){Style-HdzWorkspaceCards $child}}
+ }
+ Style-HdzWorkspaceCards $win.Content
+ $script:productTitle.FontSize=26;$script:productTitle.FontWeight='SemiBold';$script:productTitle.Margin='0,0,0,8'
+ $ui.lblSecMontaje.Text='ESPACIO DE TRABAJO';$ui.lblSecTorrent.Text='PUBLICACIÓN';$ui.lblSecMontaje.Foreground=$win.Resources['SubBrush'];$ui.lblSecTorrent.Foreground=$win.Resources['SubBrush']
+ $top=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada)
+ $script:workspaceNav=[Windows.Controls.WrapPanel]::new();$script:workspaceNav.Margin='0'
+ $script:workspaceStages=[ordered]@{}
+ $output=@($script:designedExpanders|Where-Object { [Windows.Automation.AutomationProperties]::GetName($_) -eq 'Salida y originales' })[0]
+ $delivery=@($script:designedExpanders|Where-Object { [Windows.Automation.AutomationProperties]::GetName($_) -eq 'Torrent y capturas del montaje' })[0]
+ foreach($entry in @(
+  @('general','Fuentes','entrada',$ui.panGeneral,'Tus archivos, tus versiones','Selecciona los vídeos y decide qué aporta cada fuente al montaje.'),
+  @('proyecto','Identidad','proyecto',$ui.panProyecto,'Identifica el resultado','Título, temporada y origen: la identidad que tendrá tu archivo final.'),
+  @('audio','Audio','audio',$ui.panAudio,'El sonido, a tu medida','Corrige los idiomas, conserva las pistas que necesitas y define las conversiones.'),
+  @('subs','Subtítulos','subs',$ui.panSubs,'Subtítulos bajo control','Idiomas, pistas completas y forzadas. El OCR de PGS requiere el PC.'),
+  @('salida','Salida','salida',$output,'Decide dónde termina','Carpetas de destino, nombre final y tratamiento de los originales.'),
+  @('entrega','Entrega','torrent',$delivery,'Prepara lo que vas a compartir','Torrents privados y capturas asociados al montaje. La publicación se revisa después.')
+ )){
+  $button=[Windows.Controls.Button]::new();$button.Style=$stageStyle;$button.Padding='14,10';$button.Margin='0,0,8,6';$button.MinHeight=46;$button.Tag=$entry[0]
+  $row=[Windows.Controls.StackPanel]::new();$row.Orientation='Horizontal';[void]$row.Children.Add((New-HdzOutlineIcon $entry[2]));$label=New-HdzProductText $entry[1] 14 'TextBrush';$label.Margin='9,0,0,0';$label.VerticalAlignment='Center';[void]$row.Children.Add($label);$button.Content=$row
+  $button.Add_Click({param($sender) Set-HdzWorkspaceStage $sender.Tag});[Windows.Automation.AutomationProperties]::SetName($button,$entry[1]);[void]$script:workspaceNav.Children.Add($button)
+  $script:workspaceStages[$entry[0]]=@{body=$entry[3];button=$button;title=$entry[4];note=$entry[5]}
+ }
+ $navFrame=[Windows.Controls.Border]::new();$navFrame.Background=[Windows.Media.BrushConverter]::new().ConvertFromString('#141920');$navFrame.BorderBrush=$win.Resources['CardBorderBrush'];$navFrame.BorderThickness='1';$navFrame.CornerRadius='12';$navFrame.Padding='6';$navFrame.Margin='0,0,0,20';$navFrame.Child=$script:workspaceNav
+ $visibility=[Windows.Data.Binding]::new('Visibility');$visibility.Source=$script:workspaceNav;[void]$navFrame.SetBinding([Windows.UIElement]::VisibilityProperty,$visibility)
+ $script:workspaceNav.Add_SizeChanged({param($sender) if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-60)/6)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
+ $top.Children.Insert(1,$navFrame)
+ $script:workspaceHeading=[Windows.Controls.StackPanel]::new();$script:workspaceHeading.Margin='0,0,0,18'
+ $script:workspaceHeadingTitle=New-HdzProductText '' 20 'TextBrush';$script:workspaceHeadingTitle.FontWeight='SemiBold';$script:workspaceHeadingNote=New-HdzProductText '' 13 'SubBrush';$script:workspaceHeadingNote.Margin='0,5,0,0'
+ [void]$script:workspaceHeading.Children.Add($script:workspaceHeadingTitle);[void]$script:workspaceHeading.Children.Add($script:workspaceHeadingNote);$top.Children.Insert(2,$script:workspaceHeading)
+ foreach($name in @('secHdrGeneral','secHdrProyecto','secHdrAudio','secHdrSubs')){$ui[$name].Visibility='Collapsed'}
+ # Output/delivery become plain inspector bodies, not nested accordion controls.
+ foreach($section in @($output,$delivery)){
+  $body=$section.Content;$section.Content=$null;$position=$ui.panCrear.Children.IndexOf($section);[void]$ui.panCrear.Children.Remove($section);$ui.panCrear.Children.Insert($position,$body)
+  foreach($key in @('salida','entrega')){if($script:workspaceStages[$key].body -eq $section){$script:workspaceStages[$key].body=$body}}
+ }
+ foreach($stage in $script:workspaceStages.Values){[void](New-HdzWorkspaceColumns $stage.body)}
+ # The publishing desk and preferences use the same responsive card grid.
+ [void](New-HdzWorkspaceColumns $ui.panSubidaBody.Child)
+ $settings=[Windows.Controls.StackPanel]::new();foreach($child in @($ui.panAjustes.Children|Select-Object -Skip 1)){[void]$ui.panAjustes.Children.Remove($child);[void]$settings.Children.Add($child)};[void](New-HdzWorkspaceColumns $settings);[void]$ui.panAjustes.Children.Add($settings)
+ $script:workspaceEmpty=@{}
+ foreach($key in @('audio','subs')){
+  $card=[Windows.Controls.Border]::new();$card.Style=$win.Resources['Card'];$card.Background=$win.Resources['CardBrush'];$card.BorderBrush=$win.Resources['CardBorderBrush'];$card.CornerRadius='12';$card.Padding='22'
+  $text=New-HdzProductText 'Las opciones aparecerán cuando analices vídeos con estas pistas. Vuelve a Fuentes para elegir los archivos.' 14 'SubBrush';$card.Child=$text;$script:workspaceEmpty[$key]=$card;[void]$script:workspaceStages[$key].body.Children.Add($card)
+ }
+ $script:workspaceScroll=[Windows.LogicalTreeHelper]::GetParent([Windows.LogicalTreeHelper]::GetParent($ui.panCrear))
+ $script:workspaceReady=$true;Set-HdzWorkspaceStage 'general'
 }

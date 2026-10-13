@@ -456,17 +456,17 @@ $xaml = @'
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
   <Window.Resources>
 
-    <SolidColorBrush x:Key="BgBrush"          Color="#0C0C0F"/>
-    <SolidColorBrush x:Key="SidebarBrush"     Color="#09090B"/>
-    <SolidColorBrush x:Key="CardBrush"        Color="#131316"/>
-    <SolidColorBrush x:Key="CardBorderBrush"  Color="#242429"/>
-    <SolidColorBrush x:Key="FieldBrush"       Color="#0E0E11"/>
-    <SolidColorBrush x:Key="FieldBorderBrush" Color="#2E2E35"/>
-    <SolidColorBrush x:Key="ChipBrush"        Color="#1A1A1F"/>
-    <SolidColorBrush x:Key="ChipBorderBrush"  Color="#2E2E35"/>
+    <SolidColorBrush x:Key="BgBrush"          Color="#101318"/>
+    <SolidColorBrush x:Key="SidebarBrush"     Color="#0B0E12"/>
+    <SolidColorBrush x:Key="CardBrush"        Color="#181D24"/>
+    <SolidColorBrush x:Key="CardBorderBrush"  Color="#303844"/>
+    <SolidColorBrush x:Key="FieldBrush"       Color="#11161D"/>
+    <SolidColorBrush x:Key="FieldBorderBrush" Color="#36404D"/>
+    <SolidColorBrush x:Key="ChipBrush"        Color="#222A34"/>
+    <SolidColorBrush x:Key="ChipBorderBrush"  Color="#36404D"/>
     <SolidColorBrush x:Key="TextBrush"        Color="#EDEDEF"/>
-    <SolidColorBrush x:Key="SubBrush"         Color="#9C9CA8"/>
-    <SolidColorBrush x:Key="MutedBrush"       Color="#5E5E66"/>
+    <SolidColorBrush x:Key="SubBrush"         Color="#ABB7C6"/>
+    <SolidColorBrush x:Key="MutedBrush"       Color="#8491A2"/>
     <SolidColorBrush x:Key="AccentBrush"      Color="#D92B2B"/>
     <SolidColorBrush x:Key="AccentHoverBrush" Color="#EF4444"/>
     <SolidColorBrush x:Key="OkBrush"          Color="#86D97C"/>
@@ -8213,6 +8213,7 @@ function Reset-Todo {
         $ui.btnConsola.IsEnabled = $false
     }
 
+    if ($script:workspaceReady) { Set-HdzWorkspaceStage 'general' }
     Set-Estado "Programa reiniciado. Elige una carpeta de vídeos para empezar."
 }
 
