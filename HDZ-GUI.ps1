@@ -4244,6 +4244,7 @@ function Mostrar-Panel($nombre) {
         }
         if ($nombre -eq "panCrear" -and @(Get-CarpetasEntrada).Count -gt 1) { Actualizar-DescripcionCarpetas }
     }
+    if (Get-Command Update-HdzProductState -ErrorAction SilentlyContinue) { Update-HdzProductState }
 }
 $ui.navProyecto.Add_Checked({ Mostrar-Panel "panCrear" })
 $ui.navSubida.Add_Checked({

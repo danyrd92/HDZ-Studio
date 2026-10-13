@@ -42,6 +42,7 @@ function Update-HdzDesignState {
  $torrent=switch(Get-ChipValor 'torrent'){'INDIVIDUAL'{'Torrent por archivo'}'PACK'{'Torrent del lote'}'AMBOS'{'Torrents individuales y pack'}default{'Sin torrent'}}
  $script:designDeliverSummary.Text="$torrent · $(Get-ChipValor 'capturasProy') capturas"
  foreach($summary in @($script:sectionSummaries.Values)+@($script:designOutputSummary,$script:designDeliverSummary)){$summary.ToolTip=$summary.Text}
+ Update-HdzProductState
 }
 function Initialize-HdzDesign {
  $resources=@'
@@ -88,4 +89,48 @@ function Initialize-HdzDesign {
  $ui.btnReset.Content='Empezar de Zero';$ui.btnElegirVideos.Content='Elegir vídeos';$ui.btnExaminar.Content='Elegir carpeta';$ui.btnAnadirTemporada.Content='+ Añadir temporada'
  $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada);$main.MaxWidth=1320;$main.HorizontalAlignment='Stretch'
  Set-HdzNavigationDesign;$script:hdzDesignReady=$true;Update-HdzDesignState
+ Initialize-HdzProduct
+}
+function New-HdzProductText($text,$size,$brush) {
+ $block=[Windows.Controls.TextBlock]::new();$block.Text=$text;$block.FontSize=$size;$block.Foreground=$win.Resources[$brush];$block.TextWrapping='Wrap';return $block
+}
+function Initialize-HdzProduct {
+ $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada)
+ $top=[Windows.Controls.StackPanel]::new();[void]$main.Children.Remove($script:barraEntrada);[Windows.Controls.Grid]::SetRow($top,0)
+ $hero=[Windows.Controls.Grid]::new();$hero.Margin='0,0,0,20'
+ $left=[Windows.Controls.StackPanel]::new();$left.Margin='0,0,210,0'
+ $script:productKicker=New-HdzProductText 'ESPACIO DE TRABAJO' 10.5 'SubBrush';$script:productKicker.FontWeight='SemiBold'
+ $script:productTitle=New-HdzProductText 'Proyecto' 26 'TextBrush';$script:productTitle.FontWeight='SemiBold';$script:productTitle.Margin='0,3,0,4'
+ $script:productSubtitle=New-HdzProductText '' 13 'SubBrush'
+ foreach($child in @($script:productKicker,$script:productTitle,$script:productSubtitle)){[void]$left.Children.Add($child)}
+ [void]$hero.Children.Add($left)
+ $script:productBadge=New-HdzProductText 'Sin archivos' 12 'SubBrush';$script:productBadge.MaxWidth=180
+ $badgeFrame=[Windows.Controls.Border]::new();$badgeFrame.HorizontalAlignment='Right';$badgeFrame.VerticalAlignment='Center';$badgeFrame.Background=$win.Resources['ChipBrush'];$badgeFrame.BorderBrush=$win.Resources['CardBorderBrush'];$badgeFrame.BorderThickness='1';$badgeFrame.CornerRadius='16';$badgeFrame.Padding='12,6';$badgeFrame.Child=$script:productBadge
+ [void]$hero.Children.Add($badgeFrame);[void]$top.Children.Add($hero);[void]$top.Children.Add($script:barraEntrada);[void]$main.Children.Add($top)
+ $overview=[Windows.Controls.Border]::new();$overview.Background=$win.Resources['CardBrush'];$overview.BorderBrush=$win.Resources['CardBorderBrush'];$overview.BorderThickness='1';$overview.CornerRadius='12';$overview.Margin='0,0,0,12';$overview.Padding='16,12'
+ $columns=[Windows.Controls.Primitives.UniformGrid]::new();$columns.Columns=3;$script:productMetrics=@()
+ foreach($caption in @('ENTRADA','TRABAJO','DESTINO')){
+  $column=[Windows.Controls.StackPanel]::new();$column.Margin='0,0,16,0';$label=New-HdzProductText $caption 10.5 'SubBrush';$value=New-HdzProductText '' 14 'TextBrush';$value.FontWeight='SemiBold';$value.TextWrapping='NoWrap';$value.TextTrimming='CharacterEllipsis';$value.Margin='0,4,0,0';[void]$column.Children.Add($label);[void]$column.Children.Add($value);[void]$columns.Children.Add($column);$script:productMetrics+=,$value
+ }
+ $overview.Child=$columns;$ui.panCrear.Children.Insert(0,$overview)
+ $jumps=[Windows.Controls.WrapPanel]::new();$jumps.Margin='0,0,0,16'
+ foreach($entry in @(@('Tracker','cfgTrackerUrl'),@('TMDB','cfgTmdbKey'),@('Imágenes','cfgImgbbKey'),@('Carpetas','cfgCarpetaTorrent'),@('Soporte','cfgUsuarioSoporte'))){
+  $button=[Windows.Controls.Button]::new();$button.Style=$win.Resources['GhostMini'];$button.Content=$entry[0];$button.Margin='0,0,8,6';$button.Tag=Get-HdzCard $ui[$entry[1]];$button.Add_Click({param($sender) if($sender.Tag){$sender.Tag.BringIntoView()}});[void]$jumps.Children.Add($button)
+ }
+ $ui.panAjustes.Children.Insert(0,$jumps)
+ $script:productReady=$true;Update-HdzProductState
+}
+function Update-HdzProductState {
+ if(-not $script:productReady){return}
+ $project=$ui.panCrear.Visibility -eq 'Visible';$upload=$ui.panSubida.Visibility -eq 'Visible'
+ $script:productTitle.Text=if($project){'Proyecto'}elseif($upload){'Torrent y subida'}else{'Ajustes'}
+ $script:productKicker.Text=if($project){'ESPACIO DE TRABAJO'}elseif($upload){'PUBLICACIÓN'}else{'CONFIGURACIÓN'}
+ $script:productSubtitle.Text=if($project){'Prepara tus fuentes, revisa las pistas y define el resultado.'}elseif($upload){'Revisa la ficha, la descripción y los recursos antes de publicar.'}else{'Gestiona tus conexiones, preferencias y carpetas predeterminadas.'}
+ $count=@($script:ultimoScan).Count;$sources=if($ui.swRemezcla.IsChecked -and $script:remixScanCrudo){@($script:remixScanCrudo).Count}else{$count}
+ $script:productBadge.Text=if($script:networkBusy){'Petición en curso'}elseif($project){if($count){"$count archivo(s) analizados"}else{'Sin archivos analizados'}}elseif($upload){if($ui.txtTorrentSubir.Text){'Torrent cargado'}else{'Sin torrent cargado'}}else{'Preferencias conservadas'}
+ $script:productMetrics[0].Text=if($sources){"$sources archivo(s) fuente"}else{'Selecciona tus vídeos'}
+ $script:productMetrics[1].Text=if($ui.txtTitulo.Text){$ui.txtTitulo.Text}else{'Identificación pendiente'}
+ $script:productMetrics[2].Text=if($ui.txtSalidaArchivo.Text){$ui.txtSalidaArchivo.Text}else{'Carpeta de origen'}
+ foreach($value in $script:productMetrics){$value.ToolTip=$value.Text}
+ if(-not $count){foreach($text in @(Get-HdzUiTexts $ui.panListado)){if($text.Text -like 'No hay vídeos*'){$text.Text='Todavía no hay vídeos en el análisis. Elige una carpeta o archivos concretos para comenzar.';$text.FontSize=14;$text.TextWrapping='Wrap';$text.Margin='0,10,0,0'}}}
 }
