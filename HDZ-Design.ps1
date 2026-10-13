@@ -214,12 +214,12 @@ function Initialize-HdzWorkspace {
  $output=@($script:designedExpanders|Where-Object { [Windows.Automation.AutomationProperties]::GetName($_) -eq 'Salida y originales' })[0]
  $delivery=@($script:designedExpanders|Where-Object { [Windows.Automation.AutomationProperties]::GetName($_) -eq 'Torrent y capturas del montaje' })[0]
  foreach($entry in @(
-  @('general','Fuentes','entrada',$ui.panGeneral,'Tus archivos, tus versiones','Selecciona los vídeos y decide qué aporta cada fuente al montaje.'),
-  @('proyecto','Identidad','proyecto',$ui.panProyecto,'Identifica el resultado','Título, temporada y origen: la identidad que tendrá tu archivo final.'),
-  @('audio','Audio','audio',$ui.panAudio,'El sonido, a tu medida','Corrige los idiomas, conserva las pistas que necesitas y define las conversiones.'),
-  @('subs','Subtítulos','subs',$ui.panSubs,'Subtítulos bajo control','Idiomas, pistas completas y forzadas. El OCR de PGS requiere el PC.'),
-  @('salida','Salida','salida',$output,'Decide dónde termina','Carpetas de destino, nombre final y tratamiento de los originales.'),
-  @('entrega','Entrega','torrent',$delivery,'Prepara lo que vas a compartir','Torrents privados y capturas asociados al montaje. La publicación se revisa después.')
+  @('general','Fuentes','entrada',$ui.panGeneral,'Fuentes',''),
+  @('proyecto','Identidad','proyecto',$ui.panProyecto,'Identificación y origen',''),
+  @('audio','Audio','audio',$ui.panAudio,'Audio',''),
+  @('subs','Subtítulos','subs',$ui.panSubs,'Subtítulos',''),
+  @('salida','Salida','salida',$output,'Salida y originales',''),
+  @('entrega','Entrega','torrent',$delivery,'Torrent y capturas','')
  )){
   $button=[Windows.Controls.Button]::new();$button.Style=$stageStyle;$button.Padding='14,10';$button.Margin='0,0,8,6';$button.MinHeight=46;$button.Tag=$entry[0]
   $row=[Windows.Controls.StackPanel]::new();$row.Orientation='Horizontal';[void]$row.Children.Add((New-HdzOutlineIcon $entry[2]));$label=New-HdzProductText $entry[1] 14 'TextBrush';$label.Margin='9,0,0,0';$label.VerticalAlignment='Center';[void]$row.Children.Add($label);$button.Content=$row
@@ -231,7 +231,7 @@ function Initialize-HdzWorkspace {
  $script:workspaceNav.Add_SizeChanged({param($sender) if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-60)/6)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
  $top.Children.Insert(1,$navFrame)
  $script:workspaceHeading=[Windows.Controls.StackPanel]::new();$script:workspaceHeading.Margin='0,0,0,18'
- $script:workspaceHeadingTitle=New-HdzProductText '' 20 'TextBrush';$script:workspaceHeadingTitle.FontWeight='SemiBold';$script:workspaceHeadingNote=New-HdzProductText '' 13 'SubBrush';$script:workspaceHeadingNote.Margin='0,5,0,0'
+ $script:workspaceHeadingTitle=New-HdzProductText '' 20 'TextBrush';$script:workspaceHeadingTitle.FontWeight='SemiBold';$script:workspaceHeadingNote=New-HdzProductText '' 13 'SubBrush';$script:workspaceHeadingNote.Visibility='Collapsed'
  [void]$script:workspaceHeading.Children.Add($script:workspaceHeadingTitle);[void]$script:workspaceHeading.Children.Add($script:workspaceHeadingNote);$top.Children.Insert(2,$script:workspaceHeading)
  foreach($name in @('secHdrGeneral','secHdrProyecto','secHdrAudio','secHdrSubs')){$ui[$name].Visibility='Collapsed'}
  # Output/delivery become plain inspector bodies, not nested accordion controls.
