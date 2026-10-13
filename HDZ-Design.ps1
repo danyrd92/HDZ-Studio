@@ -1,18 +1,22 @@
 # Visual design only; keep all existing media/torrent handlers and values.
 $script:hdzIcons=@{
- entrada='M2,7 L9,7 L11,10 L22,10 L22,21 L2,21 Z M2,7 L2,4 L9,4 L11,7 L22,7 L22,10'
- proyecto='M4,3 L20,3 L20,21 L4,21 Z M4,8 L20,8 M8,3 L8,8 M14,3 L14,8 M9,12 L16,12 M9,16 L16,16'
- audio='M3,9 L7,9 L12,5 L12,19 L7,15 L3,15 Z M16,8 Q21,12 16,16 M18,4 Q27,12 18,20'
- subs='M3,4 L21,4 L21,17 L9,17 L4,21 L4,17 L3,17 Z M7,9 L11,9 M14,9 L17,9 M7,13 L17,13'
- salida='M4,4 L4,20 L20,20 L20,4 M12,2 L12,14 M7,9 L12,14 L17,9'
- torrent='M4,4 L15,4 L20,9 L20,20 L4,20 Z M15,4 L15,9 L20,9 M12,11 L12,17 M9,14 L12,17 L15,14'
- ajustes='M12,2 L15,5 L19,5 L19,9 L22,12 L19,15 L19,19 L15,19 L12,22 L9,19 L5,19 L5,15 L2,12 L5,9 L5,5 L9,5 Z M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12'
- recursos='M3,5 L21,5 L21,20 L3,20 Z M3,16 L8,11 L13,16 L17,12 L21,16 M17,9 A1,1 0 1 1 15,9 A1,1 0 1 1 17,9'
- info='M22,12 A10,10 0 1 1 2,12 A10,10 0 1 1 22,12 M12,11 L12,17 M12,7 L12,8'
+ entrada=@('M2,9 Q2,7 4,7 L20,7 Q22,7 22,9 L20,20 L4,20 Z','M3,6 L3,4 L9,4 L12,7 L3,7 Z')
+ proyecto=@('M3,8 L21,8 L21,19 Q21,21 19,21 L5,21 Q3,21 3,19 Z M9,11 L9,18 L16,14.5 Z','M3,3 L8,3 L5,7 L3,7 Z M10,3 L15,3 L12,7 L7,7 Z M17,3 L21,3 L21,7 L14,7 Z M9,11 L16,14.5 L9,18 Z')
+ audio=@('M3,9 Q4.5,9 4.5,10.5 L4.5,13.5 Q4.5,15 3,15 Q1.5,15 1.5,13.5 L1.5,10.5 Q1.5,9 3,9 Z M12,3 Q13.5,3 13.5,4.5 L13.5,19.5 Q13.5,21 12,21 Q10.5,21 10.5,19.5 L10.5,4.5 Q10.5,3 12,3 Z M21,9 Q22.5,9 22.5,10.5 L22.5,13.5 Q22.5,15 21,15 Q19.5,15 19.5,13.5 L19.5,10.5 Q19.5,9 21,9 Z','M7.5,6 Q9,6 9,7.5 L9,16.5 Q9,18 7.5,18 Q6,18 6,16.5 L6,7.5 Q6,6 7.5,6 Z M16.5,6 Q18,6 18,7.5 L18,16.5 Q18,18 16.5,18 Q15,18 15,16.5 L15,7.5 Q15,6 16.5,6 Z')
+ subs=@('M4,4 L20,4 Q22,4 22,6 L22,18 Q22,20 20,20 L4,20 Q2,20 2,18 L2,6 Q2,4 4,4 Z M4,7 L4,17 L20,17 L20,7 Z','M11,8 L11,10 L7,10 L7,14 L11,14 L11,16 L5,16 L5,8 Z M19,8 L19,10 L15,10 L15,14 L19,14 L19,16 L13,16 L13,8 Z')
+ salida=@('M3,12 L6,12 L6,17 L18,17 L18,12 L21,12 L21,20 Q21,22 19,22 L5,22 Q3,22 3,20 Z','M10.5,2 L13.5,2 L13.5,10 L17,10 L12,15 L7,10 L10.5,10 Z')
+ torrent=@('M5,4 L11,10 L9,12 L3,6 Z M13,10 L19,4 L21,6 L15,12 Z M10.5,14 L13.5,14 L13.5,20 L10.5,20 Z M7,5 A3,3 0 1 1 1,5 A3,3 0 1 1 7,5 Z M23,5 A3,3 0 1 1 17,5 A3,3 0 1 1 23,5 Z M15,20 A3,3 0 1 1 9,20 A3,3 0 1 1 15,20 Z','M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12 Z')
+ ajustes=@('M2,5 L22,5 L22,7 L2,7 Z M2,11 L22,11 L22,13 L2,13 Z M2,17 L22,17 L22,19 L2,19 Z','M10,6 A3,3 0 1 1 4,6 A3,3 0 1 1 10,6 Z M20,12 A3,3 0 1 1 14,12 A3,3 0 1 1 20,12 Z M13,18 A3,3 0 1 1 7,18 A3,3 0 1 1 13,18 Z')
+ recursos=@('M4,3 L20,3 Q22,3 22,5 L22,19 Q22,21 20,21 L4,21 Q2,21 2,19 L2,5 Q2,3 4,3 Z M5,6 L5,18 L19,18 L19,6 Z','M5,17 L9,11 L13,15 L16,12 L19,17 Z M18,9 A2,2 0 1 1 14,9 A2,2 0 1 1 18,9 Z')
+ info=@('M22,12 A10,10 0 1 1 2,12 A10,10 0 1 1 22,12 Z M19,12 A7,7 0 1 1 5,12 A7,7 0 1 1 19,12 Z','M10.5,10 L13.5,10 L13.5,18 L10.5,18 Z M13.5,7 A1.5,1.5 0 1 1 10.5,7 A1.5,1.5 0 1 1 13.5,7 Z')
 }
 function New-HdzOutlineIcon($key) {
  if(-not $script:hdzIcons.ContainsKey($key)){$key='info'}
- $p=[Windows.Shapes.Path]::new();$p.Data=[Windows.Media.Geometry]::Parse($script:hdzIcons[$key]);$p.Width=18;$p.Height=18;$p.Stretch='Uniform';$p.Stroke=$win.Resources['SubBrush'];$p.StrokeThickness=1.7;$p.StrokeStartLineCap='Round';$p.StrokeEndLineCap='Round';$p.StrokeLineJoin='Round';$p.VerticalAlignment='Center';return $p
+ $canvas=[Windows.Controls.Canvas]::new();$canvas.Width=24;$canvas.Height=24
+ $main=[Windows.Shapes.Path]::new();$main.Data=[Windows.Media.Geometry]::Parse($script:hdzIcons[$key][0]);$main.Fill=$win.Resources['TextBrush'];$main.Opacity=0.9
+ $accent=[Windows.Shapes.Path]::new();$accent.Data=[Windows.Media.Geometry]::Parse($script:hdzIcons[$key][1]);$accent.Fill=$win.Resources['AccentHoverBrush']
+ [void]$canvas.Children.Add($main);[void]$canvas.Children.Add($accent)
+ $icon=[Windows.Controls.Viewbox]::new();$icon.Width=22;$icon.Height=22;$icon.Child=$canvas;$icon.VerticalAlignment='Center';$icon.HorizontalAlignment='Left';$icon.Tag=$main;return $icon
 }
 function New-HdzSectionHeader($title,$icon,$summary,$chevron) {
  $grid=[Windows.Controls.Grid]::new();$grid.MinHeight=44
@@ -25,7 +29,7 @@ function New-HdzSectionHeader($title,$icon,$summary,$chevron) {
 }
 function Set-HdzNavigationDesign {
  foreach($entry in @(@('navProyecto','proyecto','Proyecto'),@('navSubida','torrent','Torrent y subida'),@('navAjustes','ajustes','Ajustes'))) {
-  $nav=$ui[$entry[0]];$row=[Windows.Controls.StackPanel]::new();$row.Orientation='Horizontal';$row.VerticalAlignment='Center';$icon=New-HdzOutlineIcon $entry[1];$binding=[Windows.Data.Binding]::new('Foreground');$binding.Source=$nav;[void]$icon.SetBinding([Windows.Shapes.Shape]::StrokeProperty,$binding);[void]$row.Children.Add($icon)
+  $nav=$ui[$entry[0]];$row=[Windows.Controls.StackPanel]::new();$row.Orientation='Horizontal';$row.VerticalAlignment='Center';$icon=New-HdzOutlineIcon $entry[1];$binding=[Windows.Data.Binding]::new('Foreground');$binding.Source=$nav;[void]$icon.Tag.SetBinding([Windows.Shapes.Shape]::FillProperty,$binding);[void]$row.Children.Add($icon)
   if(-not $script:sidebarColapsado){$label=[Windows.Controls.TextBlock]::new();$label.Text=$entry[2];$label.Margin='12,0,0,0';$label.VerticalAlignment='Center';[void]$row.Children.Add($label)}
   $nav.Content=$row;$nav.ToolTip=$entry[2];[Windows.Automation.AutomationProperties]::SetName($nav,$entry[2])
  }
@@ -88,7 +92,10 @@ function Initialize-HdzDesign {
  $ui.lblVersion.Foreground=$win.Resources['SubBrush'];$ui.lblPie.Foreground=$win.Resources['SubBrush'];$ui.lblPie.FontSize=12;$ui.lblSecMontaje.Text='MONTAJE';$ui.lblSecTorrent.Text='PUBLICACIÓN'
  $ui.btnReset.Content='Empezar de Zero';$ui.btnElegirVideos.Content='Elegir vídeos';$ui.btnExaminar.Content='Elegir carpeta';$ui.btnAnadirTemporada.Content='+ Añadir temporada'
  $ui.lblPie.Text='PGS: el OCR manual requiere Subtitle Edit en el PC.'
- $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada);$main.MaxWidth=1320;$main.HorizontalAlignment='Stretch'
+ $main=[Windows.LogicalTreeHelper]::GetParent($script:barraEntrada);$main.MaxWidth=[double]::PositiveInfinity;$main.HorizontalAlignment='Stretch'
+ foreach($old in @(Get-HdzUiTexts $script:barraEntrada | Where-Object Text -eq '📁')){
+  $parent=[Windows.LogicalTreeHelper]::GetParent($old);if($parent -is [Windows.Controls.Grid]){[void]$parent.Children.Remove($old);$folder=New-HdzOutlineIcon 'entrada';[Windows.Controls.Grid]::SetColumn($folder,0);[void]$parent.Children.Add($folder)}
+ }
  Set-HdzNavigationDesign;$script:hdzDesignReady=$true;Update-HdzDesignState
  Initialize-HdzProduct
 }

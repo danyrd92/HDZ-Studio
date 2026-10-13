@@ -1,4 +1,5 @@
 {
+  "version": "1.17.25",
   "schema": 1,
   "files": [
     {
@@ -41,6 +42,5 @@
       "bytes": 115384320,
       "name": "PowerShell-7.6.3-win-x64.msi"
     }
-  ],
-  "version": "1.17.24"
+  ]
 }
