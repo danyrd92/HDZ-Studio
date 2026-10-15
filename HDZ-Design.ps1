@@ -158,6 +158,7 @@ function Update-HdzProductState {
 
 # A task-oriented workspace: one inspector at a time, with the same authoritative controls.
 function Set-HdzWorkspaceStage($name) {
+ if($name -eq 'salida'){$name='entrega'}
  if(-not $script:workspaceStages.Contains($name)){return}
  $script:workspaceStage=$name
  foreach($key in $script:workspaceStages.Keys){
@@ -218,8 +219,7 @@ function Initialize-HdzWorkspace {
   @('proyecto','Identidad','proyecto',$ui.panProyecto,'Identificación y origen',''),
   @('audio','Audio','audio',$ui.panAudio,'Audio',''),
   @('subs','Subtítulos','subs',$ui.panSubs,'Subtítulos',''),
-  @('salida','Salida','salida',$output,'Salida y originales',''),
-  @('entrega','Entrega','torrent',$delivery,'Torrent y capturas','')
+  @('entrega','Entrega y salida','torrent',$delivery,'Entrega y salida','')
  )){
   $button=[Windows.Controls.Button]::new();$button.Style=$stageStyle;$button.Padding='14,10';$button.Margin='0,0,8,6';$button.MinHeight=46;$button.Tag=$entry[0]
   $row=[Windows.Controls.StackPanel]::new();$row.Orientation='Horizontal';[void]$row.Children.Add((New-HdzOutlineIcon $entry[2]));$label=New-HdzProductText $entry[1] 14 'TextBrush';$label.Margin='9,0,0,0';$label.VerticalAlignment='Center';[void]$row.Children.Add($label);$button.Content=$row
@@ -228,16 +228,19 @@ function Initialize-HdzWorkspace {
  }
  $navFrame=[Windows.Controls.Border]::new();$navFrame.Background=[Windows.Media.BrushConverter]::new().ConvertFromString('#141920');$navFrame.BorderBrush=$win.Resources['CardBorderBrush'];$navFrame.BorderThickness='1';$navFrame.CornerRadius='12';$navFrame.Padding='6';$navFrame.Margin='0,0,0,20';$navFrame.Child=$script:workspaceNav
  $visibility=[Windows.Data.Binding]::new('Visibility');$visibility.Source=$script:workspaceNav;[void]$navFrame.SetBinding([Windows.UIElement]::VisibilityProperty,$visibility)
- $script:workspaceNav.Add_SizeChanged({param($sender) if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-60)/6)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
+ $script:workspaceNav.Add_SizeChanged({param($sender) if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-($sender.Children.Count*10))/$sender.Children.Count)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
  $top.Children.Insert(1,$navFrame)
  $script:workspaceHeading=[Windows.Controls.StackPanel]::new();$script:workspaceHeading.Margin='0,0,0,18'
  $script:workspaceHeadingTitle=New-HdzProductText '' 20 'TextBrush';$script:workspaceHeadingTitle.FontWeight='SemiBold';$script:workspaceHeadingNote=New-HdzProductText '' 13 'SubBrush';$script:workspaceHeadingNote.Visibility='Collapsed'
  [void]$script:workspaceHeading.Children.Add($script:workspaceHeadingTitle);[void]$script:workspaceHeading.Children.Add($script:workspaceHeadingNote);$top.Children.Insert(2,$script:workspaceHeading)
  foreach($name in @('secHdrGeneral','secHdrProyecto','secHdrAudio','secHdrSubs')){$ui[$name].Visibility='Collapsed'}
  # Output/delivery become plain inspector bodies, not nested accordion controls.
+ $deliveryHeading=New-HdzProductText 'Entrega' 17 'TextBrush';$deliveryHeading.FontWeight='SemiBold';$deliveryHeading.Margin='0,0,0,12';$delivery.Content.Children.Insert(0,$deliveryHeading)
+ $outputHeading=New-HdzProductText 'Salida y originales' 17 'TextBrush';$outputHeading.FontWeight='SemiBold';$outputHeading.Margin='0,10,0,12';[void]$delivery.Content.Children.Add($outputHeading)
+ foreach($child in @($output.Content.Children)){[void]$output.Content.Children.Remove($child);[void]$delivery.Content.Children.Add($child)}
  foreach($section in @($output,$delivery)){
-  $body=$section.Content;$section.Content=$null;$position=$ui.panCrear.Children.IndexOf($section);[void]$ui.panCrear.Children.Remove($section);$ui.panCrear.Children.Insert($position,$body)
-  foreach($key in @('salida','entrega')){if($script:workspaceStages[$key].body -eq $section){$script:workspaceStages[$key].body=$body}}
+  $body=$section.Content;$section.Content=$null;$position=$ui.panCrear.Children.IndexOf($section);[void]$ui.panCrear.Children.Remove($section)
+  if($section -eq $delivery){$ui.panCrear.Children.Insert($position,$body);$script:workspaceStages.entrega.body=$body}
  }
  foreach($stage in $script:workspaceStages.Values){[void](New-HdzWorkspaceColumns $stage.body)}
  # The publishing desk and preferences use the same responsive card grid.

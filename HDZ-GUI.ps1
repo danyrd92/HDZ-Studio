@@ -2221,10 +2221,11 @@ function Actualizar-Torrent {
     $crearTorrent = ("$v" -in @("INDIVIDUAL", "PACK", "AMBOS"))
     $ui.panTorrentDatos.Visibility = if ($crearTorrent) { "Visible" } else { "Collapsed" }
     $ui.panPackNombre.Visibility   = if ("$v" -in @("PACK", "AMBOS")) { "Visible" } else { "Collapsed" }
-    # Si no se va a crear torrent, no tiene sentido elegir dónde guardarlo: deshabilita la ubicación.
+    # La ubicación del torrent solo aparece tras elegir que se cree uno.
     if ($ui.txtSalidaTorrent) { $ui.txtSalidaTorrent.IsEnabled = $crearTorrent }
     if ($ui.btnSalidaTorrent) { $ui.btnSalidaTorrent.IsEnabled = $crearTorrent }
-    if ($ui.lblSalidaTorrent) { $ui.lblSalidaTorrent.Opacity   = if ($crearTorrent) { 1.0 } else { 0.4 } }
+    if ($ui.lblSalidaTorrent) { $ui.lblSalidaTorrent.Visibility = if ($crearTorrent) { 'Visible' } else { 'Collapsed' } }
+    if ($ui.txtSalidaTorrent) { $ui.txtSalidaTorrent.Parent.Visibility = if ($crearTorrent) { 'Visible' } else { 'Collapsed' } }
     Rellenar-PackNombre
 }
 
