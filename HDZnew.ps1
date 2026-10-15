@@ -3557,6 +3557,7 @@ function New-Capturas($archivoFinalDestino, $nombreFinal, $numCapturas, $esHdr =
     $global:ultimasCapturas = @()
     if ($numCapturas -le 0) { return }
 
+    try {
     $res = New-HdzCapturas -ArchivoVideo $archivoFinalDestino -NombreFinal $nombreFinal `
         -NumCapturas $numCapturas -EsHdr ([bool]$esHdr) -DirCapturas $dirCapturas `
         -OnProgress {
@@ -3574,7 +3575,15 @@ function New-Capturas($archivoFinalDestino, $nombreFinal, $numCapturas, $esHdr =
 
     $global:ultimasCapturas = @($res.Capturas)
     foreach ($rutaCaptura in @($res.Capturas)) { $global:capturasLote += $rutaCaptura }
-    Set-ProgresoGui2 -1   # oculta la 2ª barra al terminar las capturas
+    } catch {
+        # Las capturas son opcionales: su destino o FFmpeg pueden fallar sin invalidar
+        # el MKV ya verificado. No saltar el torrent, el historial ni el resto del lote.
+        $mensaje = "No se pudieron generar las capturas: $($_.Exception.Message). El MKV está creado; se continúa con el torrent si está solicitado."
+        Write-Host "   [!] $mensaje" -ForegroundColor Yellow
+        Add-Incidencia $global:archivoEnCurso $mensaje
+    } finally {
+        Set-ProgresoGui2 -1   # limpiar también cuando falla la preparación del destino
+    }
 }
 
 # Lee mediainfo del archivo MKV final ya muxeado y devuelve los componentes técnicos
