@@ -147,7 +147,7 @@ function Update-HdzProductState {
  if(-not $count){foreach($text in @(Get-HdzUiTexts $ui.panListado)){if($text.Text -like 'No hay vídeos*'){$text.Text='Todavía no hay vídeos en el análisis. Elige una carpeta o archivos concretos para comenzar.';$text.FontSize=14;$text.TextWrapping='Wrap';$text.Margin='0,10,0,0'}}}
  if($script:workspaceReady){
   foreach($key in @('audio','subs')){
-   $wrap=$script:workspaceStages[$key].body.Children[0];$available=@($wrap.Children|Where-Object Visibility -eq 'Visible').Count -gt 0
+   $panel=if($key -eq 'audio'){$ui.panAudio}else{$ui.panSubs};$wrap=$panel.Children[0];$available=@($wrap.Children|Where-Object Visibility -eq 'Visible').Count -gt 0
    $script:workspaceEmpty[$key].Visibility=if($available){'Collapsed'}else{'Visible'}
   }
   $script:workspaceNav.Visibility=if($project){'Visible'}else{'Collapsed'}
@@ -159,6 +159,7 @@ function Update-HdzProductState {
 # A task-oriented workspace: one inspector at a time, with the same authoritative controls.
 function Set-HdzWorkspaceStage($name) {
  if($name -eq 'salida'){$name='entrega'}
+ if($name -eq 'subs'){$name='audio'}
  if(-not $script:workspaceStages.Contains($name)){return}
  $script:workspaceStage=$name
  foreach($key in $script:workspaceStages.Keys){
@@ -181,7 +182,7 @@ function New-HdzWorkspaceColumns($owner,$wideCards=@()) {
  [void]$owner.Children.Add($wrap)
  $wrap.Add_SizeChanged({param($sender)
   $available=$sender.ActualWidth;if($available -le 0){return}
-  $columns=if($available -ge 1050){2}else{1};$half=($available-16)/2
+  $columns=if($available -ge 1050){2}else{1};$half=[Math]::Floor(($available-20)/2)
   foreach($child in $sender.Children){
    $wide=$child -isnot [Windows.Controls.Border] -or @($sender.Tag) -contains $child -or $child -eq (Get-HdzCard $ui.panListado) -or $child -eq (Get-HdzCard $ui.panRemezcla) -or $child -eq $ui.cardConvAudio -or $child -eq $ui.cardUndAudio -or $child -eq $ui.cardUndSub
    $child.Width=if($columns -eq 1 -or $wide){$available}else{$half}
@@ -217,8 +218,7 @@ function Initialize-HdzWorkspace {
  foreach($entry in @(
   @('general','Fuentes','entrada',$ui.panGeneral,'Fuentes',''),
   @('proyecto','Identidad','proyecto',$ui.panProyecto,'Identificación y origen',''),
-  @('audio','Audio','audio',$ui.panAudio,'Audio',''),
-  @('subs','Subtítulos','subs',$ui.panSubs,'Subtítulos',''),
+  @('audio','Audio y subtítulos','audio',$ui.panAudio,'Audio y subtítulos',''),
   @('entrega','Entrega y salida','torrent',$delivery,'Entrega y salida','')
  )){
   $button=[Windows.Controls.Button]::new();$button.Style=$stageStyle;$button.Padding='14,10';$button.Margin='0,0,8,6';$button.MinHeight=46;$button.Tag=$entry[0]
@@ -242,14 +242,17 @@ function Initialize-HdzWorkspace {
   $body=$section.Content;$section.Content=$null;$position=$ui.panCrear.Children.IndexOf($section);[void]$ui.panCrear.Children.Remove($section)
   if($section -eq $delivery){$ui.panCrear.Children.Insert($position,$body);$script:workspaceStages.entrega.body=$body}
  }
+ $tracks=[Windows.Controls.StackPanel]::new();$position=$ui.panCrear.Children.IndexOf($ui.panAudio);[void]$ui.panCrear.Children.Remove($ui.panAudio);[void]$ui.panCrear.Children.Remove($ui.panSubs);$ui.panCrear.Children.Insert($position,$tracks)
+ foreach($entry in @(@('Audio',$ui.panAudio),@('Subtítulos',$ui.panSubs))){$label=New-HdzProductText $entry[0] 17 'TextBrush';$label.FontWeight='SemiBold';$label.Margin='0,8,0,12';[void]$tracks.Children.Add($label);$entry[1].Visibility='Visible';[void]$tracks.Children.Add($entry[1]);[void](New-HdzWorkspaceColumns $entry[1])}
+ $script:workspaceStages.audio.body=$tracks
  foreach($stage in $script:workspaceStages.Values){[void](New-HdzWorkspaceColumns $stage.body)}
  # The publishing desk and preferences use the same responsive card grid.
- [void](New-HdzWorkspaceColumns $ui.panSubidaBody.Child)
+ [void](New-HdzWorkspaceColumns $ui.panSubidaBody.Child @($ui.panSubidaBody.Child.Children))
  $settings=[Windows.Controls.StackPanel]::new();foreach($child in @($ui.panAjustes.Children|Select-Object -Skip 1)){[void]$ui.panAjustes.Children.Remove($child);[void]$settings.Children.Add($child)};[void](New-HdzWorkspaceColumns $settings);[void]$ui.panAjustes.Children.Add($settings)
  $script:workspaceEmpty=@{}
  foreach($key in @('audio','subs')){
   $card=[Windows.Controls.Border]::new();$card.Style=$win.Resources['Card'];$card.Background=$win.Resources['CardBrush'];$card.BorderBrush=$win.Resources['CardBorderBrush'];$card.CornerRadius='12';$card.Padding='22'
-  $text=New-HdzProductText 'Las opciones aparecerán cuando analices vídeos con estas pistas. Vuelve a Fuentes para elegir los archivos.' 14 'SubBrush';$card.Child=$text;$script:workspaceEmpty[$key]=$card;[void]$script:workspaceStages[$key].body.Children.Add($card)
+  $text=New-HdzProductText 'Las opciones aparecerán cuando analices vídeos con estas pistas. Vuelve a Fuentes para elegir los archivos.' 14 'SubBrush';$card.Child=$text;$script:workspaceEmpty[$key]=$card;$panel=if($key -eq 'audio'){$ui.panAudio}else{$ui.panSubs};[void]$panel.Children.Add($card)
  }
  $script:workspaceScroll=[Windows.LogicalTreeHelper]::GetParent([Windows.LogicalTreeHelper]::GetParent($ui.panCrear))
  $script:workspaceReady=$true;Set-HdzWorkspaceStage 'general'
