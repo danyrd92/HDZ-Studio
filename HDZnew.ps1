@@ -323,6 +323,16 @@ function Add-Incidencia($archivo, $mensaje) {
     $linea = if ($archivo) { "[$archivo] $mensaje" } else { $mensaje }
     $global:incidencias.Add($linea)
 }
+function Test-HdzAudioTrackKept($archivo,$id,[switch]$FfprobeIndex) {
+    foreach($item in @(Get-CfgGui 'PistasAudioExcluidas')) {
+        if(-not $item -or -not $item.Archivo){continue}
+        if([string]::Equals([IO.Path]::GetFullPath("$archivo"),[IO.Path]::GetFullPath("$($item.Archivo)"),[StringComparison]::OrdinalIgnoreCase)){
+            $excludedId=if($FfprobeIndex){$item.Index}else{$item.Id}
+            if($null -ne $excludedId -and "$excludedId" -eq "$id"){return $false}
+        }
+    }
+    return $true
+}
 
 # Memoria global de idiomas resueltos para subtítulos 'und' (indeterminado). El usuario elige
 # el idioma de una lista y se guarda aquí con clave "<archivo>|<formato>" (formato = Text/PGS).
@@ -2545,6 +2555,7 @@ function Invoke-ConversionDTSMultiidioma($origenesPistas, $modo = "SIEMPRE", $me
             }
         })
         foreach ($p in $crudas) {
+            if(-not (Test-HdzAudioTrackKept $rutaArchivo $p.Index -FfprobeIndex)){continue}
             # Añadimos el path del archivo a cada pista para que la conversión sepa de dónde sacarla
             $p | Add-Member -NotePropertyName "RutaArchivo" -NotePropertyValue $rutaArchivo -Force
             $pistasInternas += $p
@@ -2699,6 +2710,8 @@ function Invoke-ConversionAudioManual($conversiones, $archivoPrincipal) {
             if (-not $episode -or $candidates.Count -ne 1) { throw 'No se puede identificar un único donante de audio para este episodio.' }
             $copy.ArchivoFuente = $candidates[0].FullName
         }
+        $selectionSource=if($copy.FuenteExacta){"$($copy.ArchivoFuente)"}else{$archivoPrincipal.FullName}
+        if(-not (Test-HdzAudioTrackKept $selectionSource $copy.Index -FfprobeIndex)){continue}
         [pscustomobject]$copy
     })
 
@@ -2913,6 +2926,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                 $contIdx[$tipoClave]++
                 $claveMap = "$tipoClave+$($contIdx[$tipoClave])"
                 $idMkvmerge = if ($idMap.ContainsKey($claveMap)) { $idMap[$claveMap] } else { $pista.ID - 1 }
+                if($tipoClave -eq 'Audio' -and -not (Test-HdzAudioTrackKept $rutaArchivo $idMkvmerge)){continue}
 
                 # REMEZCLA: filtra qué archivo aporta audio/subs. El vídeo (primer archivo) NO aporta
                 # audio/subs salvo que su carpeta tenga ese rol; los demás archivos, según su rol. El

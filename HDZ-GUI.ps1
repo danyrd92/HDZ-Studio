@@ -2506,6 +2506,7 @@ function Sugerir-Proyecto($nombres) {
 # sin badges. Las tarjetas de pistas 'und' solo existen con análisis (listan pistas
 # concretas), así que arrancan ocultas.
 function Reset-Adaptacion {
+    if($ui.cardAudioTracks){$ui.cardAudioTracks.Visibility='Collapsed';$ui.panAudioTracks.Children.Clear();$script:audioTrackRows=@()}
     foreach ($b in @("bdgModoLote","bdgReprocesar","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub","bdgFiltro","bdgSubsUnicos","bdgPGS")) {
         Set-Badge $b ""
     }
@@ -2823,7 +2824,34 @@ function Reconstruir-FilasConv($estados = @()) {
 # Construye el conversor para un ámbito (homogéneo = selección; heterogéneo = archivos de la peli).
 # Toma el PRIMER archivo con audio como representante: en homogéneo todos comparten estructura, y la
 # conversión se aplica por índice de pista a cada archivo procesado.
+function Initialize-HdzAudioTracks {
+    $script:audioTracksExcluded=@{};$script:audioTrackRows=@()
+    $card=[Windows.Controls.Border]::new();$card.Style=$win.Resources['Card'];$card.Visibility='Collapsed'
+    $body=[Windows.Controls.StackPanel]::new();$title=[Windows.Controls.TextBlock]::new();$title.Style=$win.Resources['H'];$title.Text='Pistas de audio a mantener';[void]$body.Children.Add($title)
+    $help=[Windows.Controls.TextBlock]::new();$help.Style=$win.Resources['D'];$help.Text='Marca cada pista que quieras incluir. También se aplica el filtro de idiomas. Las pistas desmarcadas no se convierten.';$help.TextWrapping='Wrap';[void]$body.Children.Add($help)
+    $list=[Windows.Controls.StackPanel]::new();$list.Margin='0,12,0,0';[void]$body.Children.Add($list);$card.Child=$body
+    $ui.cardAudioTracks=$card;$ui.panAudioTracks=$list;$ui.panAudio.Children.Insert(1,$card)
+}
+function Build-HdzAudioTracks($scope) {
+    if(-not $ui.panAudioTracks){return}
+    $ui.panAudioTracks.Children.Clear();$script:audioTrackRows=@();$seen=@{}
+    foreach($file in @($scope)) {foreach($audio in @($file.Audios)) {
+        $source=if($audio.HdzSource){"$($audio.HdzSource)"}else{"$($file.Ruta)"}
+        $id=if($null -ne $audio.TrackId){[int]$audio.TrackId}else{[int]$audio.Index};$key="$source|$id"
+        if($seen.ContainsKey($key)){continue};$seen[$key]=$true
+        $language=Get-IdiomaPistaGui $audio 'Audio';$label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $(Get-CodecComercial $audio.Codec $audio.Profile) $(Get-NombreLayout $audio.Channels)"
+        if($audio.Title){$label+=" · $($audio.Title)"}
+        $choice=[Windows.Controls.CheckBox]::new();$choice.Foreground=$win.Resources['TextBrush'];$choice.Margin='0,4,0,8';$choice.MinHeight=32
+        $text=[Windows.Controls.TextBlock]::new();$text.Text=$label;$text.TextWrapping='Wrap';$choice.Content=$text
+        $row=[pscustomobject]@{Key=$key;Archivo=$source;Id=$id;Index=[int]$audio.Index;Etiqueta=$label;Choice=$choice};$choice.Tag=$row;$choice.IsChecked=-not $script:audioTracksExcluded.ContainsKey($key)
+        $choice.Add_Click({param($sender) $r=$sender.Tag;if($sender.IsChecked){$script:audioTracksExcluded.Remove($r.Key)}else{$script:audioTracksExcluded[$r.Key]=@{Archivo=$r.Archivo;Id=$r.Id;Index=$r.Index}}})
+        [void]$ui.panAudioTracks.Children.Add($choice);$script:audioTrackRows+=$row
+    }}
+    $ui.cardAudioTracks.Visibility=if($script:audioTrackRows.Count){'Visible'}else{'Collapsed'}
+}
+function Get-HdzExcludedAudioTracks { @($script:audioTracksExcluded.Values) }
 function Construir-Conversor($scope) {
+    Build-HdzAudioTracks $scope
     $rep = @($scope | Where-Object { @($_.Audios).Count -gt 0 } | Select-Object -First 1)
     $script:convSource = if ($rep.Count) { "$($rep[0].Ruta)" } else { '' }
     if (-not $rep) {
@@ -4011,6 +4039,7 @@ function Snapshot-DecisionesTab {
         Conv = (Leer-ConversionesActuales); DefAudio = (Get-ChipValor "defAudio"); Filtro = (Get-ChipValor "filtro")
         AudioLangs = @($script:chipsIdiomasAudio | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
         AudioLangsTodos = @($script:chipsIdiomasAudio | ForEach-Object { "$($_.Tag)" })
+        AudioTracksExcluded = @($script:audioTrackRows | Where-Object {-not $_.Choice.IsChecked} | ForEach-Object {@{Archivo=$_.Archivo;Id=$_.Id;Index=$_.Index}})
         FiltroLangs = @($script:chipsIdiomas | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
         ExtraerPGS = (Get-ChipValor "extraerPGS"); ConservarPGS = (Get-ChipValor "conservarPGS")
         Und = $und; SubsUnicos = $su
@@ -4019,6 +4048,10 @@ function Snapshot-DecisionesTab {
 # Aplica las decisiones guardadas sobre las tarjetas YA reconstruidas (Construir-Adaptacion antes).
 function Restore-DecisionesTab($d) {
     if (-not $d) { return }
+    if($d.ContainsKey('AudioTracksExcluded')){
+        foreach($row in @($script:audioTrackRows)){$script:audioTracksExcluded.Remove($row.Key);$row.Choice.IsChecked=$true}
+        foreach($item in @($d.AudioTracksExcluded)){$key="$($item.Archivo)|$($item.Id)";$script:audioTracksExcluded[$key]=$item;foreach($row in @($script:audioTrackRows)){if($row.Key -eq $key){$row.Choice.IsChecked=$false}}}
+    }
     if ($null -ne $d.Conv) { Reconstruir-FilasConv @($d.Conv) }
     if ($d.DefAudio)     { Set-ChipValor "defAudio" $d.DefAudio }
     if ($d.ContainsKey("AudioLangs")) {
@@ -7440,6 +7473,8 @@ function Iniciar-Montaje($scope) {
     }
 
     $cfg = [ordered]@{}
+    $excluded=@(Get-HdzExcludedAudioTracks)
+    if($excluded.Count){$cfg.PistasAudioExcluidas=$excluded}
     # Si se ha deseleccionado algún archivo, el script procesará SOLO los marcados
     if (-not $remezclaOn -and $todosNombresScan.Count -gt 0 -and ($marcadosSel.Count -lt $todosNombresScan.Count -or @($script:videosElegidos).Count -gt 0)) {
         $cfg.ArchivosSeleccionados = @($marcadosSel)
@@ -8105,6 +8140,7 @@ function Reset-Todo {
     try { $ui.txtCarpeta.Text = "" } finally { $script:cambioCarpetaInterno = $false }
     Actualizar-DescripcionCarpetas
     $script:ultimoScan = @()
+    $script:audioTracksExcluded=@{};$script:audioTrackRows=@();if($ui.panAudioTracks){$ui.panAudioTracks.Children.Clear();$ui.cardAudioTracks.Visibility='Collapsed'}
     $script:seleccion = @{}
     $script:carpetaScan = $null
     $script:restringirSeleccion = $null
@@ -9079,6 +9115,8 @@ function Componer-EstadoAgente {
             [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked }
         })
         audioIdiomasVisible = ("$($ui.cardFiltroAudio.Visibility)" -eq "Visible")
+        audioTracksSupported = $true
+        audioTracks = @($script:audioTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
         conversionesAudioVisible = ("$($ui.cardConvAudio.Visibility)" -eq "Visible")
         defAudioVisible = ("$($ui.cardDefAudio.Visibility)" -eq "Visible")
         undAudioVisible = ("$($ui.cardUndAudio.Visibility)" -eq "Visible")
@@ -9272,6 +9310,9 @@ function Aplicar-ComandoAgente($c) {
                 Start-SubidaAsync @("$($c.path)") $onDone @($ui.btnDescSubir)
             }
             "set_chip"    { if ($c.grupo) { Set-ChipValor "$($c.grupo)" $c.value } }
+            "set_audio_track" {
+                foreach($row in @($script:audioTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){$row.Choice.IsChecked=[bool]$c.value;if($row.Choice.IsChecked){$script:audioTracksExcluded.Remove($row.Key)}else{$script:audioTracksExcluded[$row.Key]=@{Archivo=$row.Archivo;Id=$row.Id;Index=$row.Index}};break}}
+            }
             "set_audio_lang" {
                 $cod = "$($c.code)"
                 foreach ($tbAud in @($script:chipsIdiomasAudio)) {
@@ -9550,6 +9591,7 @@ Construir-Firmas
 if ([string]::IsNullOrWhiteSpace($ui.upDescripcion.Text)) { Reset-Descripcion }
 . (Join-Path $PSScriptRoot 'HDZ-Interface.ps1')
 Initialize-HdzInterface
+Initialize-HdzAudioTracks
 . (Join-Path $PSScriptRoot 'HDZ-Design.ps1')
 Initialize-HdzDesign
 Init-Tabs

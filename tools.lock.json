@@ -1,46 +1,46 @@
 {
+  "version": "1.17.31",
   "files": [
     {
-      "sha256": "a8dc62fa2b25726be8b47c180c2fe8f1e28a1ecd8a64162b9de98b21b73653ed",
       "name": "ffmpeg.exe",
-      "bytes": 204274688
+      "bytes": 204274688,
+      "sha256": "a8dc62fa2b25726be8b47c180c2fe8f1e28a1ecd8a64162b9de98b21b73653ed"
     },
     {
-      "sha256": "06afd08fdf31e971cc0bfea9050a281d70c60b12105fcb20e77fe1f6e06315d0",
       "name": "ffprobe.exe",
-      "bytes": 204066304
+      "bytes": 204066304,
+      "sha256": "06afd08fdf31e971cc0bfea9050a281d70c60b12105fcb20e77fe1f6e06315d0"
     },
     {
-      "sha256": "7d199983820021d3b86cc91a023b756b144c49397fafe41c46d50b671f543c6e",
       "name": "mkvmerge.exe",
-      "bytes": 22038568
+      "bytes": 22038568,
+      "sha256": "7d199983820021d3b86cc91a023b756b144c49397fafe41c46d50b671f543c6e"
     },
     {
-      "sha256": "9db1b45f4b49ddfc1e12dae416d52646c26a665f8abbecdaf90632b304b45f0d",
       "name": "mkvextract.exe",
-      "bytes": 17834024
+      "bytes": 17834024,
+      "sha256": "9db1b45f4b49ddfc1e12dae416d52646c26a665f8abbecdaf90632b304b45f0d"
     },
     {
-      "sha256": "2215422d7792ab65e623833e43e16bace8e93aac2d47e1e815555f8c862d63b2",
       "name": "mkvpropedit.exe",
-      "bytes": 16774696
+      "bytes": 16774696,
+      "sha256": "2215422d7792ab65e623833e43e16bace8e93aac2d47e1e815555f8c862d63b2"
     },
     {
-      "sha256": "30f2828a45a1895b033c3cd7784581033327e7b393033c55f4a03bb15cab0d89",
       "name": "MediaInfo.exe",
-      "bytes": 9293720
+      "bytes": 9293720,
+      "sha256": "30f2828a45a1895b033c3cd7784581033327e7b393033c55f4a03bb15cab0d89"
     },
     {
-      "sha256": "fc24aec89a08d21eefc526dc32a35fb92afd713f2836ad930a084423f847c127",
       "name": "dovi_tool.exe",
-      "bytes": 3283968
+      "bytes": 3283968,
+      "sha256": "fc24aec89a08d21eefc526dc32a35fb92afd713f2836ad930a084423f847c127"
     },
     {
-      "sha256": "4f574fddb567f4d0756094424a1e4e2b2bbdde21de9f0965c0f988d24dc658e4",
       "name": "PowerShell-7.6.3-win-x64.msi",
-      "bytes": 115384320
+      "bytes": 115384320,
+      "sha256": "4f574fddb567f4d0756094424a1e4e2b2bbdde21de9f0965c0f988d24dc658e4"
     }
   ],
-  "schema": 1,
-  "version": "1.17.30"
+  "schema": 1
 }

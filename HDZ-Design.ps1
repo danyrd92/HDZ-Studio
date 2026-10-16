@@ -184,7 +184,7 @@ function New-HdzWorkspaceColumns($owner,$wideCards=@()) {
   $available=$sender.ActualWidth;if($available -le 0){return}
   $columns=if($available -ge 1050){2}else{1};$half=[Math]::Floor(($available-20)/2)
   foreach($child in $sender.Children){
-   $wide=$child -isnot [Windows.Controls.Border] -or @($sender.Tag) -contains $child -or $child -eq (Get-HdzCard $ui.panListado) -or $child -eq (Get-HdzCard $ui.panRemezcla) -or $child -eq $ui.cardConvAudio -or $child -eq $ui.cardUndAudio -or $child -eq $ui.cardUndSub
+   $wide=$child -isnot [Windows.Controls.Border] -or @($sender.Tag) -contains $child -or $child -eq (Get-HdzCard $ui.panListado) -or $child -eq (Get-HdzCard $ui.panRemezcla) -or $child -eq $ui.cardAudioTracks -or $child -eq $ui.cardConvAudio -or $child -eq $ui.cardUndAudio -or $child -eq $ui.cardUndSub
    $child.Width=if($columns -eq 1 -or $wide){$available}else{$half}
    $child.Margin=if($columns -eq 2 -and -not $wide){'0,0,16,16'}else{'0,0,0,16'}
    # Remove the trailing gutter from every second half-width card.
