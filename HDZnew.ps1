@@ -3741,8 +3741,7 @@ if ($cfgRemezcla -and $cfgRemezcla.Carpetas) {
     $rzCarpetas = @($cfgRemezcla.Carpetas | Where-Object { $_ -and "$($_.Ruta)".Trim() -and (Test-Path -LiteralPath "$($_.Ruta)") })
     $rzVideo = @($rzCarpetas | Where-Object { $_.Video }) | Select-Object -First 1
     if ($rzCarpetas.Count -ge 2 -and $rzVideo) {
-        # OJO: las carpetas de audio/subs pueden ser tus propios releases -HDZ, así que NO se excluye
-        # «-HDZ» aquí (sí lo hace el escaneo de la carpeta de vídeo). Solo se saltan temporales.
+        # Todas las releases son fuentes válidas, incluidas las que llevan -HDZ.
         $esVidRz = { param($f) ("$($f.Extension)" -match "(?i)\.(mkv|mp4|ts)$") -and ($f.Name -notmatch "(?i)_FINAL") -and ($f.Name -notmatch "(?i)^Ensamblaje_") }
         # La carpeta del vídeo principal es solo el punto de trabajo; el filtro de abajo deja pasar
         # exclusivamente el archivo marcado como Vídeo.
@@ -3799,36 +3798,14 @@ $global:idiomasAudioMantener = $null
 $cfgAudLang = Get-CfgGui "IdiomasAudioMantener"
 if ($cfgAudLang) { $global:idiomasAudioMantener = @(@($cfgAudLang) | ForEach-Object { "$_" } | Where-Object { $_ }) }
 
-$todosLosArchivos = @(Get-ChildItem -Include "*.mp4", "*.mkv", "*.ts" -Recurse -Depth 0 | Where-Object { $_.Name -notmatch "_FINAL" -and $_.Name -notmatch "-HDZ" -and $_.Name -notmatch "(?i)^Ensamblaje_" })
+$todosLosArchivos = @(Get-ChildItem -Include "*.mp4", "*.mkv", "*.ts" -Recurse -Depth 0 | Where-Object { $_.Name -notmatch "_FINAL" -and $_.Name -notmatch "(?i)^Ensamblaje_" })
 if ($global:remixActivo -and @($global:remixVideoArchivos).Count -gt 0) {
     $todosLosArchivos = @($todosLosArchivos | Where-Object { $global:remixVideoArchivos -contains $_.FullName })
 }
 if ($todosLosArchivos.Count -eq 0) {
-    # ¿Hay archivos que SÍ existen pero fueron excluidos por tener el sufijo -HDZ?
-    # En ese caso avisamos y ofrecemos procesarlos igualmente (reprocesar).
-    $archivosHDZ = @(Get-ChildItem -Include "*.mp4", "*.mkv", "*.ts" -Recurse -Depth 0 | Where-Object { $_.Name -match "-HDZ" -and $_.Name -notmatch "_FINAL" })
-    if ($archivosHDZ.Count -gt 0) {
-        Write-Host "`n[!] No hay archivos nuevos, pero se han encontrado $($archivosHDZ.Count) archivo(s) ya procesado(s) (sufijo -HDZ):" -ForegroundColor Yellow
-        foreach ($f in $archivosHDZ) { Write-Host "    - $($f.Name)" -ForegroundColor DarkGray }
-        $cfgReproc = Get-CfgGui "ReprocesarHDZ"
-        $respHDZ = if ($null -ne $cfgReproc) {
-            Write-Host "`n[GUI] Reprocesar archivos -HDZ: $(if ($cfgReproc) { 'Sí' } else { 'No' }) (configuración)." -ForegroundColor DarkGray
-            if ($cfgReproc) { "S" } else { "N" }
-        } else {
-            Read-Host "`n¿Quieres procesarlos igualmente? (S/N)"
-        }
-        if ($respHDZ -match "^[sS]") {
-            $todosLosArchivos = $archivosHDZ
-        } else {
-            Write-Host "Operación cancelada." -ForegroundColor Red
-            try { Stop-Transcript | Out-Null } catch {}
-            exit 1
-        }
-    } else {
-        Write-Host "No hay vídeos para procesar en la carpeta." -ForegroundColor Red
-        try { Stop-Transcript | Out-Null } catch {}
-        exit 1
-    }
+    Write-Host "No hay vídeos para procesar en la carpeta." -ForegroundColor Red
+    try { Stop-Transcript | Out-Null } catch {}
+    exit 1
 }
 
 # Selección de archivos de la GUI: procesar SOLO los marcados (por nombre de archivo).

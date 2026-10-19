@@ -1277,17 +1277,6 @@ $xaml = @'
                 </Grid>
               </StackPanel>
             </Border>
-            <Border x:Name="cardReprocesar" Style="{StaticResource Card}">
-              <StackPanel>
-                <Grid>
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="Reprocesar archivos ya procesados (-HDZ)"/>
-                  <TextBlock x:Name="bdgReprocesar" Style="{StaticResource Bdg}" Grid.Column="1"/>
-                </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Solo aplica si la carpeta no tiene vídeos nuevos pero sí archivos con el sufijo -HDZ."/>
-                <WrapPanel x:Name="chReprocesar" Margin="0,11,0,-8"/>
-              </StackPanel>
-            </Border>
           </StackPanel>
 
           <!-- ============ PROYECTO ============ -->
@@ -2005,12 +1994,12 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panCrear","panGeneral","panProyecto","panAudio","panSubs",
           "secHdrGeneral","secChevGeneral","secHdrProyecto","secChevProyecto",
           "secHdrAudio","secChevAudio","secHdrSubs","secChevSubs",
-          "chModoLote","chOriginales","chSufijo","chReprocesar",
+          "chModoLote","chOriginales","chSufijo",
           "chTorrent","panTorrentDatos","txtAnnounce","panPackNombre","txtPackNombre",
           "txtSalidaArchivo","btnSalidaArchivo","txtSalidaTorrent","btnSalidaTorrent","lblSalidaTorrent",
-          "bdgModoLote","bdgReprocesar","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub",
+          "bdgModoLote","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub",
           "bdgFiltro","bdgSubsUnicos","bdgPGS","lblSugerencia",
-          "cardModoLote","cardReprocesar","cardFiltroAudio","wrapIdiomasAudio","cardConvAudio","panConvFilas","btnConvAdd","cardDefAudio","cardUndAudio","cardUndSub",
+          "cardModoLote","cardFiltroAudio","wrapIdiomasAudio","cardConvAudio","panConvFilas","btnConvAdd","cardDefAudio","cardUndAudio","cardUndSub",
           "cardFiltro","cardSubsUnicos","cardPGS","phAudio","phSubs","panUndAudio","panUndSub",
           "swProyecto","panProyectoDatos","txtTitulo","txtAno","swSerie",
           "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer",
@@ -2344,7 +2333,6 @@ Add-ChipGroup $ui.chTorrent "torrent" @(
     @{T="Pack del lote"; V="PACK"},
     @{T="Ambos"; V="AMBOS"}
 ) 0 { Actualizar-Torrent }
-Add-ChipGroup $ui.chReprocesar "reprocesar" @(@{T="No, cancelar"; V=$false}, @{T="Sí, reprocesar"; V=$true})
 
 Add-ChipGroup $ui.chOrigen "origen" @(
     @{T="WEB (streaming)"; V="WEB"},
@@ -2450,8 +2438,7 @@ function Get-VideosCarpeta($carpeta) {
 
 # Sugerencia de título / año / serie a partir del nombre del primer archivo
 function Sugerir-Proyecto($nombres) {
-    $n = @($nombres | Where-Object { $_ -notmatch "-HDZ" } | Select-Object -First 1)
-    if (-not $n) { $n = @($nombres | Select-Object -First 1) }
+    $n = @($nombres | Select-Object -First 1)
     if (-not $n) { return $null }
     $base = ([System.IO.Path]::GetFileNameWithoutExtension("$n") -replace "[._]", " ")
     $serie = $false
@@ -2507,12 +2494,12 @@ function Sugerir-Proyecto($nombres) {
 # concretas), así que arrancan ocultas.
 function Reset-Adaptacion {
     if($ui.cardAudioTracks){$ui.cardAudioTracks.Visibility='Collapsed';$ui.panAudioTracks.Children.Clear();$script:audioTrackRows=@()}
-    foreach ($b in @("bdgModoLote","bdgReprocesar","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub","bdgFiltro","bdgSubsUnicos","bdgPGS")) {
+    foreach ($b in @("bdgModoLote","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub","bdgFiltro","bdgSubsUnicos","bdgPGS")) {
         Set-Badge $b ""
     }
     # Las tarjetas condicionales empiezan ocultas mientras llega el nuevo análisis. Así no se
     # muestran durante unos instantes opciones que no aplican al lote (PGS o audio DTS, por ejemplo).
-    foreach ($c in @("cardModoLote","cardReprocesar","cardConvAudio","cardDefAudio","cardFiltro","cardSubsUnicos","cardPGS")) {
+    foreach ($c in @("cardModoLote","cardConvAudio","cardDefAudio","cardFiltro","cardSubsUnicos","cardPGS")) {
         $ui[$c].Visibility = "Collapsed"
     }
     $ui.panConvFilas.Children.Clear(); $script:convRows = @(); $script:convTrackOpts = @()
@@ -2926,9 +2913,7 @@ function Actualizar-ListaRapida {
         return
     }
     $vids = if (@($script:videosElegidos).Count -gt 0) { @($script:videosElegidos | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Item -LiteralPath $_ }) } else { @(Get-VideosCarpeta $carpeta) }
-    $nuevos = @($vids | Where-Object { $_.Name -notmatch "-HDZ" })
-    $hdz    = @($vids | Where-Object { $_.Name -match "-HDZ" })
-    $ui.lblResumen.Text = "$($nuevos.Count) por procesar · $($hdz.Count) con -HDZ"
+    $ui.lblResumen.Text = "$($vids.Count) vídeo(s)"
     if ($vids.Count -eq 0) {
         $t = New-Object System.Windows.Controls.TextBlock
         $t.Text = "No hay vídeos (.mkv / .mp4 / .ts) en esta carpeta."
@@ -2939,7 +2924,7 @@ function Actualizar-ListaRapida {
     foreach ($v in $vids) {
         $t = New-Object System.Windows.Controls.TextBlock
         $t.Text = "•  $($v.Name)"
-        $t.Foreground = if ($v.Name -match "-HDZ") { $win.Resources["SubBrush"] } else { $win.Resources["TextBrush"] }
+        $t.Foreground = $win.Resources["TextBrush"]
         $t.FontSize = 12.5
         $t.Margin = [System.Windows.Thickness]::new(0, 2, 0, 2)
         $t.TextTrimming = "CharacterEllipsis"
@@ -3094,7 +3079,7 @@ function Aplicar-NumeracionEpisodios {
     $primer = [int]("0" + ("$($ui.txtPrimerEp.Text)"    -replace '\D','')); if ($primer -le 0) { $primer = 1 }
     $n      = [int](Get-ComboValor $ui.cmbEpsPorVideo); if ($n -le 0) { $n = 1 }
     # Se numera por GRUPO (una pareja híbrida = un solo vídeo/episodio), no por archivo suelto.
-    $grps = @(@($script:gruposLote) | Where-Object { ($script:seleccion[$_.Principal] -ne $false) -and ($_.Principal -notmatch "-HDZ") } | Sort-Object { "$($_.Principal)" })
+    $grps = @(@($script:gruposLote) | Where-Object { $script:seleccion[$_.Principal] -ne $false } | Sort-Object { "$($_.Principal)" })
     if ($grps.Count -eq 0) { Set-Estado "No hay vídeos seleccionados para numerar." "warn"; return }
     $ep = $primer
     foreach ($g in $grps) {
@@ -3267,7 +3252,7 @@ function Construir-ListadoLote {
             $sp.Opacity = if ($marcado) { 1.0 } else { 0.45 }
             $tb = New-Object System.Windows.Controls.TextBlock
             $tb.Text = $f.Nombre
-            $tb.Foreground = if ($f.Nombre -match "-HDZ") { $win.Resources["SubBrush"] } else { $win.Resources["TextBrush"] }
+            $tb.Foreground = $win.Resources["TextBrush"]
             $tb.FontSize = 12.5
             $tb.TextTrimming = "CharacterEllipsis"
             $cb = New-Object System.Windows.Controls.CheckBox
@@ -3513,8 +3498,6 @@ function Aplicar-Analisis($filas) {
     }
     $script:subsAmbiguos = @($ambiguosMap.Values)
 
-    $nuevos = @($sel | Where-Object { $_.Nombre -notmatch "-HDZ" })
-    $hdz    = @($sel | Where-Object { $_.Nombre -match "-HDZ" })
 
     # ---- lista enriquecida: se pinta en Construir-ListadoLote (filtra por pestaña en heterogéneo) ----
     $script:gruposRender = $grupos
@@ -3529,13 +3512,6 @@ function Aplicar-Analisis($filas) {
         Set-Badge "bdgModoLote" "$($gruposSel.Keys.Count) títulos distintos seleccionados" "ok"
     } else {
         $ui.cardModoLote.Visibility = "Collapsed"
-    }
-    # Reprocesar
-    if ($nuevos.Count -eq 0 -and $hdz.Count -gt 0) {
-        $ui.cardReprocesar.Visibility = "Visible"
-        Set-Badge "bdgReprocesar" "solo hay archivos -HDZ en la carpeta" "warn"
-    } else {
-        $ui.cardReprocesar.Visibility = "Collapsed"
     }
     # Tarjetas de audio/subtítulos: en modo HOMOGÉNEO se construyen aquí del agregado; en
     # HETEROGENEO las construye Aplicar-TabActiva por pestaña (con el archivo de cada película).
@@ -4202,14 +4178,11 @@ function Lanzar-Escaneo {
             $script:seleccion = @{}
             $script:carpetaScan = $claveCarpetas
         }
-        # Elegir nuevos/reproceso POR CARPETA: una temporada que solo tenga -HDZ no debe desaparecer
-        # porque otra carpeta del lote sí contenga archivos nuevos.
+        # El nombre de la release no decide qué vídeos se pueden procesar.
         $objetivo = if (@($script:videosElegidos).Count -gt 0) {
             @($script:videosElegidos | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Item -LiteralPath $_ })
         } else { @($carpetas | ForEach-Object {
-            $vidsCp = @(Get-VideosCarpeta $_)
-            $nuevosCp = @($vidsCp | Where-Object { $_.Name -notmatch "-HDZ" })
-            if ($nuevosCp.Count -gt 0) { $nuevosCp } else { $vidsCp }
+            Get-VideosCarpeta $_
         }) }
         if ($objetivo.Count -eq 0) { Set-Estado "No hay vídeos que analizar en las carpetas seleccionadas."; return }
         if ($carpetas.Count -gt 1) {
@@ -7485,7 +7458,6 @@ function Iniciar-Montaje($scope) {
         $cfg.Remezcla = @{ Modo = $(if (Es-RemezclaSeriePorEpisodio $rzPlan) { "SERIE_EPISODIOS" } else { "MANUAL" }); Carpetas = @($rzPlan | ForEach-Object { @{ Ruta = $_.Ruta; Archivo = $_.Archivo; Video = [bool]$_.Video; Audio = [bool]$_.Audio; Subs = [bool]$_.Subs } }) }
     }
     $v = Get-ChipValor "modoLote";     if ($null -ne $v) { $cfg.ModoLote = $v }
-    $v = Get-ChipValor "reprocesar";   if ($null -ne $v) { $cfg.ReprocesarHDZ = $v }
     $v = Get-ChipValor "capturasProy"; if ($null -ne $v) { $cfg.NumCapturas = [int]$v }
     $v = Get-ChipValor "originales";   if ($null -ne $v) { $cfg.AccionOriginales = "$v"; $cfg.BorrarOriginales = ("$v" -eq "BORRAR") }
     $v = Get-ChipValor "sufijo";       if ($null -ne $v) { $cfg.SufijoHDZ = $v }
@@ -8929,7 +8901,7 @@ function Listar-CarpetaAgenteCore($p, $filtro = "video") {
         return [ordered]@{ path = "$p"; up = "$up"; dirs = $dirs; files = $files; filtro = "$filtro" }
     } catch { return [ordered]@{ path = "$p"; up = ""; dirs = @(); files = @(); filtro = "$filtro"; error = "$($_.Exception.Message)" } }
 }
-$script:agGruposChip = @('modoLote','originales','sufijo','torrent','reprocesar','origen','webTipo','capturasProy','defAudio','filtro','extraerPGS','conservarPGS','hostImg')
+$script:agGruposChip = @('modoLote','originales','sufijo','torrent','origen','webTipo','capturasProy','defAudio','filtro','extraerPGS','conservarPGS','hostImg')
 function _agMapSwitch { @{ remezcla=$ui.swRemezcla; proyecto=$ui.swProyecto; serie=$ui.swSerie; aplicarTodos=$ui.swAplicarTodos } }
 function _agMapCombo  { @{ plataforma=$ui.cmbPlataforma; formato=$ui.cmbFormato; upCategoria=$ui.upCategoria; upTipo=$ui.upTipo; upResolucion=$ui.upResolucion; numCapturas=$ui.cmbNumCapturas; epsPorVideo=$ui.cmbEpsPorVideo } }
 $script:agFlags = @('upAnon','upPersonal','upAudioEd','upProper','upDV','upHDR10P','upHDR10','upModQueue')
@@ -9128,7 +9100,6 @@ function Componer-EstadoAgente {
         subsUnicos = $subsUnicosAg
         undAudioSubs = $undAg
         undSubsVisible = ("$($ui.cardUndSub.Visibility)" -eq "Visible")
-        reprocesarVisible = ("$($ui.cardReprocesar.Visibility)" -eq "Visible")
         browse = $script:agBrowse
         montaje = [ordered]@{
             activo  = [bool]($script:procMontaje -and -not $script:procMontaje.HasExited)
