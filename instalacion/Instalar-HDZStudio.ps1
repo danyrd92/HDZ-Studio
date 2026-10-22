@@ -22,6 +22,15 @@ $verMkvtoolnix = "99.0"
 $verMediaInfo  = "26.05"
 
 $ErrorActionPreference = "Stop"
+$setupLog = Join-Path $env:TEMP 'HDZ-Studio-setup.log'
+trap {
+    try {
+        Add-Content -LiteralPath $setupLog -Encoding UTF8 -Value ("[{0:yyyy-MM-dd HH:mm:ss}] ERROR: {1}`n{2}" -f (Get-Date), $_.Exception.Message, ($_ | Out-String))
+    } catch {}
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Registro detallado: $setupLog" -ForegroundColor Yellow
+    exit 1
+}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
 
 function Escribe($txt, $color = "Gray") { Write-Host $txt -ForegroundColor $color }
@@ -66,7 +75,9 @@ $rutaVerJson = Join-Path $bin 'herramientas.json'
 $verInstaladas = @{ paquete = $toolLock.version }
 foreach ($tool in $toolLock.files) { $resumen += [pscustomobject]@{Herramienta=$tool.name;Estado='OK (SHA256 verificado)'} }
 function RutaPwsh {
-    $expected = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
+    # Un proceso de PowerShell de 32 bits puede tener ProgramFiles redirigido.
+    $programFilesNative = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+    $expected = Join-Path $programFilesNative 'PowerShell\7\pwsh.exe'
     if (Test-Path -LiteralPath $expected) { return $expected }
     return $null
 }
@@ -78,7 +89,9 @@ if (-not $pwshPath) {
     $pwshPath = RutaPwsh
     if (-not $pwshPath) { throw 'PowerShell no está disponible tras instalarlo.' }
 }
-& (Join-Path $instalDir 'Instalar-RuntimeMenu.ps1')
+# .NET 8 solo se necesita para la extensión moderna del menú contextual.
+# Esa instalación es opcional y se intenta más abajo junto al menú; un fallo
+# de red o una política de Windows no debe impedir usar HDZ Studio.
 
 
 # --- Lanzador oculto (.vbs) + acceso directo con icono ---------------------

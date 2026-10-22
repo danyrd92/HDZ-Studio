@@ -1,6 +1,7 @@
 ﻿# Runtime fijado de Microsoft para el componente COM del menú moderno.
 $ErrorActionPreference = 'Stop'
-$dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+$programFilesNative = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+$dotnet = Join-Path $programFilesNative 'dotnet\dotnet.exe'
 if ((Test-Path -LiteralPath $dotnet) -and (& $dotnet --list-runtimes | Select-String '^Microsoft.NETCore.App 8\.0\.')) { return }
 $expected = '2dc2f346a4bcb53ab15ab6ab84348c02eb31b0a3d4e8e06aac73b4c89f1b001af01943ed4c5735fa5585f1dd731a942d2034577dfe937f4454367ff2d6edf929'
 $path = Join-Path $env:TEMP ('hdz_net8_' + [guid]::NewGuid().ToString('N') + '.exe')
