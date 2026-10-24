@@ -1,4 +1,33 @@
 # Funciones puras compartidas. No inicia trabajos ni conexiones al cargarse.
+function Get-HdzVideoResolution($Video) {
+    # MediaInfo y ffprobe: misma clasificación en montaje, escritorio, web y subida.
+    # La anchura reconoce formatos panorámicos recortados (1920x800 = clase 1080).
+    # No se infiere HD a partir de un umbral de altura ni de un nombre de archivo.
+    $height = 0; $width = 0
+    if (-not $Video -or -not [int]::TryParse("$($Video.Height)", [ref]$height) -or $height -le 0) { return '' }
+    [void][int]::TryParse("$($Video.Width)", [ref]$width)
+    $lines = if ($height -eq 1088) { 1080 } else { $height }
+    foreach ($format in @(@{Widths=@(7680,8192);Lines=4320},@{Widths=@(3840,4096);Lines=2160},@{Widths=@(1920,2048);Lines=1080},@{Widths=@(1280);Lines=720})) {
+        if ($width -in $format.Widths -and $height -le $format.Lines -and $height -ge ($format.Lines / 2)) {
+            $lines = $format.Lines; break
+        }
+    }
+    $scanType = "$($Video.ScanType)"
+    $fieldOrder = "$($Video.FieldOrder) $($Video.field_order)".Trim()
+    $interlaced = $scanType -match '(?i)interlaced|MBAFF|PAFF'
+    if ($scanType -notmatch '(?i)progressive' -and $fieldOrder -match '(?i)\b(tt|bb|tb|bt)\b') { $interlaced = $true }
+    $suffix = if ($interlaced) { 'i' } else { 'p' }
+    return "$lines$suffix"
+}
+
+function Get-HdzResolutionTrackerId([string]$Resolution) {
+    if (-not $Resolution) { return $null }
+    # IDs del catálogo actual; un formato no estándar se publica como Other.
+    $ids = @{'4320p'=1;'2160p'=2;'1080p'=3;'1080i'=4;'720p'=5;'576p'=6;'576i'=7;'480p'=8;'480i'=9}
+    if ($ids.ContainsKey($Resolution)) { return $ids[$Resolution] }
+    return 10
+}
+
 function Convert-HdzLanguage([string]$Language) {
     $code = $Language.Trim().ToLowerInvariant()
     if (-not $code) { return 'und' }

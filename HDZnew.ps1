@@ -3608,7 +3608,7 @@ function New-Capturas($archivoFinalDestino, $nombreFinal, $numCapturas, $esHdr =
 # tener toda la metadata combinada).
 function Get-DatosTecnicosMkv($rutaMkv) {
     $resultado = [PSCustomObject]@{
-        Resolucion  = "1080p"
+        Resolucion  = ""             # Sin datos no inventamos una resolución HD.
         CodecVideo  = "264"        # "264", "265" o "AV1"
         HdrVideo    = ""           # ej: "DV HDR10+", "HDR10", "DV", ...
         AudioPista  = ""           # ej: "DD+ 5.1", "TrueHD 7.1 Atmos", "DTS-HD MA 5.1"
@@ -3621,8 +3621,7 @@ function Get-DatosTecnicosMkv($rutaMkv) {
     $pistaVideo = $json.media.track | Where-Object { $_.'@type' -eq 'Video' } | Select-Object -First 1
     if ($pistaVideo) {
         # Resolución
-        $alto = [int]$pistaVideo.Height
-        $resultado.Resolucion = if ($alto -gt 1200) { "2160p" } else { "1080p" }
+        $resultado.Resolucion = Get-HdzVideoResolution $pistaVideo
 
         # Códec de video
         $fmt = "$($pistaVideo.Format)"

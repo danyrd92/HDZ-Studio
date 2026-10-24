@@ -2412,6 +2412,7 @@ $scanWorker = {
                         Codec  = "$($s.codec_name)"
                         Width  = [int]"0$($s.width)"
                         Height = [int]"0$($s.height)"
+                        FieldOrder = "$($s.field_order)"
                         EsDV   = $esDV
                         EsHDR  = ("$($s.color_transfer)" -match "smpte2084|arib-std-b67")
                     }
@@ -3200,7 +3201,7 @@ function Construir-ListadoRemezcla($escaneo) {
             [void]$wp.Children.Add((New-Pill "error al analizar: $($f.Error)" "warn"))
         } else {
             if ($f.Video) {
-                $res = if ($f.Video.Height -gt 1200) { "2160p" } elseif ($f.Video.Height -gt 700) { "1080p" } elseif ($f.Video.Height -gt 0) { "$($f.Video.Height)p" } else { "?" }
+                $res = Get-HdzVideoResolution $f.Video; if (-not $res) { $res = '?' }
                 [void]$wp.Children.Add((New-Pill $res))
             }
             if (@($f.Audios).Count -gt 0) { [void]$wp.Children.Add((New-Pill "♪ $(@($f.Audios).Count) audio(s)")) }
@@ -3278,7 +3279,7 @@ function Construir-ListadoLote {
                 [void]$wp.Children.Add((New-Pill "error al analizar: $($f.Error)" "warn"))
             } else {
                 if ($f.Video) {
-                    $res = if ($f.Video.Height -gt 1200) { "2160p" } elseif ($f.Video.Height -gt 700) { "1080p" } elseif ($f.Video.Height -gt 0) { "$($f.Video.Height)p" } else { "?" }
+                    $res = Get-HdzVideoResolution $f.Video; if (-not $res) { $res = '?' }
                     [void]$wp.Children.Add((New-Pill $res "accent"))
                     $cod = switch -Regex ("$($f.Video.Codec)") { "hevc" { "HEVC" } "h264" { "H.264" } "av1" { "AV1" } default { "$($f.Video.Codec)".ToUpper() } }
                     [void]$wp.Children.Add((New-Pill $cod))
@@ -4517,7 +4518,7 @@ function Construir-InfoRemezcla($escaneo) {
             $nEps = @((Get-MapaEpisodiosRemezcla $cfg.Ruta).Keys).Count
             [void]$wp.Children.Add((New-Pill "$nEps capítulo(s) detectados"))
         } elseif ($f -and $f.Video) {
-            $res = if ($f.Video.Height -gt 1200) { "2160p" } elseif ($f.Video.Height -gt 700) { "1080p" } elseif ($f.Video.Height -gt 0) { "$($f.Video.Height)p" } else { "?" }
+            $res = Get-HdzVideoResolution $f.Video; if (-not $res) { $res = '?' }
             [void]$wp.Children.Add((New-Pill $res))
             [void]$wp.Children.Add((New-Pill ("♪ $(@($f.Audios).Count) audio(s)")))
             [void]$wp.Children.Add((New-Pill ("💬 $(@($f.Subs).Count) sub(s)")))
@@ -4904,8 +4905,7 @@ function Get-SpecsVideo($ruta) {
         $j = $jsonMi | ConvertFrom-Json
         $v = $j.media.track | Where-Object { $_.'@type' -eq "Video" } | Select-Object -First 1
         if ($v) {
-            $alto = [int]"0$($v.Height)"
-            $r.Resolucion = if ($alto -gt 1200) { 2 } elseif ($alto -gt 700) { 3 } elseif ($alto -gt 0) { 5 } else { $null }
+            $r.Resolucion = Get-HdzResolutionTrackerId (Get-HdzVideoResolution $v)
             $hdr = "$($v.HDR_Format) $($v.HDR_Format_Compatibility) $($v.HDR_Format_String)"
             if ($hdr -match "(?i)Dolby Vision") { $r.DV = $true }
             if ($hdr -match "(?i)HDR10\+|SMPTE ST 2094") { $r.HDR10P = $true }
@@ -9175,7 +9175,7 @@ function Componer-EstadoAgente {
                     $bdg += @{ t = "REMEZCLA · $($rolesRz -join ' + ')"; s = "accent" }
                 }
                 if ($f.Video) {
-                    $resB = if ($f.Video.Height -gt 1200) { "2160p" } elseif ($f.Video.Height -gt 700) { "1080p" } elseif ($f.Video.Height -gt 0) { "$($f.Video.Height)p" } else { "?" }
+                    $resB = Get-HdzVideoResolution $f.Video; if (-not $resB) { $resB = '?' }
                     $bdg += @{ t = $resB; s = "accent" }
                     $codB = switch -Regex ("$($f.Video.Codec)") { "hevc" { "HEVC" } "h264" { "H.264" } "av1" { "AV1" } default { "$($f.Video.Codec)".ToUpper() } }
                     $bdg += @{ t = $codB; s = "gris" }
