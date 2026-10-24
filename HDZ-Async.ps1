@@ -1,13 +1,29 @@
-# Operaciones bloqueantes fuera del hilo WPF, con la interfaz repintándose y
-# controles de edición bloqueados para que la petición no cambie de ficha.
+# Bloquear editores y acciones durante una espera conserva el contexto de la
+# petición sin desactivar el ScrollViewer ni la navegación entre pantallas.
+function Get-HdzBusyEditors($node) {
+    if($node -is [Windows.Controls.Primitives.TextBoxBase] -or
+       $node -is [Windows.Controls.PasswordBox] -or $node -is [Windows.Controls.ComboBox] -or
+       $node -is [Windows.Controls.Primitives.ButtonBase]) {
+        if($node.Name -notin @('navProyecto','navSubida','navAjustes','btnToggleSidebar','btnConsola')){$node}
+        return
+    }
+    foreach($child in [Windows.LogicalTreeHelper]::GetChildren($node)){
+        if($child -is [Windows.DependencyObject]){Get-HdzBusyEditors $child}
+    }
+}
 function Invoke-HdzBackground([scriptblock]$Work, [hashtable]$Arguments) {
     if ($script:networkBusy) { throw 'Ya hay una operación externa en curso.' }
     $script:networkBusy = $true
-    $wasEnabled = if ($win) { $win.IsEnabled } else { $true }
+    $editors=@()
     $pipeline = [powershell]::Create()
     $timer = $null
     try {
-        if ($win) { $win.IsEnabled = $false }
+        if ($win) {
+            $editors=@(Get-HdzBusyEditors $win.Content | Where-Object IsEnabled | ForEach-Object {
+                @{Control=$_;Local=$_.ReadLocalValue([Windows.UIElement]::IsEnabledProperty)}
+            })
+            foreach($editor in $editors){$editor.Control.SetCurrentValue([Windows.UIElement]::IsEnabledProperty,$false)}
+        }
         [void]$pipeline.AddScript($Work.ToString()).AddArgument($Arguments)
         $running = $pipeline.BeginInvoke()
         if (-not $running.IsCompleted) {
@@ -25,7 +41,10 @@ function Invoke-HdzBackground([scriptblock]$Work, [hashtable]$Arguments) {
         if ($timer) { $timer.Stop() }
         $pipeline.Dispose()
         $script:networkBusy = $false
-        if ($win) { $win.IsEnabled = $wasEnabled }
+        foreach($editor in $editors){
+            if($editor.Local -eq [Windows.DependencyProperty]::UnsetValue){$editor.Control.ClearValue([Windows.UIElement]::IsEnabledProperty)}
+            else{$editor.Control.SetCurrentValue([Windows.UIElement]::IsEnabledProperty,$true)}
+        }
     }
 }
 

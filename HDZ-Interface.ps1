@@ -60,8 +60,6 @@ function Get-HdzInterfaceState {
         $count=@($script:videosElegidos).Count
         $script:sectionSummaries.general.Text=if($count){if($count -eq 1){'1 vídeo elegido'}else{"$count vídeos elegidos"}}else{$folders=@(Get-CarpetasEntrada).Count;if($folders -eq 1){'1 carpeta'}else{"$folders carpetas"}}
         $script:sectionSummaries.proyecto.Text="$($ui.txtTitulo.Text) · $($ui.txtAno.Text)".Trim(' ','·')
-        $script:sectionSummaries.audio.Text='Idiomas → pistas → conversiones'
-        $script:sectionSummaries.subs.Text='Idiomas → pistas → PGS'
     }
     if (Get-Command Update-HdzDesignState -ErrorAction SilentlyContinue) { Update-HdzDesignState }
     $busy=[bool]$script:networkBusy

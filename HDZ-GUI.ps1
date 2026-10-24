@@ -2068,7 +2068,12 @@ function Set-ChipValor($nombre, $valor) {
 }
 
 function Init-Combo($cmb, $opciones, $indiceDefecto = 0) {
-    foreach ($o in $opciones) { [void]$cmb.Items.Add($o.T) }
+    if([object]::ReferenceEquals($opciones,$opcionesIdiomaUnd)){
+        # Centenares de pistas comparten el catálogo; no añadir cientos de
+        # cadenas por separado a cada selector durante el análisis.
+        if(-not $script:undOptionLabels){$script:undOptionLabels=[string[]]@($opcionesIdiomaUnd | ForEach-Object {$_.T})}
+        $cmb.ItemsSource=$script:undOptionLabels
+    }else{foreach ($o in $opciones) { [void]$cmb.Items.Add($o.T) }}
     $cmb.Tag = $opciones
     if ($indiceDefecto -ge 0 -and $indiceDefecto -lt $opciones.Count) { $cmb.SelectedIndex = $indiceDefecto }
 }
@@ -8862,12 +8867,14 @@ $agenteWorker = {
         if ($sync.PushNow -or ($now - $last).TotalMilliseconds -ge 1800) {
             $sync.PushNow = $false; $last = $now
             try {
-                $body = "$($sync.Estado)"
-                if ($body) {
+                $snapshot = $sync.Estado
+                if ($null -ne $snapshot) {
+                    # El DTO solo contiene valores; serializar aquí deja libre el Dispatcher WPF.
+                    $body = if ($snapshot -is [string]) { $snapshot } else { ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress }
                     $r = Invoke-RestMethod -Uri $url -Method Post -Body $body `
                          -Headers @{ "X-HDZ-Key" = $key } -ContentType "application/json; charset=utf-8" -TimeoutSec 10
                     $sync.Online = $true
-                    try { $sync.LastAckIds=@(($body | ConvertFrom-Json)._acks | ForEach-Object {$_.id}) } catch {}
+                    try { $sync.LastAckIds=@($(if($snapshot -is [string]){($body | ConvertFrom-Json)._acks}else{$snapshot._acks}) | ForEach-Object {$_.id}) } catch {}
                     if ($n -lt 2) { _agl "push OK (len=$($body.Length))" }; $n++
                     if ($r.cmds) { foreach ($c in @($r.cmds)) { [void]$sync.Cmds.Enqueue($c) } }
                 } else { if ($n -lt 6) { _agl "estado VACIO, no envio" }; $n++ }
@@ -8987,8 +8994,18 @@ function Get-TareasAuxiliares {
 function Actualizar-PanelTareasAux {
     if (-not $ui.panTareasAux) { return }
     $tareas = @(Get-TareasAuxiliares)
-    $ui.panTareasAux.Children.Clear()
+    while ($ui.panTareasAux.Children.Count -gt $tareas.Count) { $ui.panTareasAux.Children.RemoveAt($ui.panTareasAux.Children.Count-1) }
+    $taskIndex=0
     foreach ($t in $tareas) {
+        $kind="$($t.tipo)|$($t.titulo)"
+        $existing=if($taskIndex -lt $ui.panTareasAux.Children.Count){$ui.panTareasAux.Children[$taskIndex]}else{$null}
+        if ($existing -and $existing.Tag.Kind -eq $kind) {
+            $existing.Tag.Title.Text="$($t.titulo) · $($t.fase)"
+            $existing.Tag.Detail.Text="$($t.detalle)"
+            $existing.Tag.Bar.Value=[Math]::Clamp([double]$t.pct,0,100)
+            $taskIndex++
+            continue
+        }
         $bd = New-Object System.Windows.Controls.Border
         $bd.Background = $win.Resources["ChipBrush"]; $bd.BorderBrush = $win.Resources["ChipBorderBrush"]
         $bd.BorderThickness = [System.Windows.Thickness]::new(1); $bd.CornerRadius = [System.Windows.CornerRadius]::new(8)
@@ -9001,11 +9018,29 @@ function Actualizar-PanelTareasAux {
         $rt = New-Object System.Windows.Controls.TextBlock; $rt.Text = "$($t.detalle)"; $rt.Foreground = $win.Resources["SubBrush"]; $rt.FontSize = 11.5; $rt.FontWeight = "SemiBold"
         [System.Windows.Controls.Grid]::SetColumn($rt, 1); [void]$g.Children.Add($lt); [void]$g.Children.Add($rt)
         $bar = New-Object System.Windows.Controls.ProgressBar; $bar.Height = 5; $bar.Minimum = 0; $bar.Maximum = 100; $bar.Value = [double]$t.pct; $bar.Background = "#26262C"; $bar.BorderThickness = [System.Windows.Thickness]::new(0); $bar.Foreground = $win.Resources["AccentBrush"]
-        [void]$sp.Children.Add($g); [void]$sp.Children.Add($bar); $bd.Child = $sp; [void]$ui.panTareasAux.Children.Add($bd)
+        [void]$sp.Children.Add($g); [void]$sp.Children.Add($bar); $bd.Child = $sp
+        $bd.Tag=@{Kind=$kind;Title=$lt;Detail=$rt;Bar=$bar}
+        if($existing){$ui.panTareasAux.Children.RemoveAt($taskIndex)}
+        $ui.panTareasAux.Children.Insert($taskIndex,$bd);$taskIndex++
     }
     $ui.panTareasAux.Visibility = if ($tareas.Count -gt 0) { "Visible" } else { "Collapsed" }
 }
 function Componer-EstadoAgente {
+    param([switch]$Snapshot)
+    # El análisis es inmutable entre escaneos. Invalidar solo al cambiar fuentes
+    # o correcciones de idioma, en vez de recalcular miles de pistas por segundo.
+    $languageKey=ConvertTo-Json -InputObject $script:idiomasManuales -Compress
+    if (-not [object]::ReferenceEquals($script:agCachedScan,$script:ultimoScan) -or
+        -not [object]::ReferenceEquals($script:agCachedRemix,$script:remixScanCrudo) -or
+        $script:agCachedLanguages -ne $languageKey -or -not $script:agMediaCache) {
+        $script:agMediaCache=@{};$script:agCachedScan=$script:ultimoScan
+        $script:agCachedRemix=$script:remixScanCrudo;$script:agCachedLanguages=$languageKey
+    }
+    $principalNames=@{};$hybridNames=@{}
+    foreach($group in $script:gruposLote){
+        $principalNames["$($group.Principal)"]=$true
+        if(@($group.Miembros).Count -gt 1){foreach($name in $group.Miembros){$hybridNames["$name"]=$true}}
+    }
     $op = [ordered]@{}
     foreach ($g in $script:agGruposChip) { $v = Get-ChipValor $g; if ($v -is [bool]) { $v = "$v".ToLower() }; $op[$g] = "$v" }
     $sw = [ordered]@{}; $ms = _agMapSwitch; foreach ($k in $ms.Keys) { $sw[$k] = [bool]$ms[$k].IsChecked }
@@ -9015,10 +9050,12 @@ function Componer-EstadoAgente {
     $inp = [ordered]@{}; $mi = _agMapInput; foreach ($k in $mi.Keys) { $inp[$k] = "$($mi[$k].Text)" }
     # Controles dinámicos: estas decisiones se crean tras analizar los vídeos, por lo que el
     # panel móvil necesita una descripción explícita (no basta con los controles fijos de arriba).
+    if(-not $script:agConvDestinations){$script:agConvDestinations=@{}}
     $convTracksAg = @($script:convTrackOpts | ForEach-Object {
         $can = [int]$_.Channels
+        if(-not $script:agConvDestinations.ContainsKey($can)){$script:agConvDestinations[$can]=@((Get-OpcionesDestino $can) | ForEach-Object {@{t="$($_.T)";v="$($_.V)"}})}
         [ordered]@{ v = "$($_.V)"; t = "$($_.T)"; canales = $can
-                    destinos = @((Get-OpcionesDestino $can) | ForEach-Object { @{ t = "$($_.T)"; v = "$($_.V)" } }) }
+                    destinos = $script:agConvDestinations[$can] }
     })
     $convRowsAg = @()
     foreach ($r in @($script:convRows)) {
@@ -9026,11 +9063,12 @@ function Componer-EstadoAgente {
         $convRowsAg += [ordered]@{ Index = "$(Get-ComboValor $r.CmbOrigen)"; Dest = "$(Get-ComboValor $r.CmbDestino)"; MantenerOriginal = [bool]$r.SwMant.IsChecked }
     }
     $undAg = @()
+    if(-not $script:agUndOptions){$script:agUndOptions=@($opcionesIdiomaUnd|ForEach-Object {@{t="$($_.T)";v="$($_.V)"}})}
     foreach ($r in @($script:undRows)) {
+        if(-not $r){continue}
         $undAg += [ordered]@{ archivo = "$($r.Archivo)"; id = "$($r.Id)"; tipo = "$($r.Tipo)"
                                etiqueta = "$($r.Etiqueta)"
-                               valor = "$(Get-ComboValor $r.Combo)"
-                               opciones = @(@($r.Combo.Tag) | ForEach-Object { @{ t = "$($_.T)"; v = "$($_.V)" } }) }
+                               valor = "$(Get-ComboValor $r.Combo)" }
     }
     $subIdiomasAg = @($script:chipsIdiomas | ForEach-Object { [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked } })
     $remezclaFuentesAg = @((Leer-RemezclaCarpetas) | ForEach-Object { [ordered]@{ ruta = "$($_.Ruta)"; archivo = "$($_.Archivo)"; video = [bool]$_.Video; audio = [bool]$_.Audio; subs = [bool]$_.Subs } })
@@ -9099,6 +9137,7 @@ function Componer-EstadoAgente {
         subsUnicosVisible = ("$($ui.cardSubsUnicos.Visibility)" -eq "Visible")
         subsUnicos = $subsUnicosAg
         undAudioSubs = $undAg
+        idiomasPistaOpciones = $script:agUndOptions
         undSubsVisible = ("$($ui.cardUndSub.Visibility)" -eq "Visible")
         browse = $script:agBrowse
         montaje = [ordered]@{
@@ -9118,9 +9157,16 @@ function Componer-EstadoAgente {
             $f = $_
             $nm = "$($f.Nombre)"
             $cfgRz = if ($loteRemezclaAg -and $rolesRemezclaPorArchivo.ContainsKey("$($f.Ruta)")) { $rolesRemezclaPorArchivo["$($f.Ruta)"] } else { $null }
-            $epv = if ($script:episodiosMap.ContainsKey($nm)) { "$($script:episodiosMap[$nm])" } else { Detectar-EpisodioGui $nm }
+            $mediaKey="$($f.Ruta)|$nm"
+            $entry=$script:agMediaCache[$mediaKey]
+            if(-not $entry -or -not [object]::ReferenceEquals($entry.Source,$f)){
+                $entry=@{Source=$f;Episode=(Detectar-EpisodioGui $nm);BadgeKey=$null;Badges=@()};$script:agMediaCache[$mediaKey]=$entry
+            }
+            $epv = if ($script:episodiosMap.ContainsKey($nm)) { "$($script:episodiosMap[$nm])" } else { $entry.Episode }
             $sal = if ($cfgRz -and -not $cfgRz.Video) { "" } elseif ($script:salidaMap.ContainsKey($nm)) { "$($script:salidaMap[$nm])" } else { "" }
             # Badges del vídeo (misma info y estilos que la lista del programa: New-Pill).
+            $badgeKey="$($cfgRz.Video)|$($cfgRz.Audio)|$($cfgRz.Subs)|$($hybridNames.ContainsKey($nm))"
+            if($entry.BadgeKey -eq $badgeKey){$bdg=$entry.Badges}else{
             $bdg = @()
             if ($f.Error) { $bdg += @{ t = "error al analizar: $($f.Error)"; s = "warn" } }
             else {
@@ -9150,11 +9196,13 @@ function Componer-EstadoAgente {
                 $nPgsB = @($f.Subs | Where-Object { $_.EsPGS }).Count
                 $nTxtB = @($f.Subs | Where-Object { -not $_.EsPGS }).Count
                 if (@($f.Subs).Count -gt 0) { $bdg += @{ t = "💬 $nTxtB texto · $nPgsB PGS"; s = "gris" } }
-                if (@(Miembros-GrupoDe $nm).Count -gt 1) { $bdg += @{ t = "PAREJA HÍBRIDA DV+HDR10"; s = "warn" } }
+                if ($hybridNames.ContainsKey($nm)) { $bdg += @{ t = "PAREJA HÍBRIDA DV+HDR10"; s = "warn" } }
                 $undsB = @($f.Audios | Where-Object { (Get-IdiomaPistaGui $_ 'Audio') -eq "und" }).Count + @($f.Subs | Where-Object { (Get-IdiomaPistaGui $_ 'Sub') -eq "und" }).Count
                 if ($undsB -gt 0) { $bdg += @{ t = "$undsB pista(s) sin idioma"; s = "warn" } }
             }
-            [ordered]@{ nombre = $nm; sel = $(if ($loteRemezclaAg) { $true } else { $script:seleccion[$nm] -ne $false }); ep = "$epv"; salida = "$sal"; principal = $(if ($cfgRz) { [bool]$cfgRz.Video } else { Es-PrincipalGrupo $nm }); fijo = $loteRemezclaAg; badges = $bdg }
+            $entry.BadgeKey=$badgeKey;$entry.Badges=$bdg
+            }
+            [ordered]@{ nombre = $nm; sel = $(if ($loteRemezclaAg) { $true } else { $script:seleccion[$nm] -ne $false }); ep = "$epv"; salida = "$sal"; principal = $(if ($cfgRz) { [bool]$cfgRz.Video } else { -not $script:gruposLote -or $principalNames.ContainsKey($nm) }); fijo = $loteRemezclaAg; badges = $bdg }
         })
         resumen = $(if ($loteRemezclaAg) { "$(@($loteAnalisisAg).Count) archivos fuente · $(@($script:ultimoScan).Count) archivo(s) final(es)" } else { "$($ui.lblResumen.Text)" })
         estado  = "$($ui.lblEstado.Text)"
@@ -9204,7 +9252,12 @@ function Componer-EstadoAgente {
     $est.logoRefresh = $true
     $est.customLogo = $true
     $est.protocol = 2
-    $est.tmdbResults = @($script:tmdbSearchResults | ForEach-Object { @{id="$($_.Id)";titulo="$($_.Titulo)";fecha="$($_.Fecha)"} })
+    $est.tmdbResults = @(for($i=0;$i -lt @($script:tmdbSearchResults).Count;$i++){
+        $result=@($script:tmdbSearchResults)[$i]
+        if($result -and "$($result.Id)" -match '^[1-9][0-9]*$' -and "$($result.Titulo)".Trim()){
+            @{i=$i;id="$($result.Id)";titulo="$($result.Titulo)";fecha="$($result.Fecha)"}
+        }
+    })
     $est.carpetas = @(Get-CarpetasEntrada)
     $est.firmas = @($script:firmaBordes | ForEach-Object { @{ruta="$($_.Ruta)";nombre=(Split-Path $_.Ruta -Leaf);sel=($_.Ruta -eq $script:firmaSel);thumb=(Get-CapturaThumbB64 $_.Ruta)} })
     if ($script:networkBusy) { $est.tareas = @($est.tareas) + @(@{titulo='Red';fase='Esperando respuesta del servicio';pct=0;detalle='En curso'}) }
@@ -9212,6 +9265,7 @@ function Componer-EstadoAgente {
     $est.busy = [bool]$script:networkBusy
     $est.history = @($script:historialVisible)
     $est._acks = @($script:agCompleted.Values)
+    if($Snapshot){return $est}
     return ($est | ConvertTo-Json -Depth 8 -Compress)
 }
 function _agClick($btn) {
@@ -9262,7 +9316,7 @@ function Aplicar-ComandoAgente($c) {
             "remove_carpeta" { Set-CarpetasTemporadas @(Get-CarpetasEntrada | Where-Object { $_ -ne "$($c.path)" }) }
             "sel_tmdb" {
                 $index = [int]$c.idx
-                if ($index -lt 0 -or $index -ge @($script:tmdbSearchResults).Count) { throw 'El resultado TMDB ya no está disponible.' }
+                if (-not $script:tmdbSearchResults -or $index -lt 0 -or $index -ge @($script:tmdbSearchResults).Count -or -not $script:tmdbSearchResults[$index].Id) { throw 'El resultado TMDB ya no está disponible. Vuelve a buscar.' }
                 Aplicar-ResultadoTmdb $script:tmdbSearchResults[$index]
                 Set-Estado 'Ficha TMDB aplicada.' 'ok'
             }
@@ -9440,8 +9494,11 @@ function Resolver-AgentUrl {
     return ""
 }
 function Update-HdzAgentState {
+    param([switch]$Force)
     if(-not $script:agSync){return}
-    try {$script:agSync.Estado=Componer-EstadoAgente} catch {return}
+    $now=[datetime]::UtcNow
+    if(-not $Force -and $script:agSnapshotAt -and ($now-$script:agSnapshotAt).TotalMilliseconds -lt 600){return}
+    try {$script:agSync.Estado=Componer-EstadoAgente -Snapshot;$script:agSnapshotAt=[datetime]::UtcNow} catch {return}
     $script:agSync.PushNow=$true
 }
 function Start-HdzAgentStateTimer {
@@ -9491,9 +9548,10 @@ function Iniciar-Agente {
         # Aplica comandos PRIMERO, luego recompón el estado (así refleja el comando recién aplicado)
         # y pide empuje inmediato para que el panel vea el cambio sin esperar al ciclo normal.
         $q = $script:agSync.Cmds; $aplicado = $false
-        while ($q.Count -gt 0) { $c = $q.Dequeue(); Aplicar-ComandoAgente $c; $aplicado = $true }
+        $budget=[Diagnostics.Stopwatch]::StartNew();$processed=0
+        while ($q.Count -gt 0 -and $processed -lt 4 -and ($processed -eq 0 -or $budget.ElapsedMilliseconds -lt 40)) { $c = $q.Dequeue(); Aplicar-ComandoAgente $c; $aplicado = $true; $processed++ }
         $err = $null
-        try { $script:agSync.Estado = Componer-EstadoAgente } catch { $err = "$($_.Exception.Message)" }
+        try { if($aplicado){Update-HdzAgentState -Force}else{Update-HdzAgentState} } catch { $err = "$($_.Exception.Message)" }
         if (-not $script:agTickLog) { $script:agTickLog = $true; try { "[$(Get-Date -f 'HH:mm:ss')] UI tick #1: EstadoLen=$("$($script:agSync.Estado)".Length) ComponerErr=$err" | Out-File $script:agDbg -Append -Encoding UTF8 } catch {} }
         if ($aplicado) { $script:agSync.PushNow = $true }
     })
@@ -9988,7 +10046,7 @@ if ($script:modoTest) {
                           Aplicar-ComandoAgente ([PSCustomObject]@{ type = "set_conv"; rows = @([PSCustomObject]@{ Index = "$($p.v)"; Dest = "$dst"; MantenerOriginal = $false }) })
                       }
                       if (@($d0.undAudioSubs).Count -gt 0) {
-                          $u = @($d0.undAudioSubs)[0]; $uv = @($u.opciones)[0].v
+                          $u = @($d0.undAudioSubs)[0]; $uv = @($d0.idiomasPistaOpciones)[0].v
                           Aplicar-ComandoAgente ([PSCustomObject]@{ type = "set_und"; archivo = "$($u.archivo)"; id = "$($u.id)"; tipo = "$($u.tipo)"; value = "$uv" })
                       }
                       if (@($d0.idiomasSubs).Count -gt 0) { $sl = @($d0.idiomasSubs)[0]; Aplicar-ComandoAgente ([PSCustomObject]@{ type = "set_sub_lang"; code = "$($sl.v)"; value = $true }) }

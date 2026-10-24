@@ -176,20 +176,24 @@ function Set-HdzWorkspaceStage($name) {
  if($script:workspaceScroll){$script:workspaceScroll.ScrollToTop()}
 }
 function New-HdzWorkspaceColumns($owner,$wideCards=@()) {
- $wrap=[Windows.Controls.WrapPanel]::new();$wrap.HorizontalAlignment='Stretch';$wrap.Tag=@($wideCards)
+ $wrap=[Windows.Controls.WrapPanel]::new();$wrap.HorizontalAlignment='Stretch'
+ $wrap.Tag=@{Width=-1;WideCards=(@($wideCards)+@((Get-HdzCard $ui.panListado),(Get-HdzCard $ui.panRemezcla),$ui.cardAudioTracks,$ui.cardConvAudio,$ui.cardUndAudio,$ui.cardUndSub))}
  $children=@($owner.Children);$owner.Children.Clear()
  foreach($child in $children){$child.VerticalAlignment='Top';[void]$wrap.Children.Add($child)}
  [void]$owner.Children.Add($wrap)
- $wrap.Add_SizeChanged({param($sender)
+ $wrap.Add_SizeChanged({param($sender,$eventArgs)
+  if(-not $eventArgs.WidthChanged){return}
   $available=$sender.ActualWidth;if($available -le 0){return}
+  if([Math]::Abs($sender.Tag.Width-$available) -lt .5){return};$sender.Tag.Width=$available
   $columns=if($available -ge 1050){2}else{1};$half=[Math]::Floor(($available-20)/2)
+  $index=0
   foreach($child in $sender.Children){
-   $wide=$child -isnot [Windows.Controls.Border] -or @($sender.Tag) -contains $child -or $child -eq (Get-HdzCard $ui.panListado) -or $child -eq (Get-HdzCard $ui.panRemezcla) -or $child -eq $ui.cardAudioTracks -or $child -eq $ui.cardConvAudio -or $child -eq $ui.cardUndAudio -or $child -eq $ui.cardUndSub
-   $child.Width=if($columns -eq 1 -or $wide){$available}else{$half}
-   $child.Margin=if($columns -eq 2 -and -not $wide){'0,0,16,16'}else{'0,0,0,16'}
-   # Remove the trailing gutter from every second half-width card.
+   $wide=$columns -eq 1 -or $child -isnot [Windows.Controls.Border] -or $sender.Tag.WideCards -contains $child
+   $width=if($wide){$available}else{$half};if($child.Width -ne $width){$child.Width=$width}
+   $margin=if(-not $wide -and $index%2 -eq 0){[Windows.Thickness]::new(0,0,16,16)}else{[Windows.Thickness]::new(0,0,0,16)}
+   if($child.Margin -ne $margin){$child.Margin=$margin}
+   if($wide){$index=0}else{$index++}
   }
-  $index=0;foreach($child in $sender.Children){if($child.Width -lt $available){if($index%2 -eq 1){$child.Margin='0,0,0,16'};$index++}else{$index=0}}
  })
  return $wrap
 }
@@ -228,7 +232,7 @@ function Initialize-HdzWorkspace {
  }
  $navFrame=[Windows.Controls.Border]::new();$navFrame.Background=[Windows.Media.BrushConverter]::new().ConvertFromString('#141920');$navFrame.BorderBrush=$win.Resources['CardBorderBrush'];$navFrame.BorderThickness='1';$navFrame.CornerRadius='12';$navFrame.Padding='6';$navFrame.Margin='0,0,0,20';$navFrame.Child=$script:workspaceNav
  $visibility=[Windows.Data.Binding]::new('Visibility');$visibility.Source=$script:workspaceNav;[void]$navFrame.SetBinding([Windows.UIElement]::VisibilityProperty,$visibility)
- $script:workspaceNav.Add_SizeChanged({param($sender) if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-($sender.Children.Count*10))/$sender.Children.Count)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
+ $script:workspaceNav.Add_SizeChanged({param($sender,$eventArgs) if(-not $eventArgs.WidthChanged){return};if($sender.ActualWidth -ge 750){foreach($button in $sender.Children){$button.Width=[Math]::Floor(($sender.ActualWidth-($sender.Children.Count*10))/$sender.Children.Count)}}else{foreach($button in $sender.Children){$button.Width=[double]::NaN}}})
  $top.Children.Insert(1,$navFrame)
  $script:workspaceHeading=[Windows.Controls.StackPanel]::new();$script:workspaceHeading.Margin='0,0,0,18'
  $script:workspaceHeadingTitle=New-HdzProductText '' 20 'TextBrush';$script:workspaceHeadingTitle.FontWeight='SemiBold';$script:workspaceHeadingNote=New-HdzProductText '' 13 'SubBrush';$script:workspaceHeadingNote.Visibility='Collapsed'
