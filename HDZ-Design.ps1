@@ -1,5 +1,6 @@
 # Visual design only; keep all existing media/torrent handlers and values.
 $script:hdzIcons=@{
+ actualizar=@('M4,16 L7,16 L7,19 L17,19 L17,16 L20,16 L20,22 L4,22 Z','M10.5,15 L10.5,6 L7,9.5 L5,7.5 L12,0.5 L19,7.5 L17,9.5 L13.5,6 L13.5,15 Z')
  entrada=@('M2,9 Q2,7 4,7 L20,7 Q22,7 22,9 L20,20 L4,20 Z','M3,6 L3,4 L9,4 L12,7 L3,7 Z')
  proyecto=@('M3,8 L21,8 L21,19 Q21,21 19,21 L5,21 Q3,21 3,19 Z M9,11 L9,18 L16,14.5 Z','M3,3 L8,3 L5,7 L3,7 Z M10,3 L15,3 L12,7 L7,7 Z M17,3 L21,3 L21,7 L14,7 Z M9,11 L16,14.5 L9,18 Z')
  audio=@('M3,9 Q4.5,9 4.5,10.5 L4.5,13.5 Q4.5,15 3,15 Q1.5,15 1.5,13.5 L1.5,10.5 Q1.5,9 3,9 Z M12,3 Q13.5,3 13.5,4.5 L13.5,19.5 Q13.5,21 12,21 Q10.5,21 10.5,19.5 L10.5,4.5 Q10.5,3 12,3 Z M21,9 Q22.5,9 22.5,10.5 L22.5,13.5 Q22.5,15 21,15 Q19.5,15 19.5,13.5 L19.5,10.5 Q19.5,9 21,9 Z','M7.5,6 Q9,6 9,7.5 L9,16.5 Q9,18 7.5,18 Q6,18 6,16.5 L6,7.5 Q6,6 7.5,6 Z M16.5,6 Q18,6 18,7.5 L18,16.5 Q18,18 16.5,18 Q15,18 15,16.5 L15,7.5 Q15,6 16.5,6 Z')
@@ -96,6 +97,7 @@ function Initialize-HdzDesign {
  foreach($old in @(Get-HdzUiTexts $script:barraEntrada | Where-Object Text -eq '📁')){
   $parent=[Windows.LogicalTreeHelper]::GetParent($old);if($parent -is [Windows.Controls.Grid]){[void]$parent.Children.Remove($old);$folder=New-HdzOutlineIcon 'entrada';[Windows.Controls.Grid]::SetColumn($folder,0);[void]$parent.Children.Add($folder)}
  }
+ $updateIcon=New-HdzOutlineIcon 'actualizar';$updateIcon.HorizontalAlignment='Center';$ui.btnActualizar.Content=$updateIcon
  Set-HdzNavigationDesign;$script:hdzDesignReady=$true;Update-HdzDesignState
  Initialize-HdzProduct
  Initialize-HdzWorkspace

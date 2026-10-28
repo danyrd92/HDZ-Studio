@@ -1052,16 +1052,21 @@ $xaml = @'
           <Border Height="1" Background="#2A2A3C" Margin="6,14,6,14"/>
           <RadioButton x:Name="navAjustes"  Style="{StaticResource Nav}" GroupName="nav" Content="⚙   Ajustes / claves"/>
         </StackPanel>
-        <Grid DockPanel.Dock="Bottom" Margin="2,12,2,0">
+        <Grid x:Name="sidebarFooter" DockPanel.Dock="Bottom" Margin="2,12,2,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel x:Name="panVersionUpdate" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBlock x:Name="lblVersion" VerticalAlignment="Center" Foreground="#56565E"
                        FontSize="11" Margin="11,0,5,0" Text=""/>
             <Button x:Name="btnActualizar" Style="{StaticResource GhostMini}" Content="↑"
-                    Visibility="Collapsed" Padding="7,2" ToolTip="Actualizar HDZ Studio"/>
+                    Visibility="Collapsed" MinWidth="36" MinHeight="36" Padding="7,2"
+                    AutomationProperties.Name="Actualizar HDZ Studio" ToolTip="Actualizar HDZ Studio"/>
           </StackPanel>
           <Button x:Name="btnColapsar" Grid.Column="1" Style="{StaticResource GhostMini}" Content="☰"
                   FontSize="15" Padding="9,3" ToolTip="Ocultar / mostrar el menú"/>
@@ -1989,7 +1994,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panRemezclaPistas","panRemezclaAudios","panRemezclaSubs",
           "btnSelTodos","btnSelNinguno","panProcesado","lblProcesado","btnQuitarProcesado",
           "cardMultiEp","txtTemporadaEp","txtPrimerEp","cmbEpsPorVideo","btnAplicarEp",
-          "sidebar","btnColapsar","lblVersion","btnActualizar","lblSecMontaje","lblSecTorrent","lblPie","panSubidaBody","lblCarpetaDesc",
+          "sidebar","sidebarFooter","panVersionUpdate","btnColapsar","lblVersion","btnActualizar","lblSecMontaje","lblSecTorrent","lblPie","panSubidaBody","lblCarpetaDesc",
           "navProyecto",
           "panCrear","panGeneral","panProyecto","panAudio","panSubs",
           "secHdrGeneral","secChevGeneral","secHdrProyecto","secChevProyecto",
@@ -4304,8 +4309,16 @@ function Aplicar-Sidebar {
         if ($col) { $n.C.Content = $n.I; $n.C.HorizontalContentAlignment = "Center"; $n.C.FontSize = 18; $n.C.Padding = $padCol; $n.C.ToolTip = $n.L }
         else      { $n.C.Content = "$($n.I)   $($n.L)"; $n.C.HorizontalContentAlignment = "Left"; $n.C.FontSize = 13.5; $n.C.Padding = $padExp; $n.C.ToolTip = $null }
     }
-    # Colapsado: el ☰ ocupa las 2 columnas y se centra (la versión está oculta). Expandido: solo
-    # su columna derecha, con la versión a la izquierda.
+    # Compacto: actualización encima del menú, en filas distintas y a ancho completo.
+    # Expandido: actualización a la derecha de la versión, menú en su columna derecha.
+    # Se conserva el mismo botón/manejador y su visibilidad depende solo de la versión.
+    [System.Windows.Controls.Grid]::SetColumnSpan($ui.panVersionUpdate, $(if ($col) { 2 } else { 1 }))
+    $ui.panVersionUpdate.HorizontalAlignment = if ($col) { 'Center' } else { 'Left' }
+    $ui.btnActualizar.Margin = if ($col) { [Windows.Thickness]::new(0,0,0,8) } else { [Windows.Thickness]::new(0) }
+    $ui.btnActualizar.MinWidth = if ($col) { 40 } else { 36 }
+    $ui.btnActualizar.MinHeight = if ($col) { 40 } else { 36 }
+    [System.Windows.Controls.Grid]::SetRow($ui.btnColapsar, $(if ($col) { 1 } else { 0 }))
+    [System.Windows.Controls.Grid]::SetColumn($ui.btnColapsar, $(if ($col) { 0 } else { 1 }))
     [System.Windows.Controls.Grid]::SetColumnSpan($ui.btnColapsar, $(if ($col) { 2 } else { 1 }))
     $ui.btnColapsar.HorizontalAlignment = if ($col) { "Center" } else { "Right" }
     if (Get-Command Set-HdzNavigationDesign -ErrorAction SilentlyContinue) { Set-HdzNavigationDesign }
