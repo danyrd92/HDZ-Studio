@@ -3278,7 +3278,8 @@ function Format-Audios($audios) {
         if (-not $cStr) { $cStr = "2.0" }
 
         # Nombre largo (para mkvpropedit --set name=): formato bonito con espacios
-        # P. ej.: "Castellano DD+ 5.1", "Inglés DTS-HD MA 7.1", "Castellano DD+ 5.1 Atmos"
+        # P. ej.: "Castellano DD+ 5.1", "Inglés DTS-HD MA 7.1", "Castellano DD+ 5.1 Atmos".
+        # Set-Banderas añade el bitrate REAL tras muxear y convertir, no el del origen.
         $codStr = $a.Format
         if ($a.Format -match "(?i)E-?AC-?3" -or $a.Comm -match "(?i)Plus" -or $a.Profile -match "(?i)E-?AC-?3") { $codStr = "DD+" }
         elseif ($a.Format -match "(?i)AC-?3")    { $codStr = "DD" }
@@ -3502,6 +3503,16 @@ function Invoke-Ensamblaje($archivoPrincipal, $origenesPistas, $esHibrido, $vide
 # $defaultPreferidoAudio: "DOLBY" o "DTS". Cuando el idioma prioritario tiene ambos,
 # el flag default va a la pista de la familia elegida (sin cambiar el orden de pistas).
 function Set-Banderas($archivoMkv, $audiosOrdenados, $subsOrdenados, $defaultPreferidoAudio = "DOLBY") {
+    # Leer ANTES de borrar las etiquetas: mkvmerge acaba de escribir las estadísticas
+    # de cada pista, incluidas las externas/convertidas, en el orden definitivo.
+    # No usar el bitrate de la película, una pista anterior ni el ajuste del encoder.
+    $cacheMediainfo.Remove($archivoMkv) | Out-Null
+    $audioInfo = @((Get-MediainfoJson $archivoMkv).media.track | Where-Object { $_.'@type' -eq 'Audio' })
+    for ($audioIndex = 0; $audioIndex -lt $audiosOrdenados.Count; $audioIndex++) {
+        $trackInfo = if ($audioInfo.Count -eq $audiosOrdenados.Count) { $audioInfo[$audioIndex] } else { $null }
+        $audiosOrdenados[$audioIndex].NomFinal = Add-HdzAudioBitrateToName $audiosOrdenados[$audioIndex].NomFinal $trackInfo
+        Write-DiagLinea "Nombre audio final #$($audioIndex + 1): $($audiosOrdenados[$audioIndex].NomFinal)"
+    }
     # Bug 9: Invoke-Mkvpropedit captura errores
     Invoke-Mkvpropedit @($archivoMkv, "--tags", "all:", "--delete", "title") "borrar título global" | Out-Null
     Invoke-Mkvpropedit @($archivoMkv, "--edit", "track:v1", "--set", "flag-default=1", "--set", "flag-forced=0") "video por defecto" | Out-Null

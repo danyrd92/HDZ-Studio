@@ -1,4 +1,29 @@
 # Funciones puras compartidas. No inicia trabajos ni conexiones al cargarse.
+function Get-HdzAudioBitrateLabel($Track) {
+    # MediaInfo JSON expresa BitRate en bits/s y Duration en segundos.
+    # No usar BitRate_Nominal/Maximum ni el bitrate global del archivo: para VBR
+    # y formatos sin pérdida interesa el promedio real de ESTA pista.
+    $rate = 0.0
+    if ($Track) {
+        [void][double]::TryParse(("$($Track.BitRate)" -replace '\s', ''), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$rate)
+        if (-not [double]::IsFinite($rate) -or $rate -le 0) {
+            $size = 0.0; $seconds = 0.0
+            $hasSize = [double]::TryParse("$($Track.StreamSize)", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$size)
+            $hasDuration = [double]::TryParse("$($Track.Duration)", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$seconds)
+            $rate = if ($hasSize -and $hasDuration -and $size -gt 0 -and $seconds -gt 0) { $size * 8 / $seconds } else { 0.0 }
+        }
+    }
+    if (-not [double]::IsFinite($rate) -or $rate -le 0) { return 'bitrate no disponible' }
+    $kbps = [Math]::Max(1, [Math]::Round($rate / 1000, 0, [MidpointRounding]::AwayFromZero))
+    return $kbps.ToString('0', [Globalization.CultureInfo]::InvariantCulture) + ' kb/s'
+}
+
+function Add-HdzAudioBitrateToName([string]$Name, $Track) {
+    # Idempotente, también si se vuelve a aplicar el nombre a un resultado previo.
+    $baseName = $Name -replace '(?i)\s+@\s+(?:\d+(?:[.,]\d+)?\s+kb/s|bitrate no disponible)\s*$', ''
+    return $baseName.TrimEnd() + ' @ ' + (Get-HdzAudioBitrateLabel $Track)
+}
+
 function Get-HdzVideoResolution($Video) {
     # MediaInfo y ffprobe: misma clasificación en montaje, escritorio, web y subida.
     # La anchura reconoce formatos panorámicos recortados (1920x800 = clase 1080).
