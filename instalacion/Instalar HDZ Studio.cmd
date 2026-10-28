@@ -2,25 +2,20 @@
 REM ============================================================
 REM  Instalar HDZ Studio  -  doble clic para dejar todo listo.
 REM  Usa Windows PowerShell 5.1 (siempre presente) porque puede
-REM  que PowerShell 7 aun no este instalado. Se auto-eleva a
-REM  administrador (necesario para instalar PowerShell 7).
+REM  que PowerShell 7 aun no este instalado. Solo el requisito
+REM  de PowerShell 7 solicita permisos si no esta instalado.
 REM ============================================================
 title Instalar HDZ Studio
 
-REM --- Comprobar privilegios de administrador ---
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Solicitando permisos de administrador...
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
-    exit /b
-)
+REM La aplicacion se configura con el usuario actual. Solo PowerShell 7,
+REM si falta, solicitara permisos de administrador para instalar su MSI.
 
 echo.
 echo  Instalando HDZ Studio. Esto puede tardar unos minutos
-echo  (descarga de herramientas). No cierres la ventana.
+echo  (verificacion de herramientas incluidas). No cierres la ventana.
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Instalar-HDZStudio.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Instalar-HDZStudio.ps1" -SkipContextMenu
 
 echo.
 pause

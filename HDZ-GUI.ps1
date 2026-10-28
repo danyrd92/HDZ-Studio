@@ -8664,6 +8664,18 @@ function Set-HdzUpdateVersion($manifest) {
     $script:updVersion=if($manifest -and [version]::TryParse("$($manifest.version)",[ref]$version)){"$version"}else{''}
     Update-HdzUpdateButton
 }
+function Get-HdzUpdateLaunchPlan([string]$Updater, [int]$OwnerId, [bool]$NeedsAdmin, [bool]$Remote) {
+    if ($NeedsAdmin -and $Remote) {
+        throw 'Esta instalación necesita permisos de administrador. Actualiza una vez desde el PC y acepta el aviso de Windows, o instala HDZ Studio en tu carpeta de usuario para actualizar desde la web sin intervenir en el PC.'
+    }
+    $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$Updater+'"'),'-WaitForProcessId',"$OwnerId")
+    $options=@{FilePath=(Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe');ArgumentList=$arguments;WindowStyle='Hidden';ErrorAction='Stop'}
+    if ($NeedsAdmin) {
+        $options.Verb='RunAs';$options.PassThru=$true
+        $options.ArgumentList+= '-NoRelanzar'
+    }
+    return @{Start=$options;ReopenAsOriginalUser=$NeedsAdmin}
+}
 function Start-HdzUpdateInstaller {
     if($script:modoTest){throw 'El instalador real está deshabilitado en las pruebas.'}
     $upd=Join-Path $PSScriptRoot 'instalacion\Actualizar-HDZStudio.ps1'
@@ -8673,10 +8685,24 @@ function Start-HdzUpdateInstaller {
         $probe=Join-Path $PSScriptRoot ('.hdz_wtest_'+[guid]::NewGuid().ToString('N')+'.tmp')
         [IO.File]::WriteAllText($probe,'x');Remove-Item -LiteralPath $probe -Force
     }catch{$necesitaAdmin=$true}
-    $argsUpd=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$upd+'"'),'-WaitForProcessId',"$PID")
-    $start=@{FilePath='powershell.exe';ArgumentList=$argsUpd;WindowStyle='Hidden';ErrorAction='Stop'}
-    if($necesitaAdmin){throw 'Esta instalación está en una carpeta protegida. Usa la instalación por usuario para actualizar sin intervenir en el PC.'}
-    Start-Process @start
+    $plan=Get-HdzUpdateLaunchPlan $upd $PID $necesitaAdmin ([bool]$script:updCommandId)
+    try {
+        $start=$plan.Start
+        $updater=Start-Process @start
+        if($plan.ReopenAsOriginalUser){
+            if(-not $updater -or $updater.Id -le 0){throw 'No se pudo identificar el actualizador elevado. HDZ Studio no se cerrará.'}
+            $watcherArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$upd+'"'),'-ReabrirTrasProceso',"$($updater.Id)",'-WaitForProcessId',"$PID")
+            # El ayudante hereda al usuario original, NO al administrador de UAC.
+            Start-Process -FilePath $start.FilePath -ArgumentList $watcherArgs -WindowStyle Hidden -ErrorAction Stop
+        }
+    } catch {
+        $cause=$_.Exception
+        while($cause){
+            if($cause -is [ComponentModel.Win32Exception] -and $cause.NativeErrorCode -eq 1223){throw 'Se canceló el permiso de administrador. HDZ Studio sigue abierto y no se ha aplicado la actualización.'}
+            $cause=$cause.InnerException
+        }
+        throw
+    }
 }
 function Close-HdzForUpdate { $win.Close() }
 function Complete-HdzUpdateRequest {

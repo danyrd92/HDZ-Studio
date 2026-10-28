@@ -18,10 +18,15 @@
 # --- Versiones de las herramientas que no se auto-resuelven por URL "latest" ---
 # (ffmpeg y dovi_tool se resuelven solos a la última; estas dos llevan la versión
 #  en la URL, así que cuando salga una nueva basta con actualizar el número aquí.)
+param([switch]$SkipContextMenu, [switch]$SkipShortcuts)
+
 $verMkvtoolnix = "99.0"
 $verMediaInfo  = "26.05"
 
 $ErrorActionPreference = "Stop"
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
+}
 $setupLog = Join-Path $env:TEMP 'HDZ-Studio-setup.log'
 trap {
     try {
@@ -81,10 +86,17 @@ function RutaPwsh {
     if (Test-Path -LiteralPath $expected) { return $expected }
     return $null
 }
+function Get-HdzRuntimeInstallOptions([string]$Msi, [bool]$AlreadyAdmin) {
+    $options=@{FilePath=(Join-Path $env:WINDIR 'System32\msiexec.exe');ArgumentList=@('/i',('"'+$Msi+'"'),'/quiet','/norestart','ADD_PATH=1');WindowStyle='Hidden';Wait=$true;PassThru=$true;ErrorAction='Stop'}
+    if(-not $AlreadyAdmin){$options.Verb='RunAs'}
+    return $options
+}
 $pwshPath = RutaPwsh
 if (-not $pwshPath) {
     $msi = Join-Path $bin 'PowerShell-7.6.3-win-x64.msi'
-    $install = Start-Process msiexec.exe -ArgumentList @('/i', ('"' + $msi + '"'), '/quiet', '/norestart', 'ADD_PATH=1') -WindowStyle Hidden -Wait -PassThru
+    $principal=New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    $runtimeOptions=Get-HdzRuntimeInstallOptions $msi ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
+    $install = Start-Process @runtimeOptions
     if ($install.ExitCode -notin @(0,3010)) { throw "PowerShell no se pudo instalar (código $($install.ExitCode))." }
     $pwshPath = RutaPwsh
     if (-not $pwshPath) { throw 'PowerShell no está disponible tras instalarlo.' }
@@ -116,7 +128,7 @@ function CreaAcceso($destinoLnk) {
     $lnk.Description = "HDZ Studio"
     $lnk.Save()
 }
-try {
+if (-not $SkipShortcuts) { try {
     $escritorio = [Environment]::GetFolderPath("Desktop")
     CreaAcceso (Join-Path $escritorio "HDZ Studio.lnk")
     $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "HDZ Studio.lnk"
@@ -124,13 +136,13 @@ try {
     Escribe "  Creado en Escritorio y Menu Inicio." "Green"
 } catch {
     Escribe "  [!] No pude crear el acceso directo: $($_.Exception.Message)" "Yellow"
-}
+} }
 
 # --- Menú contextual de capturas ------------------------------------------
 # El instalador separado se autoeleva para registrar el respaldo clásico en
 # HKLM y la extensión moderna de Windows 11.
 $instMenuCapturas = Join-Path $appRoot "instalacion\Instalar-menu-capturas.ps1"
-if (Test-Path -LiteralPath $instMenuCapturas) {
+if (-not $SkipContextMenu -and (Test-Path -LiteralPath $instMenuCapturas)) {
     Titulo "Menú contextual"
     try { & $instMenuCapturas } catch { Escribe "  [!] No pude instalar el menú contextual: $($_.Exception.Message)" "Yellow" }
 }

@@ -1,6 +1,5 @@
 {
-  "version": "1.17.37",
-  "schema": 1,
+  "version": "1.17.38",
   "files": [
     {
       "name": "ffmpeg.exe",
@@ -42,5 +41,6 @@
       "sha256": "4f574fddb567f4d0756094424a1e4e2b2bbdde21de9f0965c0f988d24dc658e4",
       "bytes": 115384320
     }
-  ]
+  ],
+  "schema": 1
 }
