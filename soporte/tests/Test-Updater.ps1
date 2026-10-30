@@ -75,6 +75,34 @@ try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Forzar -WaitForProcessId 2147483647 2>&1 | Out-Null
     Assert ($LASTEXITCODE -eq 0) 'Falló actualización desatendida válida'
     Assert-Reopened
+    # Modo GitHub Releases: todo el código en un zip firmado por su huella; una herramienta que
+    # ya coincide no se descarga (su URL HTTPS es inalcanzable a propósito).
+    $zipServer = Join-Path $testRoot 'github'; $zipContent = Join-Path $testRoot 'zip-content'
+    foreach ($dir in @($zipServer, (Join-Path $zipContent 'bin'), (Join-Path $installed 'bin'))) { [void][IO.Directory]::CreateDirectory($dir) }
+    Write-Fixture (Join-Path $installed 'bin/tool.exe') 'tool v1'
+    $zipHashes = [ordered]@{'bin/tool.exe'=(Get-FileHash -LiteralPath (Join-Path $installed 'bin/tool.exe')).Hash}
+    foreach ($name in $names) {
+        Write-Fixture (Join-Path $zipContent $name) $(if($name -eq 'VERSION.txt') {'3.0.0'} else {'# zip '+$name})
+        $zipHashes[$name] = (Get-FileHash -LiteralPath (Join-Path $zipContent $name)).Hash
+    }
+    Remove-Item -LiteralPath (Join-Path $zipContent 'bin') -Recurse
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zipPath = Join-Path $zipServer 'HDZStudio-3.0.0.zip'
+    [IO.Compression.ZipFile]::CreateFromDirectory($zipContent, $zipPath)
+    function Write-ZipManifest($PackageHash) {
+        Write-Fixture (Join-Path $zipServer 'version.json') (@{schema=2;version='3.0.0';archivos=@($zipHashes.Keys);sha256=$zipHashes;paquete=@{nombre='HDZStudio-3.0.0.zip';sha256=$PackageHash};herramientas=@{'bin/tool.exe'='https://invalid.example/tool.exe'}}|ConvertTo-Json -Depth 5)
+        Write-Fixture (Join-Path $zipServer 'version.sig') ([Convert]::ToBase64String($rsa.SignData([IO.File]::ReadAllBytes((Join-Path $zipServer 'version.json')), 'SHA256')))
+    }
+    $env:HDZ_UPDATE_BASE = ([Uri]($zipServer + '\')).AbsoluteUri
+    Write-ZipManifest ('0' * 64)
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -NoRelanzar 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 1) 'Aceptó un zip cuya huella no coincide con el manifiesto firmado'
+    Assert ([IO.File]::ReadAllText((Join-Path $installed 'VERSION.txt')) -eq '2.0.0') 'Cambió archivos con un zip no verificado'
+    Write-ZipManifest (Get-FileHash -LiteralPath $zipPath).Hash
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -NoRelanzar 2>&1 | Out-Null
+    Assert ($LASTEXITCODE -eq 0) 'No instaló el paquete zip verificado'
+    foreach ($name in $names) { Assert ((Get-FileHash -LiteralPath (Join-Path $installed $name)).Hash -eq $zipHashes[$name]) "Hash instalado desde zip incorrecto: $name" }
+    Assert ([IO.File]::ReadAllText((Join-Path $installed 'bin/tool.exe')) -eq 'tool v1') 'Tocó una herramienta que ya coincidía'
     Write-Host "UPDATER_REGRESSION_OK — PS5.1 desde Start-Process/PS7, firma, SHA256, reversión y actualización acumulativa. Pruebas: $testRoot"
 } finally {
     $rsa.Dispose()

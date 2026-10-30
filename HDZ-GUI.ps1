@@ -8764,14 +8764,15 @@ function Iniciar-ChequeoActualizacion {
         $cfgPath = Join-Path $PSScriptRoot "HDZ-update.config.json"
         if (-not (Test-Path -LiteralPath $cfgPath)) { return }
         $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        # Fuente de actualización: si hay "baseUrl" (servidor propio) se usa esa; si no, GitHub raw.
+        # Fuente de actualización: si hay "baseUrl" (servidor propio) se usa esa; si no, la última
+        # release estable de GitHub (las prereleases, como «herramientas», no cuentan como latest).
         $baseCfg = "$($cfg.baseUrl)".Trim()
         if ($baseCfg) {
             $url = ($baseCfg.TrimEnd('/')) + "/version.json"
         } else {
-            $repo = "$($cfg.repo)"; $rama = "$($cfg.rama)"; if (-not $rama) { $rama = "main" }
-            if ([string]::IsNullOrWhiteSpace($repo) -or $repo -like "*USUARIO/REPO*") { return }   # sin configurar → no se busca
-            $url = "https://raw.githubusercontent.com/$repo/$rama/version.json"
+            $repo = "$($cfg.repo)"
+            if ($repo -notmatch '^[\w.-]+/[\w.-]+$') { return }   # sin configurar → no se busca
+            $url = "https://github.com/$repo/releases/latest/download/version.json"
         }
         $urls = @($url)
         foreach ($fallback in @($cfg.fallbackUrls)) {
@@ -8789,7 +8790,10 @@ function Iniciar-ChequeoActualizacion {
             foreach ($address in @($urls | Select-Object -Unique)) {
                 for ($attempt=1; $attempt -le 2; $attempt++) {
                     try {
-                        $json = Invoke-RestMethod -Uri $address -UseBasicParsing -TimeoutSec 12 -ErrorAction Stop
+                        # GitHub entrega los assets como octet-stream: se decodifica el JSON a mano.
+                        $response = Invoke-WebRequest -Uri $address -UseBasicParsing -TimeoutSec 12 -ErrorAction Stop
+                        $text = if ($response.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($response.Content) } else { "$($response.Content)" }
+                        $json = $text.TrimStart([char]0xFEFF) | ConvertFrom-Json
                         $parsedVersion=$null
                         if (-not [version]::TryParse("$($json.version)",[ref]$parsedVersion)) { throw 'Respuesta de actualización no válida.' }
                         $sync.Json = $json

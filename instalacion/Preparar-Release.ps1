@@ -54,10 +54,32 @@ try {
         $hashes[$rel] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     $manifest = [ordered]@{schema=2;version=$Version;fecha=(Get-Date -Format yyyy-MM-dd);notas=$Notes;archivos=@($hashes.Keys);sha256=$hashes}
+    # GitHub Releases: el código va en un zip (sin herramientas) junto a version.json/sig, en una
+    # carpeta hermana «-github». Las herramientas viven en la release «herramientas»; el
+    # actualizador solo las descarga si su SHA256 no coincide con el instalado.
+    $repo = "$((Get-Content -LiteralPath (Join-Path $root 'HDZ-update.config.json') -Raw | ConvertFrom-Json).repo)"
+    if ($repo -notmatch '^[\w.-]+/[\w.-]+$') { throw 'HDZ-update.config.json no indica el repositorio de GitHub.' }
+    $github = $stage + '-github'
+    if (Test-Path -LiteralPath $github) { throw 'La carpeta de GitHub ya existe. Usa una carpeta nueva.' }
+    $packageSource = Join-Path $github 'contenido'
+    foreach ($name in @($hashes.Keys | Where-Object { $_ -notlike 'bin/*' })) {
+        $dest = Join-Path $packageSource $name
+        [void][IO.Directory]::CreateDirectory((Split-Path $dest -Parent))
+        Copy-Item -LiteralPath (Join-Path $stage $name) -Destination $dest
+    }
+    $packageName = "HDZStudio-$Version.zip"
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::CreateFromDirectory($packageSource, (Join-Path $github $packageName), [IO.Compression.CompressionLevel]::Optimal, $false)
+    Remove-Item -LiteralPath $packageSource -Recurse -Force
+    $manifest.paquete = [ordered]@{nombre=$packageName;sha256=(Get-FileHash -LiteralPath (Join-Path $github $packageName) -Algorithm SHA256).Hash.ToLowerInvariant()}
+    $manifest.herramientas = [ordered]@{}
+    foreach ($tool in $toolNames) { $manifest.herramientas['bin/' + $tool] = "https://github.com/$repo/releases/download/herramientas/$tool" }
     $manifestPath = Join-Path $stage 'version.json'
     [IO.File]::WriteAllText($manifestPath, ($manifest|ConvertTo-Json -Depth 5), $utf8)
     $signature = $rsa.SignData([IO.File]::ReadAllBytes($manifestPath),'SHA256')
     [IO.File]::WriteAllText((Join-Path $stage 'version.sig'), [Convert]::ToBase64String($signature), $utf8)
     if (-not $rsa.VerifyData([IO.File]::ReadAllBytes($manifestPath),'SHA256',$signature)) { throw 'No se verifica la firma generada.' }
+    foreach ($name in @('version.json','version.sig')) { Copy-Item -LiteralPath (Join-Path $stage $name) -Destination $github }
     Write-Host "PAQUETE_VERIFICADO: $stage ($($hashes.Count) archivos, sin configuración personal)"
+    Write-Host "GITHUB_RELEASE: $github ($packageName, version.json, version.sig)"
 } finally { $rsa.Dispose() }

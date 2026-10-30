@@ -48,7 +48,9 @@ try {
     $config = Get-Content -LiteralPath (Join-Path $appRoot 'HDZ-update.config.json') -Raw | ConvertFrom-Json
     $base = "$env:HDZ_UPDATE_BASE"
     if (-not $base) { $base = "$($config.baseUrl)" }
-    if (-not $base) { $base = "https://raw.githubusercontent.com/$($config.repo)/$($config.rama)/" }
+    # GitHub Releases: la última release estable publica version.json, version.sig y el zip.
+    if (-not $base -and "$($config.repo)" -match '^[\w.-]+/[\w.-]+$') { $base = "https://github.com/$($config.repo)/releases/latest/download/" }
+    if (-not $base) { throw 'No hay origen de actualizaciones configurado.' }
     $base = $base.TrimEnd('/') + '/'
     if ($base -notmatch '^https://' -and -not ($env:HDZ_UPDATE_BASE -and $base -match '^file:')) { throw 'Las actualizaciones requieren HTTPS.' }
     $bases = @($base)
@@ -75,6 +77,20 @@ try {
     if ($manifest.schema -ne 2 -or -not $manifest.sha256 -or @($manifest.archivos).Count -lt 5) { throw 'Manifiesto incompleto.' }
     $localVersion = (Get-Content -LiteralPath (Join-Path $appRoot 'VERSION.txt') -Raw).Trim()
     if (-not $Forzar -and [version]$manifest.version -le [version]$localVersion) { Write-Host "Ya está instalada la versión $localVersion."; return }
+    # Paquete zip (GitHub): un solo archivo con todo el código, verificado con la huella firmada.
+    # Las herramientas no van en el zip; si faltan o cambian, se descargan de su URL firmada.
+    # Sin «paquete» (servidor propio) cada archivo se descarga por separado, como siempre.
+    $packageRoot = $null
+    if ($manifest.paquete) {
+        $packageName = "$($manifest.paquete.nombre)"
+        if ($packageName -notmatch '^[\w.-]+\.zip$' -or "$($manifest.paquete.sha256)" -notmatch '^[0-9a-fA-F]{64}$') { throw 'Paquete de actualización no válido.' }
+        $packagePath = Join-Path $temporary $packageName
+        Download-UpdateFile $packageName $packagePath
+        if ((Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash -ne "$($manifest.paquete.sha256)") { throw 'El paquete descargado no coincide con la publicación.' }
+        $packageRoot = Join-Path $temporary 'paquete'
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $packageRoot)
+    }
     $pending = @()
     foreach ($name in @($manifest.archivos | Select-Object -Unique)) {
         $target = Resolve-UpdatePath $appRoot $name; $stage = Resolve-UpdatePath $temporary $name
@@ -85,7 +101,15 @@ try {
             continue
         }
         [void][IO.Directory]::CreateDirectory((Split-Path $stage -Parent))
-        Download-UpdateFile $name $stage
+        $toolUrl = if ($manifest.herramientas) { "$($manifest.herramientas.PSObject.Properties[$name].Value)" } else { '' }
+        $packaged = if ($packageRoot) { Resolve-UpdatePath $packageRoot $name } else { $null }
+        if ($packaged -and (Test-Path -LiteralPath $packaged -PathType Leaf)) { Copy-Item -LiteralPath $packaged -Destination $stage }
+        elseif ($toolUrl) {
+            if ($toolUrl -notmatch '^https://') { throw "La herramienta $name requiere HTTPS." }
+            Invoke-WebRequest -Uri $toolUrl -OutFile $stage -UseBasicParsing -TimeoutSec 600 -UserAgent 'HDZ-Studio-Updater' -ErrorAction Stop | Out-Null
+        }
+        elseif ($packageRoot) { throw "El paquete no contiene $name." }
+        else { Download-UpdateFile $name $stage }
         if ((Get-FileHash -LiteralPath $stage -Algorithm SHA256).Hash -ne $expected) { throw "La descarga de $name no coincide con la publicación." }
         if ($name -eq 'VERSION.txt' -and [IO.File]::ReadAllText($stage).Trim() -ne "$($manifest.version)") { throw 'Versión incoherente.' }
         $pending += [pscustomobject]@{Name=$name;Target=$target;Stage=$stage}
