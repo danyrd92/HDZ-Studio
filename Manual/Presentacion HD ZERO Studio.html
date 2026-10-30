@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HD ZERO Studio · Presentación</title>
+<style>
+  :root{
+    --bg:#0C0C0F; --card:#15151a; --border:#2E2E35; --field:#0E0E11;
+    --accent:#D92B2B; --accentH:#EF4444; --text:#EDEDEF; --sub:#9C9CA8;
+    --ok:#3FB950; --info:#4493F8; --warn:#E0A422;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text); overflow:hidden;
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  }
+
+  /* Deck: horizontal track, one slide visible */
+  #deck{display:flex; height:100vh; transition:transform .45s cubic-bezier(.6,.05,.2,1)}
+  .slide{
+    flex:0 0 100vw; height:100vh; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:center;
+    padding:7vh 9vw;
+  }
+  .slide::before{ /* glow */
+    content:""; position:absolute; right:-8vw; top:-12vh; width:46vw; height:46vw;
+    background:radial-gradient(circle, rgba(217,43,43,.18), transparent 65%); pointer-events:none;
+  }
+  .slide.dark2{background:linear-gradient(135deg,#170d0d 0%, var(--bg) 55%)}
+
+  .kicker{color:var(--accentH); font-weight:800; letter-spacing:3px; text-transform:uppercase; font-size:1.05vw; margin-bottom:1.6vh}
+  h1{font-size:6.2vw; line-height:1.02; letter-spacing:.5px; font-weight:800}
+  h1 .hd{color:var(--accent)} h1 .zero{color:var(--text)}
+  h2{font-size:3.6vw; line-height:1.08; font-weight:800; letter-spacing:.3px; margin-bottom:2.4vh}
+  h2 .em{margin-right:1.4vw}
+  .sub{font-size:1.7vw; color:var(--sub); max-width:62vw; line-height:1.5}
+  .big-sub{font-size:2vw; color:var(--sub); margin-top:2.4vh; max-width:60vw; line-height:1.45}
+
+  .pills{display:flex; gap:1vw; flex-wrap:wrap; margin-top:4vh}
+  .pill{background:#000; border:1px solid var(--border); border-radius:999px; padding:1vh 1.6vw; font-size:1.25vw}
+  .pill b{color:var(--accentH)}
+
+  /* Step row */
+  .flow{display:flex; gap:1.4vw; margin-top:1vh; width:100%}
+  .flow .st{flex:1; background:var(--card); border:1px solid var(--border); border-radius:1.2vw; padding:2.6vh 1.6vw; position:relative}
+  .flow .st .n{width:3vw; height:3vw; border-radius:50%; background:var(--accent); color:#fff; font-weight:800; font-size:1.5vw; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 .5vw rgba(217,43,43,.14); margin-bottom:1.6vh}
+  .flow .st h3{font-size:1.55vw; margin-bottom:.7vh}
+  .flow .st p{font-size:1.15vw; color:var(--sub); line-height:1.4}
+
+  /* Feature grid */
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1.6vw; margin-top:1vh; width:100%}
+  .grid .c{background:var(--card); border:1px solid var(--border); border-radius:1.2vw; padding:3vh 1.8vw}
+  .grid .c .ic{font-size:2.6vw}
+  .grid .c h3{font-size:1.7vw; margin:1.4vh 0 .8vh}
+  .grid .c p{font-size:1.2vw; color:var(--sub); line-height:1.42}
+
+  /* Sections list */
+  .secs{display:grid; grid-template-columns:1fr 1fr; gap:1.4vw 3vw; margin-top:1vh; width:100%}
+  .secrow{display:flex; align-items:center; gap:1.4vw; background:var(--field); border:1px solid var(--border); border-radius:1vw; padding:2vh 1.6vw}
+  .secrow .em{font-size:2.4vw; width:3vw; text-align:center}
+  .secrow b{font-size:1.7vw} .secrow span{display:block; font-size:1.15vw; color:var(--sub); margin-top:.3vh}
+
+  /* Audio matrix */
+  .matrix{display:flex; gap:1.6vw; margin-top:3vh}
+  .mx{flex:1; background:var(--card); border:1px solid var(--border); border-radius:1.2vw; padding:3vh 1.6vw; text-align:center}
+  .mx .from{font-size:2.4vw; font-weight:800; color:#fff}
+  .mx .arrow{font-size:2vw; color:var(--accent); margin:1.2vh 0}
+  .mx .to{font-size:1.3vw; color:var(--sub); line-height:1.5}
+
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:2vw; margin-top:1vh; width:100%}
+  .panel{background:var(--card); border:1px solid var(--border); border-radius:1.2vw; padding:3vh 2vw}
+  .panel h3{font-size:1.9vw; margin-bottom:1.2vh; color:#fff}
+  .panel p{font-size:1.3vw; color:var(--sub); line-height:1.5}
+  .panel .tag{display:inline-block; background:#000; border:1px solid var(--border); border-radius:.6vw; padding:.4vh .9vw; font-size:1.05vw; color:var(--accentH); margin-bottom:1.4vh; font-weight:700; letter-spacing:1px}
+
+  .lock{background:rgba(224,164,34,.08); border:1px solid var(--warn); border-radius:1vw; padding:2.4vh 2vw; margin-top:3vh; font-size:1.5vw; max-width:70vw}
+  .lock b{color:#fff}
+
+  .btn{display:inline-block; background:var(--accent); color:#fff; font-weight:800; padding:1vh 1.8vw; border-radius:.8vw; font-size:1.5vw}
+
+  /* progress + nav */
+  .foot{position:absolute; left:9vw; bottom:4vh; display:flex; align-items:center; gap:1.4vw; color:#56565e; font-size:1.1vw}
+  .brandmini{font-weight:800; letter-spacing:.5px} .brandmini .hd{color:var(--accent)}
+  #bar{position:fixed; left:0; top:0; height:5px; background:var(--accent); width:0; z-index:50; transition:width .35s}
+  #count{position:fixed; right:3vw; bottom:3vh; color:var(--sub); font-size:1.2vw; z-index:50; background:rgba(0,0,0,.4); padding:.6vh 1.2vw; border-radius:999px; border:1px solid var(--border)}
+  .hint{position:fixed; left:50%; transform:translateX(-50%); bottom:2.5vh; color:#4a4a52; font-size:1vw; z-index:50}
+  .navbtn{position:fixed; top:50%; transform:translateY(-50%); z-index:50; background:rgba(20,20,24,.7); border:1px solid var(--border); color:var(--text); width:3.4vw; height:3.4vw; border-radius:50%; font-size:1.6vw; cursor:pointer; display:flex; align-items:center; justify-content:center}
+  .navbtn:hover{background:var(--accent); border-color:var(--accent)}
+  #prev{left:1.6vw} #next{right:1.6vw}
+
+  /* PRINT: one slide per landscape page */
+  @page{size:landscape; margin:0}
+  @media print{
+    body{overflow:visible}
+    #deck{display:block; height:auto; transform:none!important}
+    .slide{width:100%; height:auto; min-height:99vh; page-break-after:always; break-after:page; overflow:hidden}
+    .slide:last-child{page-break-after:avoid; break-after:auto}
+    #bar,#count,.hint,.navbtn{display:none}
+    .slide::before{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="count">1</div>
+<div class="hint">← →  para navegar</div>
+<button class="navbtn" id="prev">‹</button>
+<button class="navbtn" id="next">›</button>
+
+<div id="deck">
+
+  <!-- 1 · Portada -->
+  <section class="slide dark2">
+    <div class="kicker">Manual rápido · v1.2.1</div>
+    <h1><span class="hd">HD</span> <span class="zero">ZERO</span><br>Studio</h1>
+    <p class="big-sub">Prepara, monta y sube tus releases a HDZERO desde una sola ventana.</p>
+    <div class="pills">
+      <span class="pill">🎬 <b>Montaje</b> MKV</span>
+      <span class="pill">🔊 <b>Conversor</b> de audio</span>
+      <span class="pill">🧲 Crea <b>.torrent</b></span>
+      <span class="pill">☁ <b>Subida</b> automática</span>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span> · Presentación</div>
+  </section>
+
+  <!-- 2 · Qué es -->
+  <section class="slide">
+    <h2><span class="em">✨</span>Todo en una ventana</h2>
+    <p class="sub">Detecta tus vídeos, adapta las opciones a lo que encuentra y hace el trabajo solo. Sin comandos, sin consola.</p>
+    <div class="grid">
+      <div class="c"><div class="ic">🔎</div><h3>Analiza</h3><p>Pistas, idiomas, HDR/Dolby Vision. Solo te muestra lo que aplica.</p></div>
+      <div class="c"><div class="ic">🧩</div><h3>Monta</h3><p>Ordena y limpia pistas, convierte audio y genera el MKV final.</p></div>
+      <div class="c"><div class="ic">☁</div><h3>Publica</h3><p>Capturas, ficha, torrent y subida directa a HDZERO.</p></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 3 · El flujo -->
+  <section class="slide dark2">
+    <h2><span class="em">🚀</span>El flujo en 4 pasos</h2>
+    <div class="flow">
+      <div class="st"><div class="n">1</div><h3>Elige la carpeta</h3><p>El programa analiza tus vídeos al instante.</p></div>
+      <div class="st"><div class="n">2</div><h3>Revisa opciones</h3><p>Proyecto, Audio y Subtítulos vienen pre-rellenados.</p></div>
+      <div class="st"><div class="n">3</div><h3>Iniciar montaje</h3><p>Obtienes MKV final, capturas y .torrent.</p></div>
+      <div class="st"><div class="n">4</div><h3>Subir a HDZERO</h3><p>Completas la ficha y publicas.</p></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 4 · Las 6 secciones -->
+  <section class="slide">
+    <h2><span class="em">🧭</span>Seis secciones, un menú</h2>
+    <div class="secs">
+      <div class="secrow"><span class="em">🏠</span><div><b>General</b><span>Carpeta, lote, modo y torrents</span></div></div>
+      <div class="secrow"><span class="em">🎬</span><div><b>Proyecto</b><span>Título, origen y plataforma</span></div></div>
+      <div class="secrow"><span class="em">🔊</span><div><b>Audio</b><span>Convertir pistas e idiomas</span></div></div>
+      <div class="secrow"><span class="em">💬</span><div><b>Subtítulos</b><span>Idiomas, forzados y PGS</span></div></div>
+      <div class="secrow"><span class="em">☁</span><div><b>Torrent y subida</b><span>Ficha, capturas y publicación</span></div></div>
+      <div class="secrow"><span class="em">⚙</span><div><b>Ajustes / claves</b><span>Tracker, imágenes y TMDB</span></div></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 5 · Conversor de audio (destacado) -->
+  <section class="slide dark2">
+    <div class="kicker">Novedad</div>
+    <h2><span class="em">🔊</span>Conversor de audio inteligente</h2>
+    <p class="sub">Elige una pista y conviértela a DD+, DD o AAC. Las opciones se adaptan a sus canales — y la sincronía se preserva.</p>
+    <div class="matrix">
+      <div class="mx"><div class="from">2.0</div><div class="arrow">▼</div><div class="to">DD+ · DD · AAC<br>en 2.0</div></div>
+      <div class="mx"><div class="from">5.1</div><div class="arrow">▼</div><div class="to">DD+ · DD · AAC<br>en 5.1</div></div>
+      <div class="mx"><div class="from">7.1</div><div class="arrow">▼</div><div class="to">DD+/DD en 5.1<br>AAC en 7.1 y 5.1</div></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span> · varias conversiones por vídeo · «Mantener original» opcional</div>
+  </section>
+
+  <!-- 6 · Modo lote -->
+  <section class="slide">
+    <h2><span class="em">🗂</span>Un archivo o un lote entero</h2>
+    <div class="two">
+      <div class="panel"><span class="tag">MISMO PROYECTO</span><h3>Una temporada</h3><p>Defines los datos una vez y se aplican a todos los episodios.</p></div>
+      <div class="panel"><span class="tag">CADA ARCHIVO DISTINTO</span><h3>Varias películas</h3><p>Una <b>pestaña por película</b> (estilo MKVToolNix): cada una con su título, audio y subtítulos.</p></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 7 · Subida -->
+  <section class="slide dark2">
+    <h2><span class="em">☁</span>La ficha, casi sola</h2>
+    <div class="grid">
+      <div class="c"><div class="ic">🔍</div><h3>TMDB</h3><p>Busca por título: rellena IDs y logos automáticamente.</p></div>
+      <div class="c"><div class="ic">🖼</div><h3>Capturas + BBCode</h3><p>Sube las imágenes y monta la descripción centrada.</p></div>
+      <div class="c"><div class="ic">➕</div><h3>Varias a la vez</h3><p>Una pestaña por subida: prepara 3 películas y publícalas una a una.</p></div>
+    </div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 8 · Privacidad + updates -->
+  <section class="slide">
+    <h2><span class="em">🔒</span>Tus claves, solo tuyas</h2>
+    <p class="sub">En el primer arranque, una ventana de bienvenida pide tus credenciales del tracker y TMDB.</p>
+    <div class="lock"><b>🔒 Se guardan únicamente en tu equipo</b> (<span style="color:var(--accentH)">%APPDATA%</span>). Nunca se comparten ni viajan con el programa. Cada usuario pone las suyas.</div>
+    <p class="big-sub">🔄 Y el programa <b>se actualiza solo</b>: al abrir, avisa si hay novedades y las instala manteniendo tus ajustes.</p>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span></div>
+  </section>
+
+  <!-- 9 · Cierre -->
+  <section class="slide dark2">
+    <div class="kicker">Listo para empezar</div>
+    <h1>Elige carpeta.<br><span class="hd">Pulsa</span> montaje.</h1>
+    <p class="big-sub">El resto lo hace HD ZERO Studio.</p>
+    <div style="margin-top:4vh"><span class="btn">▶ Iniciar montaje</span></div>
+    <div class="foot"><span class="brandmini"><span class="hd">HD</span> ZERO Studio</span> · v1.2.1</div>
+  </section>
+
+</div>
+
+<script>
+  const deck=document.getElementById('deck');
+  const slides=document.querySelectorAll('.slide');
+  const bar=document.getElementById('bar');
+  const count=document.getElementById('count');
+  let i=0;
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    deck.style.transform='translateX(-'+(i*100)+'vw)';
+    bar.style.width=((i)/(slides.length-1)*100)+'%';
+    count.textContent=(i+1)+' / '+slides.length;
+  }
+  document.getElementById('next').onclick=()=>go(i+1);
+  document.getElementById('prev').onclick=()=>go(i-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')go(i+1);
+    else if(e.key==='ArrowLeft'||e.key==='PageUp')go(i-1);
+    else if(e.key==='Home')go(0);
+    else if(e.key==='End')go(slides.length-1);
+  });
+  go(0);
+</script>
+</body>
+</html>

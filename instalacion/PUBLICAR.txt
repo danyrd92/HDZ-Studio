@@ -1,0 +1,23 @@
+HDZ STUDIO - PUBLICACION VERIFICADA EN GITHUB RELEASES
+
+1. Ejecutar soporte/tests/Run-All.ps1 (y -IncludeMontaje antes de una version).
+   No utilizar videos ni torrents reales en pruebas.
+2. Actualizar VERSION.txt (1.N), la version de HDZStudio.iss y la del componente moderno.
+3. Compilar modern-menu (DebugType=none: la DLL no debe contener rutas del equipo).
+4. Ejecutar instalacion/Preparar-Release.ps1 -Version 1.N. Crea una carpeta NUEVA en
+   distribucion con una lista positiva de archivos, el zip del codigo, version.json
+   firmado con RSA y version.sig. La clave privada vive protegida con DPAPI en
+   %APPDATA%/HDZ-Publicacion; guardar una copia privada de recuperacion, nunca publicarla.
+5. Compilar Inno Setup con /DStageRoot=ruta_absoluta_del_paquete HDZStudio.iss.
+6. Comprobar que no hay datos privados: Test-PublicSafety.ps1 -Required (y -History
+   antes de cada push). El hook pre-push lo ejecuta automaticamente.
+7. Crear la release vN con gh: HDZStudio-1.N.zip, version.json, version.sig y el
+   instalador. La release «herramientas» (prerelease) guarda ffmpeg, mkvtoolnix,
+   MediaInfo, dovi_tool y el MSI de PowerShell; solo se cambia si cambia tools.lock.json.
+8. Las instalaciones comprueban releases/latest/download/version.json: verifican la
+   firma, el SHA256 del zip y de cada archivo, conservan respaldo y revierten ante fallos.
+   No se vuelven a descargar herramientas que ya coincidan con su SHA256.
+9. Verificar la version instalada, el estado de la web remota y los hashes entregados.
+
+El historial local guarda los torrents que crea HDZ; crear o descargar un torrent
+no confirma el seed. Los logs grandes se archivan comprimidos y no se borran.

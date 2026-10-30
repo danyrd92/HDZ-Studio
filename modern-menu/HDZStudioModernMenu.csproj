@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableComHosting>true</EnableComHosting>
+    <EnableRegFreeCom>true</EnableRegFreeCom>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>HDZStudioModernMenu</AssemblyName>
+    <RootNamespace>HDZStudioModernMenu</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.17.0.0</Version>
+    <FileVersion>1.17.0.0</FileVersion>
+    <Company>HD ZERO Studio</Company>
+    <Product>HD ZERO Studio</Product>
+    <Description>Windows 11 context-menu command for HD ZERO Studio</Description>
+    <!-- Sin PDB ni rutas del equipo que compila dentro de la DLL publicada. -->
+    <DebugType>none</DebugType>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.InteropServices.COM.LoadComponentInDefaultContext" Value="true" />
+  </ItemGroup>
+</Project>

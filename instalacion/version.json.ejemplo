@@ -1,0 +1,21 @@
+{
+  "_comentario": "Sube ESTE fichero (renombrado a version.json) a la RAIZ de tu repo de GitHub. El programa lo lee para saber si hay version nueva. Sube tambien los ficheros listados en 'archivos'.",
+
+  "version": "1.1.0",
+  "fecha": "2026-07-01",
+  "notas": "Que cambia en esta version (se muestra al usuario en el aviso de actualizacion).",
+
+  "archivos": [
+    "VERSION.txt",
+    "HDZ-GUI.ps1",
+    "HDZnew.ps1",
+    "HDZ-Torrent.ps1"
+  ],
+
+  "herramientas": {
+    "mkvtoolnix": "99.0",
+    "mediainfo": "26.05",
+    "ffmpeg": "latest",
+    "dovi_tool": "latest"
+  }
+}

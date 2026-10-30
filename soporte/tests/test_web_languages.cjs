@@ -1,0 +1,25 @@
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const {chromium}=require(process.env.HDZ_PLAYWRIGHT||'playwright');
+const html=fs.readFileSync(path.join(__dirname,'../../web/index.html'),'utf8');
+const options=[{t:'Automático (idioma del archivo)',v:'AUTO'},{t:'Castellano',v:'es'},{t:'Tailandés',v:'tha'}];
+const row=(tipo,id,valor)=>({archivo:'C:\\Test\\Video con código de idioma incorrecto.mkv',id:String(id),tipo,etiqueta:tipo+' · Video con código de idioma incorrecto.mkv · pista '+id+' · detectado: Inglés',valor,opciones:options});
+const state={online:true,responsive:true,data:{protocol:2,session:'language-test',uiTs:Date.now()/1000,version:'test',inputs:{},opciones:{},tabsProy:[],tabsSubida:[],history:[],firmas:[],undAudioVisible:true,undSubsVisible:true,undAudioSubs:[row('Audio',1,'AUTO'),row('Audio',2,'tha'),row('Sub',3,'es')]}};
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{
+ const page=await browser.newPage({viewport:{width:390,height:844}});const errors=[],commands=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:html});if(u.pathname==='/api/state')return route.fulfill({json:state});if(u.pathname==='/api/cmd/status')return route.fulfill({json:{status:'done'}});if(route.request().method()==='POST'){commands.push(route.request().postDataJSON());return route.fulfill({json:{id:'lang-1'}});}return route.fulfill({status:404,body:''});});
+ await page.goto('https://hdz-language-test.local/');await page.waitForTimeout(600);
+ await page.evaluate(()=>{go('crear');toggleGrp('audio');});
+ assert.equal(await page.locator('#undAudioRows select').count(),2);
+ assert.equal(await page.locator('#undSubsRows select').count(),1);
+ assert.equal(await page.locator('#undAudioRows select').nth(1).inputValue(),'tha');
+ assert.equal(await page.locator('#undAudioRows select option').count(),2,'Se duplicó el catálogo antes de abrir los selectores');
+ await page.locator('#undAudioRows select').nth(0).focus();
+ await page.locator('#undAudioRows select').nth(0).selectOption('es');
+ await page.waitForTimeout(200);
+ assert(commands.some(c=>c.type==='set_und'&&c.tipo==='Audio'&&c.id==='1'&&c.value==='es'));
+ assert.equal(await page.locator('#undAudioRows select').nth(1).inputValue(),'tha');
+ assert.deepEqual(errors,[]);
+ assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)),'Desbordamiento móvil');
+ console.log('WEB_TRACK_LANGUAGES_OK');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1)});

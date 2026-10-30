@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C0C0F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>HDZ Studio · Control remoto</title>
+<style>
+/* ============ Paleta (la del tracker — NO cambiar) ============ */
+:root{
+  --bg:#0C0C0F;--card:#131316;--cardBorder:#242429;--chip:#1A1A1F;--chipBorder:#2E2E35;
+  --text:#EDEDEF;--sub:#9C9CA8;--accent:#D92B2B;--accentHover:#EF4444;--ok:#86D97C;--warn:#F2C94C;
+  --accentSoft:rgba(217,43,43,.13);--accentGlow:rgba(217,43,43,.35);
+  --radius:14px;--radiusSm:11px;--appbar:54px;--tabbar:60px;--dock:62px;
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+  --bottom-cover:calc(var(--tabbar) + var(--dock) + var(--safe-b));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;
+  font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea,select{font-family:inherit}
+html{scroll-padding-bottom:calc(var(--bottom-cover) + 28px)}
+
+/* ============ Cabecera ============ */
+.appbar{position:sticky;top:0;z-index:40;height:calc(var(--appbar) + var(--safe-t));padding-top:var(--safe-t);
+  background:rgba(12,12,15,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--cardBorder);display:flex;align-items:center;gap:10px;padding-left:15px;padding-right:13px}
+.brand{display:flex;align-items:center}.brand img{height:30px;width:auto;max-width:52vw;display:block}
+.status{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
+.who{font-size:10.5px;color:var(--sub);text-align:right;line-height:1.25;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.versionline{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.updatebtn{border:1px solid var(--accent);border-radius:7px;padding:2px 7px;min-width:27px;min-height:27px;color:var(--text);font-weight:800;background:var(--accentSoft);flex-shrink:0}
+.updatebtn:disabled{opacity:.5;cursor:default}
+@media(max-width:360px){.who>#who{display:none}.status{gap:5px}.pill{padding:6px 8px}.brand img{max-width:27vw}}
+.pill{display:flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--chipBorder);
+  border-radius:20px;padding:6px 11px;font-size:11.5px;color:var(--sub);flex-shrink:0}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);flex-shrink:0}
+.dot.off{background:#5a5a62;box-shadow:none}
+/* Línea de progreso pegada a la cabecera: el montaje se ve desde cualquier pestaña y posición */
+.topline{position:fixed;left:0;right:0;top:calc(var(--appbar) + var(--safe-t));height:2.5px;z-index:39;pointer-events:none}
+.topline i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accentHover));transition:width .35s;box-shadow:0 0 8px var(--accentGlow)}
+
+/* ============ Layout ============ */
+main{padding:14px 13px calc(var(--bottom-cover) + 28px);max-width:720px;margin:0 auto}
+.section{display:none}.section.active{display:block;animation:fade .16s ease}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.sechead{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:.7px;color:var(--sub);margin:2px 3px 13px;text-transform:uppercase}
+.sechead::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--cardBorder),transparent)}
+/* Bloques plegables de la página «Proyecto» (General/Proyecto/Audio/Subtítulos), como el programa. */
+.grp{margin:0 0 4px}
+.grphd{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;padding:9px 4px 10px;margin:16px 0 12px;border-bottom:1px solid var(--cardBorder)}
+.grp:first-child .grphd{margin-top:2px}
+.grphd .gi{font-size:16px}
+.grphd .gt{flex:1;font-size:15px;font-weight:700;color:var(--text)}
+.grphd .chev{font-size:20px;font-weight:800;color:var(--text);width:22px;text-align:center;transition:transform .15s}
+.grphd:hover .gt{color:var(--accentHover)}
+.grp.closed .grphd{margin-bottom:2px}
+.grp.closed .grpbody{display:none}
+.card{background:linear-gradient(180deg,#16161B,#111115);border:1px solid var(--cardBorder);border-radius:var(--radius);
+  padding:15px 16px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.card.dim{opacity:.5}
+.card h3{margin:0 0 3px;font-size:14.5px;font-weight:800;letter-spacing:.1px;display:flex;align-items:center;gap:8px}
+.card h3 .ci{font-size:15px;line-height:1;flex-shrink:0;filter:saturate(.9)}
+.card .d{margin:2px 0 0;color:var(--sub);font-size:12px;line-height:1.5}
+.lbl{display:block;color:var(--text);font-size:12.5px;margin:13px 0 6px;font-weight:700}
+.row{display:flex;gap:9px;align-items:center}.row.wrap{flex-wrap:wrap}.grow{flex:1;min-width:0}.mt{margin-top:12px}
+/* Remezcla: en móvil el nombre del archivo va en su propia línea. Así los cuatro
+   controles nunca le roban espacio ni quedan superpuestos sobre un título largo. */
+.remixrow{margin-top:12px;padding:11px 0 1px;border-top:1px solid #24242a}
+.remixrow:first-child{border-top:0;padding-top:1px}
+.remixname{color:var(--text);font-size:12.5px;line-height:1.42;word-break:break-word;overflow-wrap:anywhere}
+.remixactions{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.remixactions .btn{flex:1 1 68px}
+.remixactions .btn:last-child{flex:0 0 auto;min-width:38px;padding-left:10px;padding-right:10px}
+
+/* ============ Inputs (16px: evita el auto-zoom de iOS) ============ */
+.input,select.input{width:100%;background:#0d0d11;border:1px solid var(--chipBorder);color:var(--text);
+  border-radius:var(--radiusSm);padding:10px 12px;font-size:16px;outline:none;appearance:none;min-height:44px;transition:border-color .15s}
+.yearField{flex:0 0 132px;min-width:132px}.yearField .input{text-align:center;font-variant-numeric:tabular-nums}
+select.input{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="%239C9CA8"><path d="M2 4l4 4 4-4z"/></svg>');background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+.input:focus,select.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accentSoft)}
+.input::placeholder{color:#54545e}
+textarea.input{min-height:96px;resize:vertical;font-family:Consolas,monospace;font-size:12.5px;line-height:1.45}
+
+/* ============ Botones ============ */
+.btn{border:1px solid var(--chipBorder);background:var(--chip);color:var(--text);border-radius:var(--radiusSm);
+  padding:10px 13px;font-size:13.5px;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:42px;transition:transform .1s,background .15s}
+.btn:active{background:#23232a;transform:scale(.975)}
+.btn.primary{background:linear-gradient(180deg,var(--accentHover),var(--accent));border-color:var(--accent);color:#fff;box-shadow:0 4px 14px var(--accentGlow)}
+.btn.primary:active{background:var(--accent)}
+.btn.sm{padding:7px 11px;font-size:12.5px;min-height:34px;font-weight:600}
+.btn.icon{padding:0;width:44px;height:44px;flex-shrink:0;font-size:17px}
+.btn.block{width:100%}
+.btn.link{text-decoration:none}
+
+/* ============ Chips: nube (multi), segmentado, lista-radio, carrusel ============ */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{padding:9px 13px;border-radius:20px;background:var(--chip);border:1px solid var(--chipBorder);color:var(--sub);
+  font-size:13px;font-weight:600;user-select:none;min-height:38px;display:inline-flex;align-items:center;transition:transform .1s,background .15s,color .15s,border-color .15s}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 10px var(--accentGlow)}
+.chip:active{transform:scale(.96)}
+.chip.sm{padding:8px 11px;font-size:12px;min-height:34px}
+/* Segmentado: opciones exclusivas cortas (2-4) — lectura y pulgar más rápidos que chips sueltos */
+.chips.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;background:#0d0d11;border:1px solid var(--chipBorder);
+  border-radius:13px;padding:4px;margin-top:12px}
+.chips.seg .chip{background:transparent;border:none;border-radius:10px;color:var(--sub);text-align:center;justify-content:center;
+  padding:9px 6px;font-size:12.5px;min-height:41px;white-space:normal;line-height:1.25;box-shadow:none}
+.chips.seg .chip.on{background:var(--accent);color:#fff;box-shadow:0 2px 10px var(--accentGlow)}
+.chips.seg.g2{grid-auto-flow:row;grid-template-columns:1fr 1fr}
+/* Lista-radio: opciones exclusivas con texto largo */
+.chips.list{flex-direction:column;gap:7px}
+.chips.list .chip{width:100%;border-radius:11px;padding:9px 12px;font-size:13.5px;gap:9px;min-height:40px}
+.chips.list .chip::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--chipBorder);flex:0 0 auto;transition:all .15s;background:transparent}
+.chips.list .chip.on{background:var(--accentSoft);border-color:var(--accent);color:var(--text);box-shadow:none}
+.chips.list .chip.on::before{border:4px solid var(--accent);background:#fff}
+/* Carrusel horizontal: muchas opciones numéricas */
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chips.scroll .chip{flex:0 0 auto;min-width:52px;justify-content:center}
+.hide{display:none!important}
+
+/* ============ Películas = PANTALLAS ============
+   Un ÚNICO indicador global bajo la cabecera (no un selector por menú): título + puntos de posición.
+   Se cambia de película DESLIZANDO en cualquier parte de la pantalla; tocar el indicador abre el
+   selector a pantalla completa. */
+#peliBar{position:fixed;left:0;right:0;top:calc(var(--appbar) + var(--safe-t));z-index:35;
+  display:flex;justify-content:center;padding:6px 12px 7px;
+  background:rgba(12,12,15,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--cardBorder)}
+#peliBar .pb{display:flex;align-items:center;gap:9px;max-width:100%;min-width:0;
+  background:var(--accentSoft);border:1px solid var(--accent);border-radius:18px;padding:5px 14px;min-height:33px}
+#peliBar .pb:active{background:rgba(217,43,43,.22)}
+.pb .t{font-size:12.5px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pb .c{font-size:10px;color:var(--sub);flex-shrink:0}
+.pb .dots{display:flex;gap:4px;flex-shrink:0}
+.pb .dot2{width:6px;height:6px;border-radius:50%;background:#3a3a42}
+.pb .dot2.on{background:var(--accent);box-shadow:0 0 5px var(--accentGlow)}
+body.hasPeli main{padding-top:58px}
+body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
+/* Pestañas de SUBIDA (Torrent y subida): una por release. Fila horizontal desplazable. */
+.subtabs{display:flex;gap:7px;overflow-x:auto;margin-bottom:12px;padding-bottom:3px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.subtabs::-webkit-scrollbar{display:none}
+.subtab{flex:0 0 auto;max-width:62vw;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:11px;
+  background:var(--chip);border:1px solid var(--chipBorder);color:var(--sub);font-size:12.5px;font-weight:700;min-height:40px}
+.subtab .st{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.subtab.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 10px var(--accentGlow)}
+.subtab:active{transform:scale(.97)}
+.subtab .x{flex:0 0 auto;opacity:.7;font-size:14px}
+@media(min-width:920px){.subtab{max-width:280px}}
+/* Selector de película a pantalla completa (hoja) */
+/* Selector de película a pantalla completa (hoja) */
+.tabrow{display:flex;align-items:center;gap:13px;padding:14px 12px;border-radius:11px;font-size:14px;min-height:52px;border:1px solid transparent;line-height:1.35;word-break:break-word}
+.tabrow:active{background:var(--chip)}
+.tabrow.on{background:var(--accentSoft);border-color:var(--accent)}
+.tabrow .ic{font-size:17px;flex-shrink:0}
+.tabrow .chk{color:var(--accent);font-weight:800;flex-shrink:0}
+/* Deslizamiento de pantalla al cambiar de película */
+@keyframes slInL{from{opacity:.3;transform:translateX(34px)}to{opacity:1;transform:none}}
+@keyframes slInR{from{opacity:.3;transform:translateX(-34px)}to{opacity:1;transform:none}}
+
+/* ============ Interruptores ============ */
+.switch{position:relative;width:45px;height:26px;border-radius:14px;background:#2a2a31;border:1px solid var(--chipBorder);flex-shrink:0;transition:background .18s}
+.switch::after{content:"";position:absolute;top:2px;left:3px;width:20px;height:20px;border-radius:50%;background:#c9c9d0;
+  transition:transform .18s,background .18s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.switch.on{background:var(--accent);border-color:var(--accent)}.switch.on::after{transform:translateX(17px);background:#fff}
+.switchrow{display:flex;align-items:flex-start;gap:14px}
+
+/* ============ Lista de vídeos ============ */
+.listbox{min-height:80px;max-height:340px;overflow:auto;margin-top:12px;border-top:1px solid var(--cardBorder);padding-top:4px}
+.empty{color:var(--sub);font-size:13px;text-align:center;padding:24px 10px;line-height:1.6}
+.empty .eic{display:block;font-size:26px;margin-bottom:4px;opacity:.55}
+.fi{display:flex;align-items:flex-start;gap:12px;padding:12px 2px;border-bottom:1px solid #1b1b21}
+.fi:last-child{border-bottom:none}
+.cb{width:23px;height:23px;border-radius:7px;border:2px solid var(--chipBorder);flex-shrink:0;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s}
+.cb.on{background:var(--accent);border-color:var(--accent);box-shadow:0 2px 8px var(--accentGlow)}
+.cb.on::after{content:"✓";color:#fff;font-size:13px;font-weight:800}
+.cb.fixed{cursor:default;opacity:1}
+.nm{font-size:13px;line-height:1.4;word-break:break-word}
+.fmeta{display:flex;gap:7px;margin-top:7px;flex-wrap:wrap;align-items:center}
+.fmeta .k{font-size:10.5px;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.fmeta .input{min-height:34px;padding:6px 9px;font-size:14px;width:130px}
+.fmeta .btn{min-height:34px;padding:6px 10px;font-size:12px}
+.counter{font-size:11.5px;color:var(--sub);font-weight:600;background:var(--chip);border:1px solid var(--chipBorder);border-radius:14px;padding:4px 10px}
+#resumenLote{display:none}
+/* Badges por vídeo: misma info y colores que las píldoras del programa (New-Pill) */
+.bds{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.bd{font-size:10.5px;padding:2px 8px;border-radius:6px;background:#222227;color:#9C9CA8;white-space:nowrap}
+.bd.accent{background:#3A1518;color:#FF9B9B}
+.bd.hdr{background:#3A2440;color:#E8A8D8}
+.bd.warn{background:#3E3624;color:#F2C94C}
+.destado{display:block;flex-basis:100%;width:100%;font-size:13px;line-height:1.4;white-space:normal;overflow-wrap:anywhere;padding:6px 0;color:var(--sub)}
+#estadoTxt:empty{display:none}
+
+/* ============ Acciones (cuadrícula Torrent) ============ */
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
+.act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;
+  background:var(--chip);border:1px solid var(--chipBorder);border-radius:13px;padding:12px 8px;font-size:12px;font-weight:700;line-height:1.3;min-height:70px;transition:transform .1s,background .15s}
+.act:active{background:#23232a;transform:scale(.97)}
+.act .ai{font-size:19px;line-height:1}
+.act.wide{grid-column:1/-1;flex-direction:row;min-height:44px;gap:9px}
+
+/* ============ Avisos ============ */
+.hint{background:#1C1407;border:1px solid rgba(242,201,76,.45);border-radius:9px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--warn)}
+
+/* ============ Dock inferior + navegación ============ */
+.dock{position:fixed;left:0;right:0;bottom:calc(var(--tabbar) + var(--safe-b));z-index:36;
+  background:rgba(13,13,17,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:1px solid var(--cardBorder);padding:10px 14px;
+  /* Un aviso excepcionalmente largo no debe ocupar toda la pantalla. Sigue siendo
+     legible desplazando el panel, sin recortar ni ocultar errores. */
+  max-height:50vh;max-height:50dvh;overflow-y:auto;overscroll-behavior-y:contain}
+.prog{margin-bottom:9px}.prog.hide{display:none}
+.pl{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--sub);margin-bottom:5px}
+.pl #progTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl #progPct{font-weight:800;color:var(--text);flex-shrink:0}
+/* 2ª barra (detalle de la tarea en curso): más fina y apagada que la principal, para que se lea
+   como subordinada. Muestra p.ej. «Archivando original .procesado (57 GB) · 27 MB/s · quedan 16m». */
+.prog2{margin-top:7px}.prog2.hide{display:none}
+.prog2 .pl{font-size:10.5px;margin-bottom:4px}
+.prog2 #prog2Txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prog2 #prog2Pct{font-weight:700;flex-shrink:0}
+.prog2 .bar{height:5px}
+.prog2 .bar>i{background:var(--sub);box-shadow:none;opacity:.85}
+.auxprog{margin-top:9px;padding-top:9px;border-top:1px solid var(--cardBorder)}
+.auxtask+.auxtask{margin-top:9px;padding-top:9px;border-top:1px solid #25252b}
+.auxtask .pl{margin-bottom:4px}.auxtask .bar{height:6px}.auxtask .kind{font-weight:800;color:var(--text)}
+.bar{height:8px;border-radius:5px;background:#26262c;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accentHover));border-radius:5px;transition:width .3s;box-shadow:0 0 10px var(--accentGlow)}
+.dockrow{display:flex;flex-wrap:wrap;gap:9px;align-items:stretch}.dockrow .primary{flex:1;font-size:14.5px;min-height:46px}
+@media(max-width:767px){.dockrow .destado{order:-1}.dockrow .destado:empty{display:none}}
+.dockrow .btn.icon{width:46px;height:46px}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:38;height:calc(var(--tabbar) + var(--safe-b));padding-bottom:var(--safe-b);
+  background:rgba(12,12,15,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--cardBorder);display:flex}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--sub);
+  font-size:9.5px;font-weight:700;padding:6px 2px;position:relative;min-width:0;transition:color .15s}
+.tab .ic{font-size:20px;line-height:1;transition:transform .15s}
+.tab span:not(.ic){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab.active{color:var(--accent)}
+.tab.active .ic{transform:translateY(-1px) scale(1.08)}
+.tab.active::before{content:"";position:absolute;top:0;width:28px;height:3px;border-radius:0 0 3px 3px;background:var(--accent);box-shadow:0 1px 8px var(--accentGlow)}
+
+/* ============ Toast ============ */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bottom-cover) + 18px);z-index:60;
+  background:#1b1b21;border:1px solid var(--cardBorder);color:var(--text);padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:600;
+  max-width:88vw;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+.toast.ok{border-color:rgba(134,217,124,.45)}.toast.warn{border-color:rgba(242,201,76,.45)}
+
+/* ============ Capturas y logos ============ */
+.caps{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}
+@media(min-width:520px){.caps{grid-template-columns:repeat(3,1fr)}}
+.cap{position:relative;border:3px solid var(--chipBorder);border-radius:9px;overflow:hidden;aspect-ratio:16/9;background:#14141e;opacity:.45;transition:opacity .15s,border-color .15s}
+.cap.on{border-color:var(--accent);opacity:1;box-shadow:0 2px 12px var(--accentGlow)}
+.cap img{width:100%;height:100%;object-fit:cover;display:block}
+.capzoom{position:absolute;top:5px;right:5px;width:32px;height:32px;border-radius:8px;background:rgba(12,12,15,.85);border:1px solid var(--chipBorder);font-size:13px;display:flex;align-items:center;justify-content:center}
+.logos{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.logo{background:#3A3A42;border:2px solid #33333A;border-radius:9px;padding:8px 11px;display:flex;flex-direction:column;align-items:center;gap:4px;transition:border-color .15s}
+.logo.on{border-color:var(--accent);box-shadow:0 2px 10px var(--accentGlow)}
+.logo img{height:40px;max-width:150px;object-fit:contain;display:block}
+.logo span{font-size:10px;color:var(--sub)}
+.lb{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;padding:12px}
+.lb.open{display:flex}.lb img{max-width:100%;max-height:100%;border-radius:8px}
+
+/* ============ Hoja modal (explorador) ============ */
+.modal{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.62);display:none;align-items:flex-end}
+.modal.open{display:flex}
+.sheet{background:#131316;border-top:1px solid var(--cardBorder);border-radius:18px 18px 0 0;width:100%;max-height:86vh;
+  display:flex;flex-direction:column;padding-bottom:var(--safe-b);animation:up .22s cubic-bezier(.2,.7,.2,1)}
+.sheet::before{content:"";width:42px;height:4.5px;border-radius:3px;background:#3a3a42;margin:9px auto 0;flex-shrink:0}
+@keyframes up{from{transform:translateY(36px);opacity:.6}to{transform:none;opacity:1}}
+.sheet .hd{padding:10px 16px 13px;border-bottom:1px solid var(--cardBorder)}
+.sheet .hd b{font-size:15px}
+.sheet .path{font-size:11.5px;color:var(--sub);word-break:break-all;margin-top:5px;line-height:1.45}
+.sheet .body{overflow:auto;flex:1;padding:6px 9px;min-height:200px;-webkit-overflow-scrolling:touch}
+.sheet .ft{padding:12px 13px;border-top:1px solid var(--cardBorder);display:flex;gap:9px}
+.diritem{display:flex;align-items:center;gap:13px;padding:14px 11px;border-radius:10px;font-size:14.5px;min-height:50px}
+.diritem:active{background:var(--chip)}.diritem .ic{font-size:18px}
+.filepick{display:flex;align-items:center;gap:13px;padding:13px 12px;border-radius:11px;font-size:13.5px;border:1px solid var(--chipBorder);margin:7px 0;background:#101014;min-height:52px;line-height:1.35;word-break:break-word}
+.filepick:active{background:var(--chip)}.filepick .ic{font-size:18px;flex-shrink:0}
+.filepick .pick{color:var(--accent);font-weight:700;flex-shrink:0;font-size:12.5px}
+
+/* ============ ESCRITORIO = IDÉNTICO AL PROGRAMA ============
+   Sidebar izquierda (logo + ① CREAR EL ARCHIVO / ② TORRENT Y SUBIDA + Ajustes + pie), barra de
+   carpeta persistente arriba, tarjetas en el contenido y barra inferior con «Empezar de Zero» +
+   «Iniciar montaje». En móvil nada de esto existe (sigue la vista de pestañas inferiores). */
+.side,.deskbar{display:none}
+.rlbl{display:none}
+@media(min-width:920px){
+  .appbar,.tabs{display:none}
+  .side{display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;width:216px;z-index:45;
+    background:#09090B;border-right:1px solid var(--cardBorder);padding:16px 12px 14px}
+  .slogo img{height:36px;margin:2px 6px 12px;display:block}
+  .slbl{color:var(--accent);font-size:10.5px;font-weight:800;letter-spacing:.6px;margin:12px 9px 5px}
+  .snav{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:10px 13px;margin:2px 0;
+    border-radius:9px;color:#A8A8B2;font-size:13.5px;font-weight:600;position:relative;border:none;background:none;cursor:pointer}
+  .snav .si{font-size:16px;width:20px;text-align:center}
+  .snav:hover{background:#15151A;color:#D8D8DE}
+  .snav.active{background:#271013;color:#fff;font-weight:700}
+  .snav.active::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--accent)}
+  .ssep{height:1px;background:var(--cardBorder);margin:12px 6px}
+  .sbottom{margin-top:auto;padding:0 9px}
+  .shint{color:var(--sub);font-size:10.5px;line-height:1.55;margin:0 0 10px}
+  .sconn{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--sub);margin-bottom:6px}
+  .sver{color:var(--sub);font-size:11px}
+  main{margin:0 0 0 216px;max-width:none;padding:18px 26px calc(var(--bottom-cover) + 28px)}
+  /* La línea de progreso superior se ancla al área de contenido (en escritorio no hay cabecera móvil) */
+  .topline{left:216px;top:0}
+  body.hasPeli .topline{top:46px}
+  /* Controles con ancho contenido: en pantallas grandes los segmentados/radios a todo lo ancho no
+     se parecen al programa (chips compactos). */
+  .chips.seg{max-width:620px}
+  .chips.list{max-width:680px}
+  .deskbar{display:flex;flex-direction:column;position:sticky;top:12px;z-index:34;
+    background:linear-gradient(180deg,#16161B,#111115);border:1px solid var(--cardBorder);border-radius:13px;
+    padding:11px 14px;margin-bottom:13px;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+  /* 1:1 con el programa: cabeceras de tarjeta sin emoji, resumen del lote visible, estado en la barra */
+  .card h3 .ci{display:none}
+  #resumenLote{display:inline}
+  .destado{display:block;flex:1;min-width:0;align-self:center;font-size:12.5px;color:var(--sub);padding:0 14px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dockrow .primary{margin-left:0}
+  /* Chips exclusivos = píldoras sueltas como el programa (nada de segmentados/radios en escritorio) */
+  .chips.seg,.chips.list{display:flex;flex-wrap:wrap;gap:0;background:none;border:none;padding:0;max-width:none;margin-top:12px}
+  .chips.seg .chip,.chips.list .chip{flex:0 0 auto;width:auto;background:var(--chip);border:1px solid var(--chipBorder);
+    border-radius:16px;padding:7px 15px;font-size:12.5px;min-height:0;margin:0 8px 8px 0;color:#C8C8CE;box-shadow:none}
+  .chips.list .chip::before{display:none}
+  .chips.seg .chip.on,.chips.list .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .chips.scroll{flex-wrap:wrap;overflow:visible}
+  .chip{cursor:pointer}
+  .chip:hover{border-color:var(--accent);background:var(--accentSoft);color:#fff}
+  .chip.on:hover{background:var(--accentHover);border-color:var(--accentHover)}
+  .si{filter:grayscale(1) brightness(1.9)}
+  /* Sidebar colapsada (botón ☰, como el programa): solo iconos */
+  body.scol .side{width:72px;padding:16px 8px 14px}
+  body.scol .sl,body.scol .slbl,body.scol .shint,body.scol #connTxt3,body.scol .sver{display:none}
+  body.scol .slogo img{height:26px;margin:2px auto 12px}
+  body.scol .snav{justify-content:center;padding:11px 0}
+  body.scol .snav .si{font-size:19px;width:auto}
+  body.scol .sconn{justify-content:center}
+  body.scol .sbottom .row{justify-content:center}
+  body.scol main{margin-left:72px}
+  body.scol .dock{left:72px}
+  body.scol #peliBar{left:72px}
+  body.scol .topline{left:72px}
+  #cardCarpeta{display:none}
+  .dock{left:216px;bottom:0;padding:12px 26px;border-top:1px solid var(--cardBorder)}
+  .dock .btn.icon{width:auto;padding:0 16px;font-size:14px}
+  .rlbl{display:inline;font-size:13.5px;font-weight:700;margin-left:9px}
+  .dockrow .primary{flex:0 0 auto;min-width:220px;margin-left:auto}
+  #btnIniTodos{flex:0 0 auto;min-width:130px;margin-left:0}
+  .tabs{display:none}
+  #peliBar{left:216px;top:0;padding:8px 12px}
+  body.hasPeli main{padding-top:64px}
+  body.hasPeli .deskbar{top:58px}
+  .modal{align-items:center;justify-content:center;padding:24px}
+  .sheet{max-width:620px;border-radius:16px;border:1px solid var(--cardBorder);max-height:80vh}
+  .sheet::before{display:none}
+  .caps{grid-template-columns:repeat(4,1fr)}
+  .toast{bottom:calc(var(--bottom-cover) + 18px)}
+}</style>
+</head>
+<body>
+<div class="appbar">
+  <div class="brand"><img src="logo.png" alt="HDZ Studio"></div>
+  <div class="status">
+    <div class="who"><span id="who"></span><span class="versionline"><span id="versionWeb"></span><button class="updatebtn hide" id="btnActualizarWeb" onclick="requestUpdate()" aria-label="Actualizar HDZ Studio">↑</button></span></div>
+    <span class="pill"><span class="dot" id="connDot"></span><span id="connTxt">Conectando…</span></span>
+  </div>
+</div>
+<div class="topline"><i id="topBar"></i></div>
+<div id="peliBar" class="hide"></div>
+<!-- ESCRITORIO: sidebar idéntica al programa (oculta en móvil) -->
+<aside class="side">
+  <div class="slogo"><img src="logo.png" alt="HDZ Studio"></div>
+  <div class="slbl">① CREAR EL ARCHIVO</div>
+  <button class="snav active" data-sec="crear" onclick="go('crear')"><span class="si">🎬</span><span class="sl">Proyecto</span></button>
+  <div class="slbl">② TORRENT Y SUBIDA</div>
+  <button class="snav" data-sec="torrent" onclick="go('torrent')"><span class="si">☁</span><span class="sl">Torrent y subida</span></button>
+  <div class="ssep"></div>
+  <button class="snav" data-sec="ajustes" onclick="go('ajustes')"><span class="si">⚙</span><span class="sl">Ajustes / claves</span></button>
+  <div class="sbottom">
+    <p class="shint">Las opciones se adaptan a lo detectado en tus vídeos. Todo se decide aquí: el montaje corre sin preguntar nada en consola.</p>
+    <div class="sconn"><span class="dot" id="connDot3"></span><span id="connTxt3">—</span></div>
+    <div class="row" style="margin-top:4px"><span class="versionline grow"><span class="sver" id="whoSide"></span><button class="updatebtn hide" id="btnActualizarSide" onclick="requestUpdate()" aria-label="Actualizar HDZ Studio">↑</button></span><button class="btn sm" id="btnCol" onclick="toggleSide()" title="Colapsar/expandir el menú">☰</button></div>
+  </div>
+</aside>
+<main>
+  <!-- ESCRITORIO: barra de carpeta persistente arriba, como el programa (oculta en móvil) -->
+  <div class="deskbar">
+    <div class="row" style="width:100%">
+      <span style="font-size:17px">📁</span>
+      <input class="input grow" id="carpetaTop" placeholder="Carpeta con los vídeos…">
+      <button class="btn" onclick="openElegir()">Elegir vídeos…</button>
+      <button class="btn" onclick="openBrowse('carpeta')">Carpeta…</button>
+    </div>
+    <p class="d" id="deskHint" style="margin-top:7px">«Elegir vídeos…» para ver y marcar uno o varios archivos; «Carpeta…» procesa la carpeta entera. Las opciones se adaptan a lo que se detecte.</p>
+  </div>
+  <!-- CREAR EL ARCHIVO: General + Proyecto + Audio + Subtítulos en UNA página; cada bloque se pliega. -->
+  <section class="section active" id="sec-crear">
+    <div class="grp closed" id="grp-general">
+    <div class="grphd" onclick="toggleGrp('general')"><span class="gi">🏠</span><span class="gt">General</span><span class="chev" id="chev-general">▸</span></div>
+    <div class="grpbody">
+    <div class="card" id="cardCarpeta">
+      <h3><span class="ci">📁</span>Carpeta de trabajo</h3>
+      <p class="d">Elige una carpeta completa o marca vídeos concretos del PC para procesar solo esos archivos.</p>
+      <div class="row mt"><input class="input grow" id="carpeta" placeholder="Carpeta con los vídeos…"><button class="btn icon primary" onclick="openBrowse()" aria-label="Explorar carpetas">📂</button></div>
+      <button class="btn block mt" id="btnElegirVideosMovil" onclick="openElegir()">🎬 Elegir vídeos…</button>
+      <button class="btn block mt" onclick="openExtraFolder()">+ Añadir otra temporada independiente</button>
+      <div id="seasonFolders" class="mt"></div>
+      <button class="btn block mt" data-icon="history" onclick="cmd({type:'history_view'})">🕘 Ver historial y rutas de salida</button>
+      <div id="historyResults" class="mt" aria-live="polite"></div>
+    </div>
+    <div class="card"><div class="switchrow"><div class="grow"><h3><span class="ci">🧬</span>Remezcla (combinar versiones)</h3>
+      <p class="d">Elige archivos concretos, o dos carpetas de una serie: en ese caso se empareja cada capítulo solo por SxxEyy, aunque los títulos sean distintos.</p></div>
+      <div class="switch" data-sw="remezcla" onclick="tSwitch(this)"></div></div></div>
+    <div class="card" id="cardRemezclaWeb" style="display:none"><h3><span class="ci">🧬</span>Vídeos de la remezcla</h3><p class="d">En cada fuente marca qué conservar. «Vídeo» elige la imagen final; Audio y Subs pueden venir de varias fuentes. Para una serie, añade las carpetas completas.</p><div id="remezclaRows"></div><div class="row wrap mt"><button class="btn sm" onclick="openRemixSource()">＋ Añadir vídeo</button><button class="btn sm" onclick="openRemixSeriesFolder()">📁 Añadir carpeta de serie</button></div><div id="remezclaLangs" style="display:none"><label class="lbl">Audios a conservar</label><div class="chips" id="remezclaAudio"></div><label class="lbl">Subtítulos a conservar</label><div class="chips" id="remezclaSubs"></div></div></div>
+    <div class="card"><h3><span class="ci">🎞</span>Modo de procesamiento</h3><p class="d">¿Comparten proyecto (una temporada) o son títulos distintos?</p>
+      <div class="chips seg" data-group="modoLote"><div class="chip" data-v="HOMOGENEO">Mismo proyecto (temporada)</div><div class="chip" data-v="HETEROGENEO">Cada archivo distinto</div></div></div>
+    <div class="card"><div class="row wrap"><h3 class="grow"><span class="ci">🔍</span>Análisis del lote</h3><span class="d" id="resumenLote" style="margin:0;font-size:11.5px"></span><span class="counter" id="selCount">—</span><button class="btn sm" id="btnTodosLote" onclick="allFiles(true)">Todos</button><button class="btn sm" id="btnNingunoLote" onclick="allFiles(false)">Ninguno</button></div>
+      <div class="listbox" id="listado"><div class="empty"><span class="eic">🎬</span>Sin vídeos.</div></div></div>
+    <div class="card" id="cardMultiEp" style="display:none"><h3><span class="ci">🔢</span>Episodios por vídeo (series)</h3><p class="d">Si un vídeo trae varios episodios (dobles, triples…), indícalo; se numera en cadena (E01-E02…) y puedes ajustar cada vídeo en la lista de arriba.</p>
+      <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">Temporada</label><input class="input" data-in="temporadaEp" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">Primer ep.</label><input class="input" data-in="primerEp" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">Eps/vídeo</label><select class="input" data-combo="epsPorVideo"></select></div></div>
+      <button class="btn block mt" onclick="cmd({type:'click',name:'btnAplicarEp'})">Aplicar numeración a la lista</button></div>
+    <div class="card"><h3><span class="ci">🗃</span>Archivos originales al terminar</h3>
+      <div class="chips list" data-group="originales"><div class="chip" data-v="PROCESADO">Conservar (renombrar a .procesado)</div><div class="chip" data-v="INTACTO">Mantener intactos</div><div class="chip" data-v="BORRAR">Borrarlos</div></div></div>
+    <div class="card"><h3><span class="ci">🏷</span>Sufijo «-HDZ» en el nombre final</h3>
+      <div class="chips seg" data-group="sufijo"><div class="chip" data-v="true">Sí</div><div class="chip" data-v="false">No</div></div></div>
+    <div class="card"><h3><span class="ci">🧲</span>Crear archivos .torrent</h3><p class="d">Torrents PRIVADOS listos para el tracker: uno por archivo, pack del lote, o ambos.</p>
+      <div class="chips seg g2" data-group="torrent"><div class="chip" data-v="NO">No</div><div class="chip" data-v="INDIVIDUAL">Uno por archivo</div><div class="chip" data-v="PACK">Pack del lote</div><div class="chip" data-v="AMBOS">Ambos</div></div>
+      <div id="rowPack" style="display:none"><label class="lbl">Nombre del pack (se calcula solo; edítalo solo si lo quieres cambiar)</label><input class="input" data-in="packNombre"></div></div>
+    <div class="card"><h3><span class="ci">📤</span>Carpetas de salida (opcional)</h3><p class="d">Carpeta <b>por defecto</b> del MKV final y el .torrent. Cada vídeo puede llevar su <b>propia</b> carpeta en la lista de arriba («Salida»); esta se usa solo para los que no tengan una. Vacío = junto al origen.</p>
+      <label class="lbl">Archivo procesado (MKV final) — por defecto</label>
+      <div class="row"><input class="input grow" data-in="salidaArchivo" placeholder="(junto al origen)"><button class="btn icon" onclick="openBrowse('salidaArchivo')">📂</button></div>
+      <label class="lbl">Archivo .torrent</label>
+      <div class="row"><input class="input grow" data-in="salidaTorrent" placeholder="(junto al origen)"><button class="btn icon" onclick="openBrowse('salidaTorrent')">📂</button></div></div>
+    </div></div><!-- /grp-general -->
+    <div class="grp closed" id="grp-proyecto">
+    <div class="grphd" onclick="toggleGrp('proyecto')"><span class="gi">🎬</span><span class="gt">Proyecto</span><span class="chev" id="chev-proyecto">▸</span></div>
+    <div class="grpbody">
+    <div class="card"><div class="switchrow"><div class="grow"><h3><span class="ci">🎬</span>Identificar el proyecto</h3><p class="d">Título, año, plataforma… se envían al motor sin preguntar en consola.</p></div>
+      <div class="switch" data-sw="proyecto" onclick="tSwitch(this)"></div></div></div>
+    <div class="card"><h3><span class="ci">✏️</span>Identificación</h3>
+      <label class="lbl">Título limpio</label><input class="input" data-in="titulo" placeholder="p.ej. Friends">
+      <div class="row mt wrap"><div class="yearField"><label class="lbl" style="margin-top:0">Año</label><input class="input" data-in="ano" placeholder="1994" inputmode="numeric" maxlength="4"></div>
+        <div class="switchrow" style="align-items:center;padding-top:24px"><div class="switch" data-sw="serie" onclick="tSwitch(this)"></div><span class="d" style="color:var(--text);font-weight:600">Es una serie (detecta SxxEyy del nombre)</span></div></div></div>
+    <div class="card"><h3><span class="ci">🌐</span>Origen</h3>
+      <div class="chips seg" data-group="origen"><div class="chip" data-v="WEB">WEB (streaming)</div><div class="chip" data-v="FISICO">Físico (disco)</div></div>
+      <div id="grpWeb"><label class="lbl">Tipo WEB</label>
+        <div class="chips seg" data-group="webTipo" style="margin-top:0"><div class="chip" data-v="WEB-DL">WEB-DL</div><div class="chip" data-v="WEBRip">WEBRip</div></div>
+        <label class="lbl">Plataforma</label><select class="input" data-combo="plataforma"></select>
+        <label class="lbl">…o escribe otra etiqueta (opcional)</label><input class="input" data-in="plataformaOtra" placeholder="(código de plataforma)"></div>
+      <div id="grpFisico"><label class="lbl">Formato</label><select class="input" data-combo="formato"></select>
+        <label class="lbl">…o escribe otro</label><input class="input" data-in="formatoOtro" placeholder="(formato)">
+        <label class="lbl">Etiquetas extra</label><input class="input" data-in="etiquetas" placeholder="(opcional)"></div></div>
+    <div class="card"><h3><span class="ci">📸</span>Capturas por archivo</h3>
+      <div class="chips scroll" data-group="capturasProy"><div class="chip" data-v="0">0</div><div class="chip" data-v="1">1</div><div class="chip" data-v="2">2</div><div class="chip" data-v="3">3</div><div class="chip" data-v="4">4</div><div class="chip" data-v="5">5</div><div class="chip" data-v="6">6</div><div class="chip" data-v="8">8</div><div class="chip" data-v="10">10</div><div class="chip" data-v="15">15</div><div class="chip" data-v="20">20</div><div class="chip" data-v="30">30</div></div></div>
+    <div class="card"><div class="switchrow"><div class="grow"><h3><span class="ci">📋</span>Aplicar a todos</h3><p class="d">En «cada archivo distinto», aplica la misma identidad a todos los archivos.</p></div>
+      <div class="switch" data-sw="aplicarTodos" onclick="tSwitch(this)"></div></div></div>
+    </div></div><!-- /grp-proyecto -->
+    <div class="grp closed" id="grp-audio">
+    <div class="grphd" onclick="toggleGrp('audio')"><span class="gi">🔊</span><span class="gt">Audio</span><span class="chev" id="chev-audio">▸</span></div>
+    <div class="grpbody">
+    <div class="card" id="cardAudioLangs" style="display:none"><div class="row wrap"><h3 class="grow"><span class="ci">🌍</span>Idiomas de audio a mantener</h3><span class="counter" id="audioLangCount"></span></div>
+      <p class="d">Todos están seleccionados por defecto. Desmarca los idiomas que no quieras conservar.</p>
+      <div class="chips" id="audioLangs"></div></div>
+    <div class="card" id="cardConvAudioWeb" style="display:none"><h3><span class="ci">🎚</span>Convertir audio</h3><p class="d">Elige la pista, el formato de destino y si quieres conservar la original.</p><div id="convAudioRows"></div><button class="btn sm mt" onclick="addConv()">＋ Añadir conversión</button></div>
+    <div class="card" id="cardDefAudioWeb" style="display:none"><h3><span class="ci">🔊</span>Pista de audio predeterminada</h3><p class="d">Cuál se marca como predeterminada cuando hay varias familias de códec.</p>
+      <div class="chips seg" data-group="defAudio"><div class="chip" data-v="DOLBY">Dolby (DD+ / TrueHD / DD)</div><div class="chip" data-v="DTS">DTS (DTS-HD MA / DTS)</div></div></div>
+    <div class="card" id="cardUndAudioWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de audio</h3><p class="d">Elige el idioma real aunque el archivo indique otro. Automático conserva la identificación original; el archivo de origen no se modifica.</p><div id="undAudioRows"></div></div>
+    </div></div><!-- /grp-audio -->
+    <div class="grp closed" id="grp-subs">
+    <div class="grphd" onclick="toggleGrp('subs')"><span class="gi">💬</span><span class="gt">Subtítulos</span><span class="chev" id="chev-subs">▸</span></div>
+    <div class="grpbody">
+    <div class="card"><h3><span class="ci">💬</span>Idiomas de subtítulos a mantener</h3><p class="d">Qué subtítulos conservar en el resultado.</p>
+      <div class="chips list" data-group="filtro"><div class="chip" data-v="TODOS">Mantener todos</div><div class="chip" data-v="CAST_ENG">Solo castellano e inglés</div><div class="chip" data-v="PERSONALIZADA">Personalizada</div></div></div>
+    <div class="card" id="cardSubsPersonalWeb" style="display:none"><h3><span class="ci">🌍</span>Idiomas (personalizada)</h3><p class="d">Marca los idiomas de subtítulos que quieres conservar.</p><div class="chips" id="subLangs"></div></div>
+    <div class="card" id="cardSubsUnicosWeb" style="display:none"><h3><span class="ci">❔</span>Subtítulos sin señal: ¿forzado o completo?</h3><p class="d">Decide cada subtítulo que no trae esa información.</p><div id="subsUnicosRows"></div></div>
+    <div class="card" id="cardPGSWeb" style="display:none"><h3><span class="ci">🧾</span>Subtítulos PGS (OCR con Subtitle Edit)</h3>
+      <label class="lbl">Extraer PGS para OCR</label>
+      <div class="chips seg" data-group="extraerPGS" style="margin-top:0"><div class="chip" data-v="false">No extraer</div><div class="chip" data-v="true">Sí, extraer y pausar</div></div>
+      <label class="lbl">Qué conservar tras el OCR</label>
+      <div class="chips seg" data-group="conservarPGS" style="margin-top:0"><div class="chip" data-v="CONSERVAR_PGS">Mantener PGS + SRT</div><div class="chip" data-v="ELIMINAR_PGS">Solo SRT (borrar PGS)</div></div></div>
+    <div class="card" id="cardUndSubsWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de subtítulos</h3><p class="d">Elige el idioma real aunque su código sea erróneo. Automático conserva la identificación original; el archivo de origen no se modifica.</p><div id="undSubsRows"></div></div>
+    </div></div><!-- /grp-subs -->
+  </section>
+
+  <!-- TORRENT Y SUBIDA -->
+  <section class="section" id="sec-torrent">
+    <div class="sechead">Torrent y subida</div>
+    <div class="subtabs hide" id="subtabs"></div>
+    <div class="card"><h3><span class="ci">⚡</span>Torrent a subir</h3><p class="d">Carga un .torrent ya creado, o crea uno a partir de un archivo (o carpeta/pack) que YA tengas procesado. Se localiza el vídeo, se extrae el MediaInfo y las specs, se cargan las capturas que haya al lado y se rellenan los campos.</p>
+      <div class="acts">
+        <button class="act" onclick="cmd({type:'click',name:'btnTorrentUltimo'})"><span class="ai">⬆</span>Último torrent creado</button>
+        <button class="act" onclick="openPick('cargar_torrent')"><span class="ai">📥</span>Cargar un .torrent…</button>
+        <button class="act" onclick="openPick('crear_archivo')"><span class="ai">🧲</span>Torrent de un archivo…</button>
+        <button class="act" onclick="openPick('crear_pack')"><span class="ai">📦</span>Torrent de un pack…</button>
+        <button class="act wide" onclick="cmd({type:'click',name:'btnNuevaSubida'})"><span class="ai">➕</span>Nueva subida (pestaña en blanco)</button>
+      </div></div>
+    <div class="card"><h3><span class="ci">📝</span>Datos del torrent</h3>
+      <label class="lbl" style="margin-top:10px">Título</label><input class="input" data-in="upTitulo" placeholder="Nombre del release">
+      <label class="lbl">Keywords</label><input class="input" data-in="upKeywords" placeholder="palabras clave">
+      <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">TMDB</label><input class="input" data-in="upTmdb" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">IMDb</label><input class="input" data-in="upImdb"></div></div>
+      <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">TVDB</label><input class="input" data-in="upTvdb" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">MAL</label><input class="input" data-in="upMal" inputmode="numeric"></div></div>
+      <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">Temporada</label><input class="input" data-in="upTemporada" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">Episodio</label><input class="input" data-in="upEpisodio" inputmode="numeric"></div></div>
+      <button class="btn block mt" data-icon="search" onclick="cmd({type:'click',name:'btnBuscarTmdb'})">🔍 Buscar en TMDB</button>
+      <div id="tmdbResults" class="mt" aria-live="polite"></div>
+      <p class="d mt">Al cambiar el TMDB se sustituyen automáticamente la categoría, IMDb, TVDB, keywords y logos de la ficha anterior.</p></div>
+    <div class="card"><h3><span class="ci">🗄</span>Clasificación</h3>
+      <label class="lbl" style="margin-top:10px">Categoría</label><select class="input" data-combo="upCategoria"></select>
+      <label class="lbl">Tipo</label><select class="input" data-combo="upTipo"></select>
+      <label class="lbl">Resolución</label><select class="input" data-combo="upResolucion"></select></div>
+    <div class="card"><h3><span class="ci">🚩</span>Banderas</h3>
+      <div class="chips" id="flags">
+        <div class="chip sm" data-flag="upAnon">Publicación anónima</div><div class="chip sm" data-flag="upPersonal">Release propia</div>
+        <div class="chip sm" data-flag="upAudioEd">Audio editado</div><div class="chip sm" data-flag="upProper">Proper</div>
+        <div class="chip sm" data-flag="upDV">Dolby Vision</div><div class="chip sm" data-flag="upHDR10P">HDR10+</div>
+        <div class="chip sm" data-flag="upHDR10">HDR10</div><div class="chip sm" data-flag="upModQueue">Cola moderación</div></div></div>
+    <div class="card"><h3><span class="ci">📄</span>Textos</h3>
+      <label class="lbl" style="margin-top:10px">MediaInfo</label><textarea class="input" data-in="upMediainfo" placeholder="(se rellena al cargar el vídeo)"></textarea>
+      <button class="btn sm mt" onclick="cmd({type:'click',name:'btnMediaRefrescar'})">↻ Regenerar MediaInfo</button>
+      <label class="lbl">Descripción (BBCode)</label><textarea class="input" data-in="upDescripcion"></textarea>
+      <label class="lbl">NFO (ruta)</label><input class="input" data-in="upNfo"><button class="btn block mt" onclick="openAuxFile('nfo')">Elegir NFO del PC…</button></div>
+    <div class="card"><h3><span class="ci">📷</span>Capturas</h3><p class="d">Genera las capturas del vídeo cargado y súbelas/añádelas a la descripción.</p>
+      <div class="row mt"><span class="lbl grow" style="margin:0">Nº de capturas</span><select class="input" data-combo="numCapturas" style="width:100px"></select></div>
+      <div class="row mt"><button class="btn grow" data-icon="capture" onclick="cmd({type:'click',name:'btnCapGenerar'})">📷 Crear</button><button class="btn grow" data-icon="upload" onclick="cmd({type:'click',name:'btnCapInsertar'})">⬆ Subir y añadir</button></div><button class="btn block mt" onclick="openAuxFile('imagen')">+ Añadir captura existente del PC…</button></div>
+    <div class="card" id="firmasCard"><h3>Firma</h3><div id="firmasList" class="mt"></div><button class="btn mt" onclick="cmd({type:'sel_firma',path:''})">Sin firma</button></div>
+    <div class="card" id="cardLogos" style="display:none"><h3><span class="ci">🎨</span>Logos de TMDB</h3><p class="d">Toca un logo para añadirlo a la descripción (resaltado = el elegido).</p>
+      <div class="row mt"><button class="btn" id="btnActualizarLogos" onclick="cmd({type:'click',name:'btnActualizarLogos'})">↻ Actualizar logos</button><input class="input grow" id="logoPersonalizado" type="url" inputmode="url" placeholder="URL de logo HTTPS"><button class="btn" id="btnUsarLogoPersonalizado" onclick="useCustomLogo()">Añadir</button></div>
+      <div class="logos" id="logosBox"></div></div>
+    <div class="card" id="cardCaps" style="display:none"><h3><span class="ci">🖼</span>Capturas para la descripción</h3>
+      <div class="row" style="margin-top:6px"><span class="counter grow" id="capCount" style="text-align:left">0 seleccionadas</span><button class="btn sm" onclick="cmd({type:'cap_todas',value:true})">Todas</button><button class="btn sm" onclick="cmd({type:'cap_todas',value:false})">Ninguna</button></div>
+      <p class="d mt">Toca una miniatura para marcar/desmarcar (entra en la descripción). 🔍 para verla grande.</p>
+      <div class="caps" id="capsBox"></div></div>
+    <div class="card"><div class="dockrow"><button class="btn primary grow" onclick="cmd({type:'subir'})">⬆ Subir al tracker</button><a class="btn link" id="btnVerTracker" data-icon="view" target="_blank" rel="noopener noreferrer" aria-disabled="true" onclick="return openTrackerPage(event)">🌐 Ver</a></div></div>
+    <div class="card" id="cardTorrentDescarga" style="display:none"><h3><span class="ci">🌱</span>Torrent del tracker</h3>
+      <p class="d">Este es el torrent devuelto por el tracker, con el que debes poner el contenido a sembrar.</p>
+      <p class="d mt" id="torrentDescargaNombre"></p>
+      <a class="btn primary block link mt" id="btnDescargarTorrent" href="#">⬇ Descargar .torrent</a></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section class="section" id="sec-ajustes">
+    <div class="sechead">Ajustes / claves</div>
+    <div class="card"><h3><span class="ci">🛰</span>Tracker (HDZERO)</h3>
+      <label class="lbl" style="margin-top:10px">URL del tracker</label><input class="input" data-in="cfgTrackerUrl">
+      <label class="lbl">API token</label><input class="input" data-in="cfgTrackerToken" type="password">
+      <label class="lbl">Announce (passkey)</label><input class="input" data-in="announce" type="password"></div>
+    <div class="card"><h3><span class="ci">🖼</span>Host de imágenes</h3>
+      <p class="d">Servidor preferido: si falla, se probarán los demás automáticamente. imgbb requiere clave; Pixhost admite hasta 10 MB. Se conserva la imagen original.</p>
+      <div class="chips seg" data-group="hostImg"><div class="chip" data-v="FREEIMAGE">freeimage</div><div class="chip" data-v="IMGBB">imgbb</div><div class="chip" data-v="IMGBOX">imgbox</div><div class="chip" data-v="PIXHOST">Pixhost</div></div>
+      <label class="lbl">imgbb key</label><input class="input" data-in="cfgImgbbKey" type="password">
+      <label class="lbl">imgbox usuario</label><input class="input" data-in="cfgImgboxUser">
+      <label class="lbl">imgbox contraseña</label><input class="input" data-in="cfgImgboxPass" type="password"></div>
+    <div class="card"><h3><span class="ci">🎬</span>TMDB</h3><label class="lbl" style="margin-top:10px">Clave/token de TMDB</label><input class="input" data-in="cfgTmdbKey" type="password"></div>
+    <div class="card"><h3><span class="ci">📂</span>Carpetas</h3>
+      <label class="lbl" style="margin-top:10px">Archivos procesados y capturas</label>
+      <div class="row"><input class="input grow" data-in="cfgCarpetaProcesados"><button class="btn icon" onclick="openBrowse('cfgCarpetaProcesados')">📂</button></div>
+      <label class="lbl">Carpeta por defecto de los .torrent</label>
+      <div class="row"><input class="input grow" data-in="cfgCarpetaTorrent"><button class="btn icon" onclick="openBrowse('cfgCarpetaTorrent')">📂</button></div></div>
+    <div class="card"><h3><span class="ci">🧑</span>Soporte</h3><label class="lbl" style="margin-top:10px">Tu usuario / alias</label><input class="input" data-in="cfgUsuarioSoporte"></div>
+    <div class="card"><h3><span class="ci">📡</span>Conexión remota</h3><div class="row mt"><span class="dot" id="connDot2"></span><span class="d" id="connTxt2" style="color:var(--text)">—</span></div></div>
+  </section>
+</main>
+
+<div class="dock">
+  <div class="prog hide" id="prog"><div class="pl"><span id="progTxt">Preparando…</span><span id="progPct">0%</span></div><div class="bar"><i id="progBar"></i></div>
+    <!-- 2ª barra: detalle de la tarea en curso (ensamblado, hasheo, copia entre discos…). El PC la
+         manda en montaje.pct2/fase2; pct2 = -1 -> oculta. Sin esto, tareas largas como una copia de
+         57 GB entre discos no mostraban NADA y parecía que el programa se había colgado. -->
+    <div class="prog2 hide" id="prog2"><div class="pl"><span id="prog2Txt"></span><span id="prog2Pct">0%</span></div><div class="bar"><i id="prog2Bar"></i></div></div>
+  </div>
+  <div class="auxprog hide" id="auxProg"></div>
+  <div class="dockrow">
+    <button class="btn icon" data-icon="reset" onclick="resetAll()" title="Empezar de cero" aria-label="Empezar de cero">🗑<span class="rlbl">Empezar de Zero</span></button>
+    <span class="destado" id="estadoTxt"></span>
+    <button class="btn primary" onclick="cmd({type:'iniciar'})" id="btnIni">▶ Iniciar montaje</button>
+    <button class="btn primary hide" onclick="cmd({type:'iniciar_todos'})" id="btnIniTodos" title="En «Cada archivo distinto»: encola todas las películas pendientes, una tras otra">▶▶ Todas</button>
+  </div>
+</div>
+<nav class="tabs">
+  <button class="tab active" data-sec="crear" onclick="go('crear')"><span class="ic">🎬</span><span>Proyecto</span></button>
+  <button class="tab" data-sec="torrent" onclick="go('torrent')"><span class="ic">🧲</span><span>Torrent</span></button>
+  <button class="tab" data-sec="ajustes" onclick="go('ajustes')"><span class="ic">⚙️</span><span>Ajustes</span></button>
+</nav>
+<div class="modal" id="modal">
+  <div class="sheet">
+    <div class="hd"><div class="row"><b class="grow" id="brTitle">📂 Explorar carpetas del PC</b><button class="btn sm" onclick="closeBrowse()">✕</button></div><div class="path" id="brPath">…</div></div>
+    <div class="body" id="brBody"><div class="empty">Cargando…</div></div>
+    <div class="ft"><button class="btn grow" onclick="brUp()">⬆ Subir</button><button class="btn primary grow" id="brUseBtn" onclick="brUse()">✓ Usar esta carpeta</button></div>
+  </div>
+</div>
+<div class="modal" id="tabModal" onclick="if(event.target===this)closeTabSheet()">
+  <div class="sheet">
+    <div class="hd"><div class="row"><b class="grow">🎬 Elegir película</b><button class="btn sm" onclick="closeTabSheet()">✕</button></div></div>
+    <div class="body" id="tabSheetBody"></div>
+  </div>
+</div>
+<div class="lb" id="lightbox" onclick="this.classList.remove('open')"><img alt=""></div>
+<div class="toast" id="toast"></div>
+<script>
+const API='/api';
+/* Reserva el espacio REAL del panel fijo: cambia con los avisos, barras de
+   progreso, orientación y área segura del móvil. No depende del estado remoto. */
+const bottomDock=document.querySelector('.dock');
+const bottomTabs=document.querySelector('.tabs');
+let bottomLayoutFrame=0;
+function reserveBottomSpace(){
+  if(bottomLayoutFrame)return;
+  bottomLayoutFrame=requestAnimationFrame(()=>{
+    bottomLayoutFrame=0;
+    const cover=Math.ceil(Math.max(0,...[bottomDock,bottomTabs].map(el=>
+      el&&el.getClientRects().length?innerHeight-el.getBoundingClientRect().top:0)));
+    document.documentElement.style.setProperty('--bottom-cover',cover+'px');
+  });
+}
+if(typeof ResizeObserver!=='undefined'){
+  const bottomObserver=new ResizeObserver(reserveBottomSpace);
+  [bottomDock,bottomTabs].forEach(el=>{if(el)bottomObserver.observe(el)});
+}else{
+  new MutationObserver(reserveBottomSpace).observe(bottomDock,{childList:true,subtree:true,characterData:true,attributes:true});
+}
+window.addEventListener('resize',reserveBottomSpace);
+if(window.visualViewport)window.visualViewport.addEventListener('resize',reserveBottomSpace);
+reserveBottomSpace();
+/* Texto contextual de la barra de carpeta por pantalla (mismos textos que el programa). */
+const HINTS={crear:'«Elegir vídeos…» para ver y marcar uno o varios archivos; «Carpeta…» procesa la carpeta entera. Las opciones se adaptan a lo que se detecte.',
+ torrent:'Carpeta de trabajo: aquí se buscan por defecto los .torrent y las capturas al subir (botón «Último creado» y al localizar el vídeo de un torrent).',
+ ajustes:'Carpeta de trabajo (común a todo el programa). No se usa en Ajustes; configura aquí tus claves.',
+ _def:'Carpeta con los vídeos a procesar. Las opciones se adaptan a lo que se detecte; el resultado se monta desde aquí.'};
+/* La barra de PROYECTOS (peliBar) es del lado de CREAR: ahora todo «crear el archivo» va en una
+   única pantalla (sec-crear). En «Torrent y subida» manda el selector de SUBIDAS; en Ajustes, ninguno. */
+const SECS_CREAR=['crear'];
+let curSec='crear';
+/* Pliega/despliega un bloque de la página «Proyecto» (General/Proyecto/Audio/Subtítulos). */
+function toggleGrp(name){const g=document.getElementById('grp-'+name);if(!g)return;const cl=g.classList.toggle('closed');const c=document.getElementById('chev-'+name);if(c)c.textContent=cl?'▸':'▾';}
+function go(sec){curSec=sec;document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById('sec-'+sec).classList.add('active');document.querySelectorAll('.tab,.snav').forEach(n=>n.classList.toggle('active',n.dataset.sec===sec));const h=document.getElementById('deskHint');if(h)h.textContent=HINTS[sec]||HINTS._def;if(typeof applyPeliBar==='function')applyPeliBar();applyInterface(remoteData);window.scrollTo({top:0});}
+/* Sidebar colapsable (☰), como el programa; se recuerda entre visitas. */
+function toggleSide(){document.body.classList.toggle('scol');try{localStorage.setItem('hdz_scol',document.body.classList.contains('scol')?'1':'0')}catch(e){}}
+try{if(localStorage.getItem('hdz_scol')==='1')document.body.classList.add('scol')}catch(e){}
+let tT;function toast(m,t){const e=document.getElementById('toast');e.textContent=m;e.className='toast show'+(t?' '+t:'');clearTimeout(tT);tT=setTimeout(()=>e.className='toast',2000)}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+// Conservar los nodos evita perder el foco, cerrar selectores y relanzar el
+// cálculo de alturas de toda la página en cada actualización de progreso.
+const markupCache=new Map();
+function setMarkup(id,html){
+  const box=document.getElementById(id);if(!box||markupCache.get(id)===html)return;
+  const active=document.activeElement;
+  if(active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)&&box.contains(active))return;
+  box.innerHTML=html;markupCache.set(id,html);
+}
+function validTmdbResults(rows){return (Array.isArray(rows)?rows:[]).map((r,i)=>r&&({...r,i:Number.isInteger(r.i)?r.i:i})).filter(r=>r&&/^[1-9][0-9]*$/.test(String(r.id))&&String(r.titulo||'').trim());}
+let remoteResponsive=false,remoteData={},commandPending=0,commandChain=Promise.resolve();
+function updateInstallButtons(d,on){
+  const u=d.update||{};
+  for(const id of ['btnActualizarWeb','btnActualizarSide']){
+    const button=document.getElementById(id);
+    button.classList.toggle('hide',!on||u.available!==true);
+    button.disabled=!remoteResponsive||u.canInstall!==true||!!u.requested;
+    button.title=u.requested?'Actualización solicitada…':u.canInstall?'Actualizar HDZ Studio a '+u.version:'Espera a que terminen los trabajos activos para actualizar';
+  }
+}
+async function requestUpdate(){
+  const u=remoteData.update||{};
+  if(!u.available||!u.canInstall||u.requested||!remoteResponsive)return;
+  if(!confirm('¿Actualizar HDZ Studio a '+u.version+'? Se guardarán los ajustes y se cerrará el proyecto actual. El programa se reabrirá automáticamente y la web se reconectará.'))return;
+  if(await cmd({type:'actualizar'}))toast('Actualización solicitada. La web se reconectará cuando el programa vuelva a abrirse.','ok');
+}
+function trackerPageUrl(value){
+  try{
+    const u=new URL(String(value||''));
+    // Solo la ficha pública; nunca enlaces de descarga, passkeys ni scripts.
+    if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.search||u.hash||
+      !/^\/torrents\/[1-9]\d*\/?$/.test(u.pathname))return '';
+    return u.href;
+  }catch(e){return '';}
+}
+function updateTrackerLink(d,on){
+  const link=document.getElementById('btnVerTracker');
+  const url=on?trackerPageUrl(d.torrentWebUrl):'';
+  if(url)link.href=url;else link.removeAttribute('href');
+  link.setAttribute('aria-disabled',url?'false':'true');
+  link.title=url?'Abrir la ficha del torrent en este dispositivo':
+    !on?'Conecta el programa para consultar el enlace':
+    !Object.prototype.hasOwnProperty.call(d,'torrentWebUrl')?'Actualiza HDZ Studio a la versión 1.17.8 o posterior para abrir el enlace desde la web':
+    'Esta subida todavía no tiene un enlace válido en el tracker';
+}
+function openTrackerPage(event){
+  const link=document.getElementById('btnVerTracker');
+  if(link.getAttribute('aria-disabled')==='true'){
+    event.preventDefault();toast(link.title,'warn');return false;
+  }
+  // Enlace nativo activado por el usuario: sin órdenes al PC ni ventana emergente tardía.
+  return true;
+}
+function cmd(c){
+  const payload={...c,requestId:crypto.randomUUID().replaceAll('-',''),session:remoteData.session};
+  const isUpload=['subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
+  if(isUpload)payload.subidaTab=remoteData.tabSubidaActual;
+  else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_lang','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
+  commandPending++;
+  const run=async()=>{
+    try{
+      if(!remoteResponsive||remoteData.busy)throw new Error('El programa está ocupado o no responde. La orden no se ha enviado.');
+      let accepted;
+      for(let attempt=0;attempt<2;attempt++){
+        try{const r=await fetch(API+'/cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});const j=await r.json();if(!r.ok)throw new Error(j.error||'No se pudo aceptar la orden');accepted=j;break;}
+        catch(e){if(attempt)throw e;await new Promise(r=>setTimeout(r,600));}
+      }
+      const deadline=Date.now()+90000;
+      while(Date.now()<deadline){
+        const r=await fetch(API+'/cmd/status?id='+encodeURIComponent(accepted.id),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+        if(!r.ok)throw new Error('No se puede confirmar la orden. No la repitas hasta revisar su resultado.');
+        const result=await r.json();
+        if(result.status==='failed')throw new Error(result.message||'La orden no se pudo ejecutar');
+        if(result.status==='done')return true;
+        await new Promise(r=>setTimeout(r,400));
+      }
+      throw new Error('La orden sigue pendiente. Comprueba el programa antes de repetirla.');
+    }catch(e){markupCache.clear();toast(e.message||'Sin conexión','warn');const status=document.getElementById('estadoTxt');if(status)status.textContent=e.message;return false;}
+    finally{commandPending--;if(!commandPending){lock={};subLock=0;try{render(await getState());}catch(e){}}}
+  };
+  commandChain=commandChain.then(run,run);return commandChain;
+}
+async function getState(){const r=await fetch(API+'/state',{cache:'no-store'});if(!r.ok)throw 0;return r.json();}
+function resetAll(){if(confirm('¿Empezar de Zero? Se detienen el montaje y las tareas pendientes y se vacía la sesión. No se borran vídeos, ajustes, credenciales ni el historial guardado.'))cmd({type:'reset'}).then(ok=>{if(ok){document.getElementById('logoPersonalizado').value='';document.getElementById('estadoDetails').open=false;const preview=document.getElementById('descriptionPreview');preview.innerHTML='';preview.classList.add('hide');document.querySelector('[data-in="upDescripcion"]').classList.remove('hide');document.getElementById('bbToolbar').classList.remove('hide');document.getElementById('btnDescriptionPreview').textContent='Vista previa orientativa';if(window.hdzWorkspaceSelect)window.hdzWorkspaceSelect('general');}});}
+
+let lock={},focused=null,lastLote='',combosBuilt=false;
+function lk(k){lock[k]=Date.now()+3500}
+function locked(k){return Date.now()<(lock[k]||0)}
+/* chips exclusivos -> set_chip */
+document.querySelectorAll('.chips[data-group]').forEach(g=>{g.addEventListener('click',e=>{const c=e.target.closest('.chip');if(!c)return;
+  g.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');lk('g:'+g.dataset.group);cmd({type:'set_chip',grupo:g.dataset.group,value:c.dataset.v});});});
+/* flags (multi) -> set_check */
+document.getElementById('flags').addEventListener('click',e=>{const c=e.target.closest('.chip');if(!c)return;const on=!c.classList.contains('on');c.classList.toggle('on',on);lk('f:'+c.dataset.flag);cmd({type:'set_check',name:c.dataset.flag,value:on});});
+/* switches -> set_switch */
+function tSwitch(el){const on=!el.classList.contains('on');el.classList.toggle('on',on);lk('s:'+el.dataset.sw);cmd({type:'set_switch',name:el.dataset.sw,value:on});}
+/* inputs -> set_input (al perder foco / Enter) */
+document.querySelectorAll('input[data-in],textarea[data-in]').forEach(el=>{
+  el.addEventListener('focus',()=>focused=el.dataset.in);
+  el.addEventListener('blur',()=>{focused=null;if(el.type==='password'&&!el.value.trim())return;lk('i:'+el.dataset.in);cmd({type:'set_input',name:el.dataset.in,value:el.value});});
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'&&el.tagName!=='TEXTAREA'){el.blur();}});
+});
+/* Los DOS campos de carpeta (tarjeta móvil + barra de escritorio) comparten estado: editar uno
+   actualiza el PC y el otro. syncCarpeta() los rellena desde el estado del PC (respetando foco/lock). */
+['carpeta','carpetaTop'].forEach(id=>{const el=document.getElementById(id);if(!el)return;
+  el.addEventListener('focus',()=>focused='carpeta');
+  el.addEventListener('blur',()=>{focused=null;lk('i:carpeta');cmd({type:'set_carpeta',value:el.value});const o=document.getElementById(id==='carpeta'?'carpetaTop':'carpeta');if(o)o.value=el.value;});
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el.blur();}});});
+function syncCarpeta(v){if(focused==='carpeta'||locked('i:carpeta')||v==null)return;
+  ['carpeta','carpetaTop'].forEach(id=>{const el=document.getElementById(id);if(el&&el.value!==String(v))el.value=v;});}
+/* combos -> set_combo */
+document.querySelectorAll('select[data-combo]').forEach(el=>{el.addEventListener('change',()=>{lk('c:'+el.dataset.combo);cmd({type:'set_combo',name:el.dataset.combo,value:el.value});});});
+function allFiles(on){document.querySelectorAll('#listado .cb').forEach(cb=>cb.classList.toggle('on',on));cmd({type:'sel_todos',value:on});}
+function toggleSel(el){const on=!el.classList.contains('on');el.classList.toggle('on',on);cmd({type:'sel',nombre:el.dataset.n,value:on});}
+let epEditing=false;
+function bindEpInputs(){document.querySelectorAll('#listado .epin').forEach(el=>{
+  el.addEventListener('focus',()=>epEditing=true);
+  el.addEventListener('blur',()=>{epEditing=false;cmd({type:'set_episodio',nombre:el.dataset.ep,value:el.value});});
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el.blur();}});});}
+/* Películas como PANTALLAS (heterogéneo): se cambia DESLIZANDO en cualquier parte de la pantalla.
+   Un único indicador global bajo la cabecera (título + puntos) dice en cuál estás; tocarlo abre el
+   selector a pantalla completa. Cambiar de película envía set_tab -> Cambiar-TabProy en el PC, que
+   vuelca su identidad/audio/subs en los controles; el contenido de la sección ES esa película. */
+let tabLock=0,curTabs=[],curHet=false,pendIdx=null;
+function tabActiveIdx(){if(pendIdx!=null)return pendIdx;const a=curTabs.find(t=>t.activa);return a?a.i:0}
+/* Muestra/oculta la barra de proyectos según haya proyectos, modo heterogéneo Y estemos en una
+   pantalla del lado de crear (en «Torrent y subida»/Ajustes no aparece, como en el programa). */
+function applyPeliBar(){
+  const show=curHet&&curTabs.length>0&&SECS_CREAR.includes(curSec),bar=document.getElementById('peliBar');
+  bar.classList.toggle('hide',!show);
+  document.body.classList.toggle('hasPeli',show);
+  return show;
+}
+function renderTabs(tabs,het){
+  curHet=het;
+  if(Date.now()>=tabLock){curTabs=tabs||[];pendIdx=null;} /* con lock activo mantenemos la vista optimista */
+  const bar=document.getElementById('peliBar');
+  if(!applyPeliBar()){setMarkup('peliBar','');return;}
+  const i=Math.min(tabActiveIdx(),curTabs.length-1),t=curTabs[i]||curTabs[0];
+  setMarkup('peliBar',`<button class="pb" aria-label="Elegir película"><span class="dots">${curTabs.map(x=>`<span class="dot2${x.i===i?' on':''}"></span>`).join('')}</span><span class="t">🎬 ${esc(t.titulo||('Película '+(i+1)))}</span><span class="c">${i+1}/${curTabs.length} · desliza ↔</span></button>`);
+}
+function tabGo(i,dir){
+  if(i===tabActiveIdx()||i<0||i>=curTabs.length)return;
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  lock={};focused=null;lastLote='';  /* refresca los campos de la nueva película; no arrastra los de la anterior */
+  pendIdx=i;tabLock=Date.now()+2600;renderTabs(curTabs,curHet);
+  const s=document.querySelector('.section.active'); /* la sección entera se desliza: sensación de cambiar de pantalla */
+  if(s&&dir){s.style.animation='none';void s.offsetHeight;s.style.animation=(dir>0?'slInL':'slInR')+' .22s ease';}
+  cmd({type:'set_tab',idx:i});
+}
+function tabStep(d){if(!curHet||curTabs.length<2||!SECS_CREAR.includes(curSec))return;tabGo(Math.max(0,Math.min(curTabs.length-1,tabActiveIdx()+d)),d);}
+document.addEventListener('click',e=>{
+  if(e.target.closest('#peliBar .pb')){openTabSheet();return;}
+  const r=e.target.closest('.tabrow');if(r){closeTabSheet();const i=+r.dataset.ti;tabGo(i,i>tabActiveIdx()?1:-1);}
+});
+function openTabSheet(){if(!curTabs.length)return;const a=tabActiveIdx();
+  document.getElementById('tabSheetBody').innerHTML=curTabs.map(t=>`<div class="tabrow${t.i===a?' on':''}" data-ti="${t.i}"><span class="ic">🎬</span><span class="grow">${esc(t.titulo||('Película '+(t.i+1)))}</span>${t.i===a?'<span class="chk">✓ Actual</span>':''}</div>`).join('');
+  document.getElementById('tabModal').classList.add('open');}
+function closeTabSheet(){document.getElementById('tabModal').classList.remove('open');}
+/* Swipe en CUALQUIER parte de la pantalla = pasar de película. Solo se ignora si el gesto empieza
+   donde estorbaría: un modal/lightbox abierto, un carrusel horizontal o un campo de texto. */
+let swX=0,swY=0,swOk=false;
+document.addEventListener('touchstart',e=>{swX=e.touches[0].clientX;swY=e.touches[0].clientY;
+  swOk=!!e.target.closest('#peliBar')&&!document.querySelector('.modal.open,.lb.open')},{passive:true});
+document.addEventListener('touchend',e=>{if(!swOk)return;
+  const dx=e.changedTouches[0].clientX-swX,dy=e.changedTouches[0].clientY-swY;
+  if(Math.abs(dx)>64&&Math.abs(dx)>2.2*Math.abs(dy))tabStep(dx<0?1:-1);},{passive:true});
+
+/* Pestañas de SUBIDA: reflejan las del programa (una por release). Tocar una cambia la subida activa
+   (set_subida_tab -> Cambiar-Tab en el PC), que vuelca SU torrent/capturas/descripción/IDs. */
+let subLock=0,curSubs=[];
+function renderSubtabs(tabs){
+  curSubs=tabs||[];
+  const box=document.getElementById('subtabs'),show=curSubs.length>1;
+  box.classList.toggle('hide',!show);
+  if(!show){setMarkup('subtabs','');return;}
+  if(Date.now()<subLock)return; /* mantiene el resaltado optimista tras tocar */
+  setMarkup('subtabs',curSubs.map(t=>`<div class="subtab${t.activa?' on':''}" data-si="${t.i}"><span class="st">${esc(t.titulo||('Subida '+(t.i+1)))}</span></div>`).join(''));
+}
+document.getElementById('subtabs').addEventListener('click',e=>{const t=e.target.closest('.subtab');if(!t)return;const i=+t.dataset.si;
+  /* Antes de cambiar: confirmar cualquier edición pendiente en la subida ACTUAL (blur) y soltar los
+     bloqueos de los campos, para que al llegar la otra subida sus valores (título, IDs, descripción…)
+     se refresquen y NO se quede ninguno de la anterior. Evita subir con el nombre/campos cruzados. */
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  lock={};focused=null;lastLote='';
+  document.querySelectorAll('#subtabs .subtab').forEach(x=>x.classList.toggle('on',+x.dataset.si===i));
+  subLock=Date.now()+2500;cmd({type:'set_subida_tab',idx:i});});
+function buildCombos(c){if(combosBuilt||!c)return;const set=(name,arr)=>{const el=document.querySelector('select[data-combo="'+name+'"]');if(!el||!arr)return;el.innerHTML=arr.map(o=>`<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('');};
+  set('plataforma',c.plataforma);set('formato',c.formato);set('upCategoria',c.upCategoria);set('upTipo',c.upTipo);set('upResolucion',c.upResolucion);set('numCapturas',c.numCapturas);set('epsPorVideo',c.epsPorVideo);combosBuilt=true;}
+function setChipG(g,val){if(locked('g:'+g))return;const el=document.querySelector('.chips[data-group="'+g+'"]');if(!el||val==null)return;el.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',String(c.dataset.v)===String(val)));}
+function setInp(name,val){if(name===focused||locked('i:'+name)||val==null)return;const el=document.querySelector('[data-in="'+name+'"]');if(el&&el.value!==String(val))el.value=val;}
+function setSw(name,val){if(locked('s:'+name)||val==null)return;const el=document.querySelector('[data-sw="'+name+'"]');if(el)el.classList.toggle('on',!!val);}
+function setChk(name,val){if(locked('f:'+name)||val==null)return;const el=document.querySelector('[data-flag="'+name+'"]');if(el)el.classList.toggle('on',!!val);}
+function setCmb(name,val){if(locked('c:'+name)||val==null)return;const el=document.querySelector('select[data-combo="'+name+'"]');if(el)el.value=String(val);}
+function setCardVisible(id,visible){const el=document.getElementById(id);if(el)el.style.display=visible?'block':'none';}
+let audioLangLock=0,lastAudioLangs='';
+function toggleAudioLang(el){const on=!el.classList.contains('on');el.classList.toggle('on',on);audioLangLock=Date.now()+2600;updateAudioLangCount();cmd({type:'set_audio_lang',code:el.dataset.v,value:on});}
+function updateAudioLangCount(){const box=document.getElementById('audioLangs'),n=box.querySelectorAll('.chip.on').length,t=box.querySelectorAll('.chip').length;document.getElementById('audioLangCount').textContent=t?(n+' / '+t):'';}
+let audioTracksKey='',audioTracksLock=0;
+function renderAudioTracks(d){
+ const card=document.getElementById('cardAudioTracksWeb');if(!card)return;const rows=d.audioTracks||[];card.style.display=d.audioTracksSupported&&rows.length?'':'none';
+ if(Date.now()<audioTracksLock)return;const key=JSON.stringify([d.session,rows]);if(key===audioTracksKey)return;audioTracksKey=key;
+ const box=document.getElementById('audioTrackRows');box.replaceChildren();
+ for(const row of rows){const label=document.createElement('label');label.className='row mt';label.style.cssText='align-items:flex-start;min-height:44px;cursor:pointer';const choice=document.createElement('input');choice.type='checkbox';choice.checked=!!row.sel;choice.style.cssText='width:20px;height:20px;flex-shrink:0;accent-color:#EF4444';choice.disabled=!remoteResponsive||!!d.busy;choice.dataset.audioTrack=String(row.id);
+ const text=document.createElement('span');text.style.cssText='overflow-wrap:anywhere;min-width:0;font-size:13px';text.textContent=row.etiqueta;label.append(choice,text);box.append(label);
+ choice.onchange=()=>{audioTracksLock=Date.now()+2600;cmd({type:'set_audio_track',archivo:row.archivo,id:row.id,value:choice.checked})};}
+}
+function renderAudioLangs(items,visible){
+  const card=document.getElementById('cardAudioLangs'),box=document.getElementById('audioLangs');items=items||[];
+  const show=!!visible&&items.length>1;card.style.display=show?'block':'none';
+  if(!show){lastAudioLangs='';box.innerHTML='';updateAudioLangCount();return;}
+  if(Date.now()<audioLangLock){updateAudioLangCount();return;}
+  const key=JSON.stringify(items.map(x=>[x.v,x.t,x.sel]));
+  if(key!==lastAudioLangs){lastAudioLangs=key;box.innerHTML=items.map(x=>`<div class="chip${x.sel?' on':''}" data-v="${esc(x.v)}" onclick="toggleAudioLang(this)">${esc(x.t)}</div>`).join('');}
+  updateAudioLangCount();
+}
+let convTracks=[],convRows=[],convLock=0;
+function convDest(index){const t=convTracks.find(x=>String(x.v)===String(index));return t?(t.destinos||[]):[];}
+function pushConv(){convLock=Date.now()+2200;cmd({type:'set_conv',rows:convRows.map(r=>({Index:String(r.Index),Dest:String(r.Dest),MantenerOriginal:!!r.MantenerOriginal}))});}
+function renderConv(tracks,rows,visible){
+  setCardVisible('cardConvAudioWeb',!!visible);const box=document.getElementById('convAudioRows');convTracks=tracks||[];
+  if(!visible||!convTracks.length){setMarkup('convAudioRows','');convRows=[];return;}
+  if(Date.now()<convLock)return;
+  convRows=(rows||[]).map(r=>({Index:String(r.Index),Dest:String(r.Dest),MantenerOriginal:!!r.MantenerOriginal}));
+  setMarkup('convAudioRows',convRows.map((r,i)=>{const ds=convDest(r.Index);return `<div class="row wrap mt"><select class="input grow" onchange="changeConv(${i},'Index',this.value)">${convTracks.map(t=>`<option value="${esc(t.v)}"${String(t.v)===r.Index?' selected':''}>${esc(t.t)}</option>`).join('')}</select><span>→</span><select class="input grow" onchange="changeConv(${i},'Dest',this.value)">${ds.map(d=>`<option value="${esc(d.v)}"${String(d.v)===r.Dest?' selected':''}>${esc(d.t)}</option>`).join('')}</select><button class="btn sm" onclick="changeConv(${i},'MantenerOriginal',${!r.MantenerOriginal})">${r.MantenerOriginal?'✓ Mantener':'Sustituir'}</button><button class="btn sm" onclick="removeConv(${i})">✕</button></div>`;}).join(''));
+}
+function changeConv(i,k,v){if(!convRows[i])return;convRows[i][k]=v;if(k==='Index'){const ds=convDest(v);convRows[i].Dest=ds.length?String(ds[0].v):'';}renderConv(convTracks,convRows,true);pushConv();}
+function addConv(){if(!convTracks.length)return;const t=convTracks[0],ds=t.destinos||[];convRows.push({Index:String(t.v),Dest:ds.length?String(ds[0].v):'',MantenerOriginal:true});renderConv(convTracks,convRows,true);pushConv();}
+function removeConv(i){convRows.splice(i,1);renderConv(convTracks,convRows,true);pushConv();}
+const undChoices={Audio:new Map(),Sub:new Map()};
+function expandLanguageSelect(select){
+  if(select.dataset.expanded)return;
+  const choices=undChoices[select.dataset.t]?.get(JSON.stringify([select.dataset.a,select.dataset.i]))||[];
+  if(!choices.length)return;const value=select.value;
+  select.innerHTML=choices.map(o=>`<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('');select.value=value;select.dataset.expanded='1';
+}
+function renderUnd(items,tipo,cardId,boxId,visible){
+  const card=document.getElementById(cardId),box=document.getElementById(boxId),rows=(items||[]).filter(x=>x.tipo===tipo);card.style.display=(visible&&rows.length)?'block':'none';
+  undChoices[tipo]=new Map(rows.map(r=>[JSON.stringify([String(r.archivo),String(r.id)]),r.opciones||remoteData.idiomasPistaOpciones||[]]));
+  if(!(visible&&rows.length)){setMarkup(boxId,'');return;}
+  setMarkup(boxId,rows.map(r=>{const choices=r.opciones||remoteData.idiomasPistaOpciones||[],current=choices.find(o=>String(o.v)===String(r.valor));return `<div class="row wrap mt"><span class="d grow" style="color:var(--text)">${esc(r.etiqueta)}</span><select class="input" style="min-width:150px" onfocus="expandLanguageSelect(this)" onpointerdown="expandLanguageSelect(this)" onchange="cmd({type:'set_und',archivo:this.dataset.a,id:this.dataset.i,tipo:this.dataset.t,value:this.value})" data-a="${esc(r.archivo)}" data-i="${esc(r.id)}" data-t="${esc(r.tipo)}"><option value="${esc(r.valor)}" selected>${esc(current?.t||r.valor||'Automático')}</option></select></div>`;}).join(''));
+}
+function renderSubLangs(items,visible){const card=document.getElementById('cardSubsPersonalWeb');card.style.display=visible?'block':'none';setMarkup('subLangs',visible?(items||[]).map(x=>`<div class="chip${x.sel?' on':''}" onclick="this.classList.toggle('on');cmd({type:'set_sub_lang',code:this.dataset.v,value:this.classList.contains('on')})" data-v="${esc(x.v)}">${esc(x.t)}</div>`).join(''):'');}
+function renderSubsUnicos(items,visible){const card=document.getElementById('cardSubsUnicosWeb');const show=visible&&(items||[]).length;card.style.display=show?'block':'none';setMarkup('subsUnicosRows',show?items.map(r=>`<div class="row wrap mt"><span class="d grow" style="color:var(--text)">${esc(r.etiqueta)}</span><button class="btn sm${r.forzado?'':' primary'}" onclick="cmd({type:'set_sub_unico',idx:${r.i},forzado:false})">Completo</button><button class="btn sm${r.forzado?' primary':''}" onclick="cmd({type:'set_sub_unico',idx:${r.i},forzado:true})">Forzado</button></div>`).join(''):'');}
+let remixRows=[],remixLock=0;
+function pushRemix(){remixLock=Date.now()+2200;cmd({type:'set_remezcla',fuentes:remixRows.map(r=>({ruta:r.ruta,archivo:r.archivo,video:!!r.video,audio:!!r.audio,subs:!!r.subs}))});}
+function renderRemix(rows,visible,audios,subs){
+  const card=document.getElementById('cardRemezclaWeb'),box=document.getElementById('remezclaRows');card.style.display=visible?'block':'none';if(!visible){setMarkup('remezclaRows','');remixRows=[];return;}
+  if(Date.now()>=remixLock)remixRows=(rows||[]).map(r=>({ruta:r.ruta||'',archivo:r.archivo||'',video:!!r.video,audio:!!r.audio,subs:!!r.subs}));
+  setMarkup('remezclaRows',remixRows.map((r,i)=>`<div class="remixrow"><div class="remixname">${esc((r.archivo||r.ruta).split(/[\\/]/).pop())}</div><div class="remixactions"><button class="btn sm${r.video?' primary':''}" onclick="changeRemix(${i},'video',true)">Vídeo</button><button class="btn sm${r.audio?' primary':''}" onclick="changeRemix(${i},'audio',${!r.audio})">Audio</button><button class="btn sm${r.subs?' primary':''}" onclick="changeRemix(${i},'subs',${!r.subs})">Subs</button><button class="btn sm" onclick="removeRemix(${i})" aria-label="Quitar vídeo de la remezcla">✕</button></div></div>`).join(''));
+  const langs=document.getElementById('remezclaLangs'),ab=document.getElementById('remezclaAudio'),sb=document.getElementById('remezclaSubs'),has=(audios||[]).length||(subs||[]).length;langs.style.display=has?'block':'none';
+  setMarkup('remezclaAudio',(audios||[]).map(x=>`<div class="chip${x.sel?' on':''}" data-v="${esc(x.v)}" onclick="toggleRemixLang(this,'audio')">${esc(x.t)}</div>`).join(''));setMarkup('remezclaSubs',(subs||[]).map(x=>`<div class="chip${x.sel?' on':''}" data-v="${esc(x.v)}" onclick="toggleRemixLang(this,'subs')">${esc(x.t)}</div>`).join(''));
+}
+function changeRemix(i,k,v){if(!remixRows[i])return;if(k==='video'&&v)remixRows.forEach((r,n)=>{r.video=n===i;});else remixRows[i][k]=v;renderRemix(remixRows,true,[],[]);pushRemix();}
+function removeRemix(i){remixRows.splice(i,1);renderRemix(remixRows,true,[],[]);pushRemix();}
+function toggleRemixLang(el,tipo){el.classList.toggle('on');cmd({type:'set_remezcla_lang',tipo,code:el.dataset.v,value:el.classList.contains('on')});}
+function openRemixSource(){brMode='file';brFiltro='video';brOnFolder=null;brOnFile=(p)=>{const ruta=p.replace(/[\\/][^\\/]+$/,'');remixRows.push({ruta,archivo:p,video:remixRows.length===0,audio:remixRows.length>0,subs:remixRows.length>0});renderRemix(remixRows,true,[],[]);pushRemix();toast('Fuente de remezcla añadida','ok');};_openBr('Elegir archivo fuente de remezcla');}
+function openRemixSeriesFolder(){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=(p)=>{remixRows.push({ruta:p,archivo:'',video:remixRows.length===0,audio:remixRows.length>0,subs:remixRows.length>0});renderRemix(remixRows,true,[],[]);pushRemix();toast('Carpeta de serie añadida','ok');};_openBr('Elegir carpeta de una versión de la serie');}
+
+function render(s){
+  const d=s.data||{};buildCombos(d.combos);
+  remoteData=d;
+  const on=!!s.online,uiAge=d.uiTs?((Date.now()/1000)-Number(d.uiTs)):0;
+  /* Compatibilidad con agentes antiguos: sin uiTs usamos el estado de transporte. En agentes
+     nuevos, un estado WPF congelado durante más de 8 s se muestra como "sin responder" aunque
+     el worker de red siga alcanzando el relay. */
+  remoteResponsive=on&&(typeof s.responsive==='boolean'?s.responsive:(!d.uiTs||uiAge<8));
+  const txt=!on?'Cerrado':(remoteResponsive?'Conectado':'Sin responder');
+  document.getElementById('connDot').classList.toggle('off',!remoteResponsive);document.getElementById('connTxt').textContent=txt;
+  document.getElementById('connDot2').classList.toggle('off',!remoteResponsive);document.getElementById('connTxt2').textContent=!on?'El programa no está abierto':(remoteResponsive?'Programa abierto y conectado':'El programa está abierto, pero su interfaz no responde');
+  const whoTxt=(on&&d.equipo)?(d.equipo+(d.v?' · v'+d.v:'')):'';
+  document.getElementById('who').textContent=on?(d.equipo||''):'';
+  document.getElementById('versionWeb').textContent=on&&d.v?'v'+d.v:'';
+  const ws=document.getElementById('whoSide');if(ws)ws.textContent=on&&d.v?'v'+d.v:'';
+  updateInstallButtons(d,on);
+  const d3=document.getElementById('connDot3'),t3=document.getElementById('connTxt3');
+  if(d3){d3.classList.toggle('off',!remoteResponsive);t3.textContent=!on?'Programa cerrado':(remoteResponsive?'Conectado':'Sin responder');}
+  updateTrackerLink(d,on);
+  const td=d.torrentDescarga||{},tc=document.getElementById('cardTorrentDescarga'),ta=document.getElementById('btnDescargarTorrent'),tn=document.getElementById('torrentDescargaNombre');
+  if(td.disponible&&/^[0-9a-f]{64}$/.test(String(td.id))){
+    tc.style.display='block';tn.textContent=td.nombre||'Torrent disponible';ta.href=API+'/torrent?id='+encodeURIComponent(td.id);ta.setAttribute('download',td.nombre||'tracker.torrent');
+  }else{tc.style.display='none';ta.removeAttribute('download');ta.href='#';tn.textContent='';}
+  syncCarpeta(d.carpeta);
+  const m=d.montaje||{},prog=document.getElementById('prog'),tb=document.getElementById('topBar');
+  if(m.visible||m.activo){prog.classList.remove('hide');document.getElementById('progBar').style.width=(m.pct||0)+'%';document.getElementById('progPct').textContent=(m.pct||0)+'%';document.getElementById('progTxt').textContent=(m.fase||'')+((m.enCola>0)?('  ·  '+m.enCola+' en cola'):'');tb.style.width=(m.pct||0)+'%';}
+  else{prog.classList.add('hide');tb.style.width='0';}
+  /* 2ª barra: detalle de la tarea en curso. pct2 = -1 (o ausente) -> oculta, igual que en el PC. */
+  const p2=document.getElementById('prog2'),v2=(typeof m.pct2==='number')?m.pct2:-1;
+  if((m.visible||m.activo)&&v2>=0){p2.classList.remove('hide');document.getElementById('prog2Bar').style.width=v2+'%';document.getElementById('prog2Pct').textContent=v2+'%';document.getElementById('prog2Txt').textContent=m.fase2||'';}
+  else{p2.classList.add('hide');}
+  /* Torrent, capturas e imágenes son tareas aparte del montaje. Se muestran siempre en la barra
+     inferior para que también se vean al navegar desde el móvil a otra sección. */
+  const aux=document.getElementById('auxProg'),tareas=Array.isArray(d.tareas)?d.tareas:[];
+  if(tareas.length){aux.classList.remove('hide');setMarkup('auxProg',tareas.map(t=>{const p=Math.max(0,Math.min(100,Number(t.pct)||0));return `<div class="auxtask"><div class="pl"><span><span class="kind">${esc(t.titulo||'Procesando')}</span> · ${esc(t.fase||'')}</span><span>${esc(t.detalle||p+'%')}</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`;}).join(''));}
+  else{aux.classList.add('hide');setMarkup('auxProg','');}
+  if(commandPending>0){applyInterface(d);return;}
+  setMarkup('historyResults',(d.history||[]).map(r=>`<div class="card" style="overflow-wrap:anywhere"><strong>${esc(r.status)}</strong><p class="d">${esc(r.date)}</p><p>${esc(r.video||'')}</p><p>${esc(r.torrent||'')}</p><p class="d">Seed: ${esc(r.seed||'No comprobado')}</p>${r.torrent?`<button class="btn block" data-id="${esc(r.id)}" onclick="cmd({type:'history_torrent',id:this.dataset.id})">Preparar descarga del torrent exacto</button>`:''}</div>`).join(''));
+  setMarkup('tmdbResults',validTmdbResults(d.tmdbResults).map(r=>`<button class="btn block mt" data-idx="${r.i}" onclick="cmd({type:'sel_tmdb',idx:Number(this.dataset.idx)})">${esc(r.titulo)} · ${esc(r.fecha||'')} · TMDB ${esc(r.id)}</button>`).join(''));
+  setMarkup('seasonFolders',(d.carpetas||[]).map(p=>`<div class="row mt"><span class="grow" style="overflow-wrap:anywhere;min-width:0">${esc(p)}</span><button class="btn" data-path="${esc(p)}" onclick="cmd({type:'remove_carpeta',path:this.dataset.path})" aria-label="Quitar temporada">✕</button></div>`).join(''));
+  const firmas=d.firmas||[];document.getElementById('firmasCard').style.display=firmas.length?'block':'none';
+  setMarkup('firmasList',firmas.map(f=>`<button class="btn block mt" data-path="${esc(f.ruta)}" onclick="cmd({type:'sel_firma',path:this.dataset.path})">${f.sel?'✓ ':''}${esc(f.nombre)}</button>`).join(''));
+  const o=d.opciones||{};for(const g in o)setChipG(g,o[g]);
+  const het=(o['modoLote']==='HETEROGENEO');const bt=document.getElementById('btnIniTodos'),bi=document.getElementById('btnIni');if(bt)bt.classList.toggle('hide',!het||curSec!=='crear');if(bi)bi.textContent='▶ Procesar este trabajo';
+  renderTabs(d.tabsProy||[],het);
+  renderSubtabs(d.tabsSubida||[]);
+  const sw=d.switches||{};for(const n in sw)setSw(n,sw[n]);
+  renderRemix(d.remezclaFuentes,!!d.remezclaVisible,d.remezclaAudio,d.remezclaSubs);
+  const fl=d.flags||{};for(const n in fl)setChk(n,fl[n]);
+  const cm=d.combos_sel||{};for(const n in cm)setCmb(n,cm[n]);
+  const inp=d.inputs||{};for(const n in inp)setInp(n,inp[n]);
+  renderAudioLangs(d.audioIdiomas,d.audioIdiomasVisible);
+  renderAudioTracks(d);
+  renderConv(d.pistasConversionAudio,d.conversionesAudio,d.conversionesAudioVisible);
+  setCardVisible('cardDefAudioWeb',!!d.defAudioVisible);
+  renderUnd(d.undAudioSubs,'Audio','cardUndAudioWeb','undAudioRows',!!d.undAudioVisible);
+  setCardVisible('cardPGSWeb',!!d.pgsVisible);
+  renderSubLangs(d.idiomasSubs,!!d.idiomasSubsPersonalizadosVisible);
+  renderSubsUnicos(d.subsUnicos,!!d.subsUnicosVisible);
+  renderUnd(d.undAudioSubs,'Sub','cardUndSubsWeb','undSubsRows',!!d.undSubsVisible);
+  document.getElementById('grpWeb').style.display=(o.origen==='WEB')?'block':'none';
+  document.getElementById('grpFisico').style.display=(o.origen==='FISICO')?'block':'none';
+  const serieOn=!!(d.switches&&d.switches.serie);
+  document.getElementById('cardMultiEp').style.display=serieOn?'block':'none';
+  const loteBase=d.lote||[],fuentesRemezcla=d.remezclaFuentes||[];
+  /* Compatibilidad inmediata: el programa abierto puede ser anterior a la versión que ya envía
+     loteRemezcla. La web conoce igualmente las fuentes exactas, así que las muestra sin esperar
+     a reiniciar el PC. Cuando el agente nuevo está activo, usa sus datos enriquecidos directamente. */
+  const loteRemezcla=!!d.loteRemezcla||((!!d.remezclaVisible)&&fuentesRemezcla.length>1);
+  const lote=(loteRemezcla&&!d.loteRemezcla)?fuentesRemezcla.filter(r=>r&&((r.archivo||r.ruta))).map(r=>{
+    const nombre=(r.archivo||r.ruta).split(/[\\/]/).pop(),base=loteBase.find(f=>f.nombre===nombre);
+    const roles=[];if(r.video)roles.push('VÍDEO FINAL');if(r.audio)roles.push('AUDIO');if(r.subs)roles.push('SUBS');
+    return Object.assign({},base||{},{nombre,sel:true,principal:!!r.video,fijo:true,badges:[{t:'REMEZCLA · '+roles.join(' + '),s:'accent'}].concat((base&&base.badges)||[])});
+  }):loteBase;
+  document.getElementById('selCount').textContent=lote.length?(loteRemezcla?(lote.length+' fuente'+(lote.length===1?'':'s')):(lote.filter(f=>f.sel).length+' / '+lote.length)):'—';
+  document.getElementById('btnTodosLote').classList.toggle('hide',loteRemezcla);document.getElementById('btnNingunoLote').classList.toggle('hide',loteRemezcla);
+  const rl=document.getElementById('resumenLote');if(rl)rl.textContent=d.resumen||'';
+  // Este aviso solo sirve en el PC. El progreso ya informa del montaje en la web.
+  // Coincidencia limitada al aviso conocido: no ocultar errores que mencionen la consola.
+  const estado=String(d.estado||'');
+  const avisoConsola=/^✓\s+Montaje lanzado en segundo plano\.(?:\s+\(\d+ en cola\))?\s+Pulsa «Mostrar consola» si el script pide algo\.$/.test(estado.trim());
+  const et=document.getElementById('estadoTxt');if(et)et.textContent=avisoConsola?'':estado;
+  const rp=document.getElementById('rowPack');if(rp)rp.style.display=(o.torrent==='PACK'||o.torrent==='AMBOS')?'block':'none';
+  const key=JSON.stringify([serieOn,lote]);
+  if(key!==lastLote&&!epEditing){lastLote=key;const box=document.getElementById('listado');
+    box.innerHTML=lote.length?lote.map(f=>{
+      const leaf=f.salida?f.salida.split(/[\\/]/).pop():'';
+      const esPrin=(f.principal!==false); // una pareja híbrida = un grupo; controles solo en el principal
+      const bds=(f.badges&&f.badges.length)?('<div class="bds">'+f.badges.map(b=>`<span class="bd ${esc(b.s||'')}">${esc(b.t)}</span>`).join('')+'</div>'):'';
+      const fijo=!!f.fijo;
+      return `<div class="fi"><div class="cb ${f.sel?'on':''}${fijo?' fixed':''}"${fijo?' aria-label="Fuente obligatoria de la remezcla"':' data-n="'+esc(f.nombre)+'" onclick="toggleSel(this)"'}></div><div class="grow"><div class="nm">${esc(f.nombre)}</div>`+bds
+        +((serieOn&&esPrin&&!fijo)?`<div class="fmeta"><span class="k">Ep(s)</span><input class="input epin" value="${esc(f.ep||'')}" data-ep="${esc(f.nombre)}" placeholder="S01E01-E02"></div>`:'')
+        +(esPrin?`<div class="fmeta"><span class="k">Salida</span><button class="btn sm" data-sal="${esc(f.nombre)}" onclick="openSalida(this.dataset.sal)">${f.salida?('📂 '+esc(leaf)):'📂 Elegir…'}</button>${f.salida?`<button class="btn sm" data-sal="${esc(f.nombre)}" onclick="cmd({type:'set_salida',nombre:this.dataset.sal,value:''})">✕</button>`:''}</div>`:'')
+        +`</div></div>`;
+    }).join(''):'<div class="empty"><span class="eic">🎬</span>Sin vídeos. Escribe la ruta arriba y pulsa Enter,<br>o explora las carpetas del PC.</div>';
+    bindEpInputs();}
+  renderCaps(d.capturas);renderLogos(d.logos);
+  applyInterface(d);
+  const refreshLogos=document.getElementById('btnActualizarLogos'),customLogo=document.getElementById('logoPersonalizado'),customLogoBtn=document.getElementById('btnUsarLogoPersonalizado');
+  refreshLogos.disabled=!d.logoRefresh||!remoteResponsive||!!d.busy;
+  refreshLogos.title=d.logoRefresh?'Consultar TMDB sin cambiar la descripción':'Actualiza el programa a 1.17.16 para usar esta opción';
+  const customLogoReady=!!d.customLogo&&remoteResponsive&&!d.busy;
+  customLogo.disabled=!customLogoReady;customLogoBtn.disabled=!customLogoReady;
+  customLogo.title=customLogoReady?'URL HTTPS directa de una imagen PNG, JPEG o WebP':'Actualiza el programa para usar logos personalizados';
+  customLogoBtn.title=customLogo.title;
+  if(browseOpen&&d.browse&&d.browse.path===brWant)renderBrowse(d.browse);
+}
+/* ===== Capturas ===== */
+let lastCaps='',capLock=0;
+function updateCapCount(){const on=document.querySelectorAll('#capsBox .cap.on').length,t=document.querySelectorAll('#capsBox .cap').length;document.getElementById('capCount').textContent=on+' / '+t+' seleccionadas';}
+function toggleCap(el,i){const on=!el.classList.contains('on');el.classList.toggle('on',on);capLock=Date.now()+2600;updateCapCount();cmd({type:'sel_captura',idx:i,value:on});}
+function renderCaps(caps){const card=document.getElementById('cardCaps');
+  if(!caps||!caps.length){card.style.display='none';lastCaps='';return;}
+  card.style.display='block';
+  if(Date.now()<capLock){updateCapCount();return;}
+  const key=JSON.stringify(caps.map(c=>[c.i,c.sel,c.thumb,c.subida]));
+  if(key===lastCaps){return;}lastCaps=key;
+  document.getElementById('capsBox').innerHTML=caps.map(c=>`<div class="cap ${c.sel?'on':''}" onclick="toggleCap(this,${Number(c.i)})"><img src="${esc(c.thumb||'')}" alt="" loading="lazy"><button class="capzoom" data-url="${esc(c.subida||c.thumb||'')}" onclick="event.stopPropagation();lightbox(this.dataset.url)">🔍</button></div>`).join('');
+  updateCapCount();}
+function lightbox(src){if(!src)return;const lb=document.getElementById('lightbox');lb.querySelector('img').src=src;lb.classList.add('open');}
+/* ===== Logos TMDB ===== */
+let lastLogos='';
+function selLogo(el){el.parentNode.querySelectorAll('.logo').forEach(x=>x.classList.remove('on'));el.classList.add('on');}
+function useCustomLogo(){const input=document.getElementById('logoPersonalizado'),url=input.value.trim();if(!url){toast('Escribe la URL HTTPS directa de un logo','warn');return;}cmd({type:'set_custom_logo',url}).then(ok=>{if(ok)input.value='';});}
+function renderLogos(logos){const card=document.getElementById('cardLogos');
+  if(!logos||!logos.length){card.style.display=(remoteData&&remoteData.customLogo)?'block':'none';lastLogos='';document.getElementById('logosBox').innerHTML='';return;}
+  card.style.display='block';
+  const key=JSON.stringify(logos.map(l=>[l.url,l.sel]));
+  if(key===lastLogos){return;}lastLogos=key;
+  document.getElementById('logosBox').innerHTML=logos.map(l=>`<div class="logo ${l.sel?'on':''}" data-url="${esc(l.url)}" onclick="selLogo(this);cmd({type:'sel_logo',url:this.dataset.url})"><img src="${esc(l.url)}" alt="logo"><span>${esc(l.w)}×${esc(l.h)}${l.lang?' · '+esc(l.lang):''}</span></div>`).join('');}
+/* ===== Explorador de carpetas / ficheros ===== */
+let browseOpen=false,brState=null,brWant='',brFiltro='video',brMode='folder',brOnFolder=null,brOnFile=null;
+let brSelFiles=new Set();
+function _openBr(titulo){browseOpen=true;brWant='';brState=null;brSelFiles.clear();
+  document.getElementById('brTitle').textContent='📂 '+titulo;
+  const ub=document.getElementById('brUseBtn');
+  ub.style.display=(brMode==='folder'||brMode==='multi')?'':'none';
+  ub.textContent=(brMode==='multi')?'✓ Usar estos vídeos':'✓ Usar esta carpeta';
+  document.getElementById('modal').classList.add('open');renderBrowse(null);cmd({type:'browse',path:'',filtro:brFiltro});}
+/* Una sola orden guarda carpeta y selección en el PC antes de analizarla, igual
+   que el escritorio. No depende de que el móvil siga abierto durante el escaneo. */
+function openElegir(){brMode='multi';brFiltro='video';brOnFile=null;brOnFolder=null;_openBr('Elegir vídeos (marca uno o varios)');}
+function openExtraFolder(){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=p=>cmd({type:'add_carpeta',path:p});_openBr('Añadir temporada independiente');}
+function openAuxFile(kind){brMode='file';brFiltro=kind==='descripcion_imagen'?'imagen':kind;brOnFolder=null;brOnFile=p=>cmd(kind==='nfo'?{type:'set_input',name:'upNfo',value:p}:{type:kind==='descripcion_imagen'?'description_image':'add_captura',path:p});_openBr(kind==='nfo'?'Elegir NFO':kind==='descripcion_imagen'?'Subir imagen a la descripción':'Añadir captura existente');}
+/* Modo carpeta: fija el valor de un campo de ruta */
+function openBrowse(target){target=target||'carpeta';brMode='folder';brFiltro='video';brOnFile=null;
+  brOnFolder=(p)=>{if(target==='carpeta'){cmd({type:'set_carpeta',value:p});['carpeta','carpetaTop'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=p;});lk('i:carpeta');}
+    else{cmd({type:'set_input',name:target,value:p});const el=document.querySelector('[data-in="'+target+'"]');if(el)el.value=p;lk('i:'+target);}toast('Carpeta seleccionada');};
+  _openBr('Elegir carpeta');}
+/* Modo acción: crear/cargar torrent de algo ya procesado */
+function openPick(kind){
+  if(kind==='crear_pack'){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=(p)=>{cmd({type:'crear_torrent',modo:'pack',path:p});toast('Creando torrent del pack…','ok');};_openBr('Carpeta / pack ya procesado');}
+  else if(kind==='crear_archivo'){brMode='file';brFiltro='video';brOnFolder=null;brOnFile=(p)=>{cmd({type:'crear_torrent',modo:'archivo',path:p});toast('Creando torrent del archivo…','ok');};_openBr('Elegir archivo procesado (.mkv/.mp4)');}
+  else if(kind==='cargar_torrent'){brMode='file';brFiltro='torrent';brOnFolder=null;brOnFile=(p)=>{cmd({type:'cargar_torrent',path:p});toast('Cargando torrent…','ok');};_openBr('Elegir un .torrent existente');}
+}
+/* Carpeta de salida propia de un vídeo concreto */
+function openSalida(nombre){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=(p)=>{cmd({type:'set_salida',nombre:nombre,value:p});toast('Carpeta de salida asignada','ok');};_openBr('Carpeta de salida del MKV');}
+function closeBrowse(){browseOpen=false;document.getElementById('modal').classList.remove('open');cmd({type:'browse',close:true});}
+function brGo(p){brWant=p||'';brSelFiles.clear();renderBrowse(null);cmd({type:'browse',path:brWant,filtro:brFiltro});}
+function brUp(){if(brState)brGo(brState.up||'');}
+async function brUse(){
+  if(brMode==='multi'){
+    if(!brState||!brState.path){return;}
+    if(brSelFiles.size===0){toast('Marca al menos un vídeo','warn');return;}
+    if(!remoteData.selectVideos){toast('Actualiza HDZ Studio a 1.17.10 o posterior para seleccionar vídeos desde la web','warn');return;}
+    const paths=[...brSelFiles],button=document.getElementById('brUseBtn');
+    if(button.disabled)return;
+    button.disabled=true;
+    try{
+      if(await cmd({type:'set_videos',paths})){
+        toast(paths.length+' vídeo(s) seleccionados para analizar','ok');closeBrowse();
+      }
+    }finally{button.disabled=false;}
+    return;
+  }
+  if(brState&&brState.path&&brOnFolder){brOnFolder(brState.path);}closeBrowse();}
+function brPickFile(p){if(brOnFile&&p){brOnFile(p);}closeBrowse();}
+function renderBrowse(b){
+  brState=b;
+  document.getElementById('brPath').textContent=b?(b.path||'Unidades del PC'):'Cargando…';
+  const body=document.getElementById('brBody');
+  if(!b){setMarkup('brBody','<div class="empty">Cargando…</div>');return;}
+  let h=(b.dirs||[]).map(d=>`<div class="diritem" data-path="${esc(d.path)}"><span class="ic">📁</span><span class="grow">${esc(d.name)}</span><span style="color:var(--sub)">›</span></div>`).join('');
+  const files=b.files||[];
+  if(brMode==='file'){
+    h+=files.map(f=>`<div class="filepick" data-path="${esc(f.path)}"><span class="ic">${brFiltro==='torrent'?'📥':'🎬'}</span><span class="grow">${esc(f.name)}</span><span class="pick">Elegir ›</span></div>`).join('');
+  }else if(brMode==='multi'){
+    h+=files.map(f=>{const on=brSelFiles.has(f.path);return `<div class="filepick" data-mpath="${esc(f.path)}"><div class="cb ${on?'on':''}" style="pointer-events:none"></div><span class="ic">🎬</span><span class="grow">${esc(f.name)}</span></div>`;}).join('');
+  }else if(files.length){
+    h+=`<div class="diritem" style="opacity:.65"><span class="ic">🎬</span><span class="grow">${files.length} vídeo(s) en esta carpeta</span></div>`;
+  }
+  if(!h)h='<div class="empty">'+(brMode==='file'?'Sin ficheros ni subcarpetas aquí.':'Carpeta vacía.')+'</div>';
+  setMarkup('brBody',h);
+}
+document.getElementById('brBody').addEventListener('click',e=>{
+  const mp=e.target.closest('.filepick[data-mpath]');
+  if(mp){const p=mp.dataset.mpath;if(brSelFiles.has(p))brSelFiles.delete(p);else brSelFiles.add(p);
+    mp.querySelector('.cb').classList.toggle('on',brSelFiles.has(p));return;}
+  const fp=e.target.closest('.filepick[data-path]');if(fp){brPickFile(fp.dataset.path);return;}
+  const it=e.target.closest('.diritem[data-path]');if(it)brGo(it.dataset.path);});
+
+async function tick(){if(window.HDZ_TEST_NO_POLL)return;try{render(await getState());}catch(e){
+  remoteResponsive=false;
+  updateInstallButtons({},false);
+  [['connDot','connTxt','Sin conexión'],['connDot2','connTxt2','No se puede contactar con el panel'],['connDot3','connTxt3','Sin conexión']].forEach(x=>{const d=document.getElementById(x[0]),t=document.getElementById(x[1]);if(d)d.classList.add('off');if(t)t.textContent=x[2];});
+}finally{setTimeout(tick,browseOpen?700:2000);}}
+/* Presentation layer. Move existing nodes: listeners and remote control identities are retained. */
+function initInterface(){
+  const style=document.createElement('style');style.textContent=`
+  button:focus-visible,[role=button]:focus-visible,summary:focus-visible{outline:2px solid var(--accentHover);outline-offset:3px}
+  .btn.sm,.chip.sm,.updatebtn{min-height:44px}.btn:disabled{opacity:.45;cursor:default}
+  .grphd .gt{min-width:0}.grphd small{font-size:11px;color:var(--sub);font-weight:400}
+  .logoentry{flex-wrap:wrap}.logoentry input{flex:1 1 220px;min-width:180px}
+  .bbtools{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}.bbtools button{min-width:44px}
+  .bbpreview{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);padding:12px;border:1px solid var(--chipBorder);border-radius:10px;min-height:100px}
+  .bbpreview img{max-width:100%;height:auto}.bbpreview blockquote{border-left:3px solid var(--sub);margin:8px 0;padding-left:10px}
+  #estadoDetails{flex-basis:100%;min-width:0;color:var(--sub);font-size:12px}#estadoDetails summary{cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px 0}
+  #estadoDetails:not([open]) #estadoTxt{display:none}#estadoDetails[open] #estadoTxt{max-height:24dvh;overflow:auto}
+  .credstatus{display:block;font-size:12px;color:var(--sub);margin:5px 0 8px}
+  .remixpair{font-size:12px;overflow-wrap:anywhere;border-top:1px solid var(--cardBorder);padding:9px 0}
+  @media(max-width:600px){.logoentry input{flex-basis:100%;width:100%;order:-1}.dockrow .primary{white-space:normal}.btn,.chip{min-height:44px}}
+  `;document.head.appendChild(style);
+  const cardFor=selector=>document.querySelector(selector)?.closest('.card');
+  const cardTitle=(root,text)=>Array.from(root.querySelectorAll(':scope > .card')).find(c=>c.querySelector('h3')?.textContent.includes(text));
+  const makeGroup=(id,title)=>{const g=document.createElement('div');g.className='grp closed';g.id='grp-'+id;g.innerHTML='<div class="grphd" role="button" tabindex="0" aria-expanded="false" onclick="toggleGrp(\''+id+'\')"><span class="gt">'+title+'</span><span class="chev" id="chev-'+id+'">▸</span></div><div class="grpbody"></div>';return g;};
+  const general=document.querySelector('#grp-general .grpbody'),project=document.getElementById('sec-crear');
+  document.querySelector('#grp-general .gt').textContent='Entrada y trabajos';
+  document.querySelector('#grp-proyecto .gt').textContent='Identificación y origen';
+  document.getElementById('grp-general').classList.remove('closed');document.getElementById('chev-general').textContent='▾';
+  const output=makeGroup('salida','Salida y originales'),deliver=makeGroup('entrega','Torrent y capturas del montaje');
+  for(const selector of ['[data-group="originales"]','[data-group="sufijo"]','[data-in="salidaArchivo"]'])output.lastElementChild.append(cardFor(selector));
+  deliver.lastElementChild.append(cardFor('[data-group="torrent"]'),cardFor('[data-group="capturasProy"]'));
+  project.append(output,deliver);
+  const paths=document.createElement('p');paths.id='effectivePaths';paths.className='d card';output.lastElementChild.append(paths);
+  for(const selector of ['[data-sw="proyecto"]','[data-sw="aplicarTodos"]']){const card=cardFor(selector);if(card)card.remove();}
+  for(const [group,ids] of [['audio',['cardUndAudioWeb','cardAudioLangs','cardConvAudioWeb','cardDefAudioWeb']],['subs',['cardUndSubsWeb']]]){
+    const body=document.querySelector('#grp-'+group+' .grpbody');for(const id of ids.reverse())body.prepend(document.getElementById(id));
+  }
+  cardFor('[data-group="modoLote"]').id='cardModoLoteWeb';cardFor('[data-group="filtro"]').id='cardSubFilterWeb';
+  const selection=document.createElement('p');selection.id='selectionScope';selection.className='d';document.getElementById('cardCarpeta').append(selection);
+  const pairs=document.createElement('div');pairs.id='remixPairs';document.getElementById('remezclaLangs').after(pairs);
+  const note=document.createElement('p');note.className='d';note.textContent='Las fuentes aportan las pistas; después se aplican los filtros de idiomas y las conversiones de Audio y Subtítulos.';pairs.before(note);
+  const pg= document.getElementById('cardPGSWeb');const pgNote=document.createElement('p');pgNote.className='hint';pgNote.textContent='Requiere el PC: convierte los .sup con Subtitle Edit y confirma en la consola para continuar. No es OCR automático desde el móvil.';pg.append(pgNote);
+  const tor=document.getElementById('sec-torrent');
+  const dataCard=cardFor('[data-in="upTitulo"]'),idCard=document.createElement('div');idCard.className='card';idCard.innerHTML='<h3>Identificación TMDB</h3>';
+  const idStart=document.querySelector('[data-in="upTmdb"]').closest('.row');let node=idStart;
+  while(node){const next=node.nextElementSibling;idCard.append(node);node=next;}
+  dataCard.before(idCard);
+  const loaded=document.createElement('p');loaded.id='loadedTorrent';loaded.className='d';tor.querySelector('.card').append(loaded);
+  const resources=makeGroup('recursos','Descripción y recursos');resources.classList.remove('closed');resources.querySelector('.chev').textContent='▾';
+  const capTools=cardFor('[data-combo="numCapturas"]'),caps=document.getElementById('cardCaps');
+  capTools.querySelector('p').textContent='Enlaces directos a tamaño completo con [img=350]…[/img], cinco capturas por línea. Primero crea o añade imágenes, después selecciónalas y súbelas.';
+  caps.classList.remove('card');caps.querySelector('h3').remove();capTools.append(caps);
+  const textCard=cardFor('[data-in="upDescripcion"]');
+  const description=document.createElement('div');description.className='card';description.innerHTML='<h3>Descripción (BBCode)</h3>';
+  const desc=document.querySelector('[data-in="upDescripcion"]');desc.previousElementSibling.remove();description.append(desc);
+  resources.lastElementChild.append(document.getElementById('cardLogos'),capTools,description,document.getElementById('firmasCard'));
+  cardFor('[data-combo="upResolucion"]').after(resources);
+  const nfo=document.querySelector('[data-in="upNfo"]');nfo.previousElementSibling.remove();const nfoButton=nfo.nextElementSibling;
+  const flags= document.getElementById('flags').closest('.card');const label=document.createElement('label');label.className='lbl';label.textContent='NFO opcional (archivo del PC)';flags.append(label,nfo,nfoButton);
+  flags.querySelector('h3').textContent='Etiquetas y opciones del tracker';textCard.querySelector('h3').textContent='MediaInfo';
+  const upload=document.querySelector('button[onclick="cmd({type:\'subir\'})"]');upload.id='btnUploadWeb';upload.classList.remove('grow');document.querySelector('.dock .dockrow').append(upload);
+  const logoRow=document.getElementById('logoPersonalizado').parentNode;logoRow.classList.add('logoentry');
+  const logoLabel=document.createElement('label');logoLabel.className='lbl';logoLabel.htmlFor='logoPersonalizado';logoLabel.textContent='Logo personalizado: URL HTTPS directa';logoRow.before(logoLabel);
+  const credentials=document.querySelectorAll('#sec-ajustes input[type=password]');for(const input of credentials){const badge=document.createElement('span');badge.className='credstatus';badge.dataset.credential=input.dataset.in;input.after(badge);input.placeholder='Introduce una nueva clave para sustituirla';}
+  const cfg=document.getElementById('sec-ajustes'),tmdb=cardFor('[data-in="cfgTmdbKey"]');cfg.children[0].after(tmdb);
+  const log=document.createElement('button');log.id='btnSendLogWeb';log.className='btn block mt';log.textContent='Enviar registro a soporte';log.onclick=()=>{if(confirm('Se enviará el registro del proyecto al soporte configurado. Los tokens, passkeys y contraseñas se censuran. ¿Enviar?'))cmd({type:'send_log',confirmed:true});};cardFor('[data-in="cfgUsuarioSoporte"]').append(log);
+  const details=document.createElement('details');details.id='estadoDetails';details.className='hide';details.innerHTML='<summary id="estadoSummary">Ver detalles del estado</summary>';document.getElementById('estadoTxt').before(details);details.append(document.getElementById('estadoTxt'));
+  new MutationObserver(()=>{const txt=document.getElementById('estadoTxt').textContent;details.classList.toggle('hide',!txt);document.getElementById('estadoSummary').textContent=txt?'Ver detalles · '+txt.split('\n')[0]:'Ver detalles del estado';}).observe(document.getElementById('estadoTxt'),{childList:true,subtree:true,characterData:true});
+  const copy={'Keywords':'Palabras clave (separadas por comas)','Tipo':'Tipo de release','Banderas':'Etiquetas y opciones del tracker','Subtítulos sin señal: ¿forzado o completo?':'Subtítulos sin tipo definido: ¿forzado o completo?','Análisis del lote':'Archivos y fuentes del trabajo'};
+  document.querySelectorAll('label,h3').forEach(el=>{const text=el.textContent.trim();if(copy[text])el.textContent=copy[text];});
+  const hint=document.querySelector('.shint');if(hint)hint.textContent='Configura aquí el montaje. El OCR de PGS requiere Subtitle Edit y confirmar en el PC.';
+  document.querySelectorAll('.grphd').forEach(h=>{h.setAttribute('role','button');h.tabIndex=0;h.setAttribute('aria-expanded',!h.parentNode.classList.contains('closed'));h.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();h.click();}};});
+  document.querySelectorAll('.grphd').forEach(h=>{const summary=document.createElement('small');summary.className='groupSummary';summary.style.cssText='max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';h.querySelector('.chev').before(summary);});
+  document.addEventListener('click',e=>{if(e.target.closest('.chip[aria-disabled="true"],.switch[aria-disabled="true"]')){e.preventDefault();e.stopImmediatePropagation();}},true);
+  document.addEventListener('keydown',e=>{const el=e.target.closest('.chip,.switch');if(el&&(e.key==='Enter'||e.key===' ')){e.preventDefault();if(el.getAttribute('aria-disabled')!=='true')el.click();}});
+  const previousToggle=toggleGrp;toggleGrp=name=>{previousToggle(name);const g=document.getElementById('grp-'+name);g.querySelector('.grphd').setAttribute('aria-expanded',!g.classList.contains('closed'));};
+  document.querySelectorAll('input,textarea,select').forEach((el,i)=>{if(!el.id)el.id='field-'+i;const p=el.previousElementSibling;if(p?.tagName==='LABEL')p.htmlFor=el.id;if(!el.getAttribute('aria-label'))el.setAttribute('aria-label',p?.textContent||el.placeholder||el.dataset.in||el.dataset.combo||'Campo');});
+  const tools=document.createElement('div');tools.className='bbtools';tools.id='bbToolbar';
+  for(const [title,tag] of [['Negrita','b'],['Cursiva','i'],['Subrayado','u'],['Tachado','s'],['Imagen','img=350'],['YouTube','youtube'],['Enlace','url='],['Color','color=#ff0000'],['Tamaño de letra','size=24'],['Tipo de letra','font=Arial'],['Centrar','center'],['Izquierda','left'],['Derecha','right'],['Cita','quote'],['Código','code'],['Spoiler','spoiler'],['Nota','note'],['Alerta','alert'],['Lista','list'],['Lista numerada','list=1'],['Tabla','table']]){const button=document.createElement('button');button.className='btn sm';button.textContent=title;button.onclick=()=>{const start=desc.selectionStart,end=desc.selectionEnd;const selected=desc.value.slice(start,end),name=tag.split('=')[0];let before='['+tag+']',after='[/'+name+']';if(name==='list'){before+='\n[*]';after='\n'+after;}if(name==='table'){before+='\n[tr][td]';after='[/td][/tr]\n'+after;}desc.setRangeText(before+selected+after,start,end,'select');cmd({type:'set_input',name:'upDescripcion',value:desc.value});desc.focus();};tools.append(button);}
+  const emojis=document.createElement('button');emojis.className='btn sm';emojis.textContent='Emoji';emojis.onclick=()=>{const value=prompt('Emoji o símbolo que quieres insertar','🎬');if(value){desc.setRangeText(value,desc.selectionStart,desc.selectionEnd,'end');cmd({type:'set_input',name:'upDescripcion',value:desc.value});}};tools.append(emojis);
+  const image=document.createElement('button');image.className='btn sm';image.textContent='Subir imagen del PC';image.id='btnDescriptionImage';image.onclick=()=>openAuxFile('descripcion_imagen');tools.append(image);
+  const preview=document.createElement('div');preview.id='descriptionPreview';preview.className='bbpreview hide';
+  const previewButton=document.createElement('button');previewButton.className='btn sm';previewButton.id='btnDescriptionPreview';previewButton.textContent='Vista previa orientativa';previewButton.onclick=()=>{const show=preview.classList.contains('hide');preview.classList.toggle('hide',!show);desc.classList.toggle('hide',show);tools.classList.toggle('hide',show);if(show)preview.innerHTML=previewBbcode(desc.value);previewButton.textContent=show?'Volver a editar':'Vista previa orientativa';};
+  desc.before(previewButton,tools);desc.after(preview);
+}
+function previewBbcode(value){
+  let html=esc(value);const valid=url=>{try{const u=new URL(url.replaceAll('&amp;','&'));return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}};
+  html=html.replace(/\[img(?:=(\d+))?\]([^\[\]\r\n]+)\[\/img\]/gi,(all,w,url)=>valid(url)?'<img src="'+url+'" alt="Imagen de la descripción"'+(w?' style="width:'+Math.min(2000,Number(w))+'px"':'')+'>':all);
+  html=html.replace(/\[url=([^\]]+)\]([^\[]*)\[\/url\]/gi,(all,url,text)=>valid(url)?'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+text+'</a>':all);
+  html=html.replace(/\[color=(#[0-9a-f]{3,8})\]([\s\S]*?)\[\/color\]/gi,'<span style="color:$1">$2</span>');
+  html=html.replace(/\[size=(\d+)\]([\s\S]*?)\[\/size\]/gi,(all,size,text)=>'<span style="font-size:'+Math.min(72,Math.max(8,Number(size)))+'px">'+text+'</span>');
+  html=html.replace(/\[font=(Arial|Verdana|Georgia|Tahoma|Consolas)\]([\s\S]*?)\[\/font\]/gi,'<span style="font-family:$1">$2</span>');
+  for(const [tag,element] of [['b','strong'],['i','em'],['u','u'],['s','s'],['quote','blockquote'],['code','code'],['list','ul'],['table','table'],['tr','tr'],['td','td'],['note','blockquote'],['alert','blockquote']])html=html.replace(new RegExp('\\['+tag+'\\]','gi'),'<'+element+'>').replace(new RegExp('\\[\\/'+tag+'\\]','gi'),'</'+element+'>');
+  for(const align of ['center','left','right'])html=html.replace(new RegExp('\\['+align+'\\]','gi'),'<div style="text-align:'+align+'">').replace(new RegExp('\\[\\/'+align+'\\]','gi'),'</div>');
+  html=html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi,'<details><summary>Spoiler</summary>$1</details>').replace(/\[\*\]/g,'<li>');
+  return html;
+}
+function applyInterface(d){
+  updateHdzProduct(d);
+  const iface=d.interfaz||{},project=curSec==='crear',torrent=curSec==='torrent',ready=remoteResponsive&&!d.busy;
+  for(const [id,type,visible] of [['btnIni','iniciar',project],['btnIniTodos','iniciar_todos',project&&d.opciones?.modoLote==='HETEROGENEO'],['btnUploadWeb','subir',torrent],['btnSendLogWeb','send_log',true]]){
+    const b=document.getElementById(id);if(!b)continue;b.classList.toggle('hide',!visible);const action=iface.actions?.[type];b.disabled=!ready||(action&&!action.enabled)||(!iface.schema&&type==='send_log');b.title=action?.reason||(!ready?'Programa ocupado o sin conexión':'');
+  }
+  document.getElementById('btnIniTodos').textContent='▶▶ Procesar todos los pendientes';
+  const bar=document.querySelector('.deskbar');if(bar)bar.classList.toggle('hide',!project);
+  if(iface.sections){document.getElementById('cardModoLoteWeb').style.display=iface.sections.modoLote?'':'none';document.getElementById('cardSubFilterWeb').style.display=iface.sections.subFiltro?'':'none';}
+  for(const badge of document.querySelectorAll('[data-credential]'))badge.textContent=iface.credentials?(iface.credentials[badge.dataset.credential]?'Configurada · deja el campo vacío para conservarla':'Sin configurar'):'La clave guardada no se muestra; vacío no significa que se haya perdido';
+  document.getElementById('effectivePaths').textContent=iface.salidas?'MKV: '+iface.salidas.mkv+(['INDIVIDUAL','PACK','AMBOS'].includes(d.opciones?.torrent)?'\nTorrent: '+iface.salidas.torrent:''):'Vacío: se aplican las carpetas configuradas o la ubicación del vídeo de origen.';
+  document.getElementById('selectionScope').textContent=iface.seleccion||'';
+  setMarkup('remixPairs',(iface.remezcla||[]).map(r=>'<div class="remixpair"><strong>'+esc(r.episodio)+' · '+esc(r.estado)+'</strong><br>'+esc(r.video)+'<br>'+esc(r.pistas||'Sin pista emparejada')+'<br>'+esc(r.fuente)+'</div>').join(''));
+  document.getElementById('loadedTorrent').textContent=d.torrentRuta||d.torrentNombre||'';
+  const summaries={general:iface.seleccion||'',proyecto:[d.inputs?.titulo,d.inputs?.ano].filter(Boolean).join(' · '),audio:(d.audioIdiomas||[]).filter(x=>x.sel).map(x=>x.t).join(', '),subs:d.opciones?.filtro==='TODOS'?'Todos los idiomas':d.opciones?.filtro==='CAST_ENG'?'Castellano e inglés':'Filtro personalizado',salida:d.opciones?.originales==='INTACTO'?'Originales intactos':d.opciones?.originales==='BORRAR'?'Borrar originales':'Archivar originales',entrega:(d.opciones?.torrent||'Sin torrent')+' · '+(d.opciones?.capturasProy||0)+' capturas'};
+  for(const [id,text] of Object.entries(summaries)){const element=document.querySelector('#grp-'+id+' .groupSummary');if(element){element.textContent=text;element.title=text;}}
+  document.querySelectorAll('.chip,.switch').forEach(el=>{el.tabIndex=0;el.setAttribute('role',el.classList.contains('switch')?'switch':'checkbox');el.setAttribute('aria-checked',el.classList.contains('on'));el.setAttribute('aria-disabled',!ready);});
+  document.querySelectorAll('input[data-in],textarea[data-in],select[data-combo]').forEach(el=>{if(document.activeElement!==el)el.disabled=!ready;});
+  const descriptionImage=document.getElementById('btnDescriptionImage');descriptionImage.disabled=!ready||!iface.schema;descriptionImage.title=iface.schema?'Sube una imagen e insértala en la descripción':'Actualiza el programa para subir imágenes desde el editor web';
+  document.querySelectorAll('#bbToolbar button:not(#btnDescriptionImage)').forEach(b=>b.disabled=!ready);
+  const preview=document.getElementById('descriptionPreview');if(!preview.classList.contains('hide'))setMarkup('descriptionPreview',previewBbcode(document.querySelector('[data-in="upDescripcion"]').value));
+  document.querySelectorAll('button[onclick]').forEach(b=>{const action=b.getAttribute('onclick')||'';if(['btnIni','btnIniTodos','btnUploadWeb','btnSendLogWeb'].includes(b.id)||b.classList.contains('tab')||b.classList.contains('snav')||b.classList.contains('updatebtn'))return;if(/cmd\(|openPick\(|openBrowse\(|openElegir\(|openAuxFile\(/.test(action))b.disabled=!ready;});
+  for(const [name,type] of [['btnCapGenerar','capturas'],['btnCapInsertar','imagenes']]){const a=iface.actions?.[type];if(a)document.querySelectorAll('button[onclick*="'+name+'"]').forEach(b=>{b.disabled=!ready||!a.enabled;b.title=a.reason;});}
+}
+function initHdzDesign(){
+  const paths={"torrent":["M5,4 L11,10 L9,12 L3,6 Z M13,10 L19,4 L21,6 L15,12 Z M10.5,14 L13.5,14 L13.5,20 L10.5,20 Z M7,5 A3,3 0 1 1 1,5 A3,3 0 1 1 7,5 Z M23,5 A3,3 0 1 1 17,5 A3,3 0 1 1 23,5 Z M15,20 A3,3 0 1 1 9,20 A3,3 0 1 1 15,20 Z","M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12 Z"],"ajustes":["M2,5 L22,5 L22,7 L2,7 Z M2,11 L22,11 L22,13 L2,13 Z M2,17 L22,17 L22,19 L2,19 Z","M10,6 A3,3 0 1 1 4,6 A3,3 0 1 1 10,6 Z M20,12 A3,3 0 1 1 14,12 A3,3 0 1 1 20,12 Z M13,18 A3,3 0 1 1 7,18 A3,3 0 1 1 13,18 Z"],"info":["M22,12 A10,10 0 1 1 2,12 A10,10 0 1 1 22,12 Z M19,12 A7,7 0 1 1 5,12 A7,7 0 1 1 19,12 Z","M10.5,10 L13.5,10 L13.5,18 L10.5,18 Z M13.5,7 A1.5,1.5 0 1 1 10.5,7 A1.5,1.5 0 1 1 13.5,7 Z"],"subs":["M4,4 L20,4 Q22,4 22,6 L22,18 Q22,20 20,20 L4,20 Q2,20 2,18 L2,6 Q2,4 4,4 Z M4,7 L4,17 L20,17 L20,7 Z","M11,8 L11,10 L7,10 L7,14 L11,14 L11,16 L5,16 L5,8 Z M19,8 L19,10 L15,10 L15,14 L19,14 L19,16 L13,16 L13,8 Z"],"audio":["M3,9 Q4.5,9 4.5,10.5 L4.5,13.5 Q4.5,15 3,15 Q1.5,15 1.5,13.5 L1.5,10.5 Q1.5,9 3,9 Z M12,3 Q13.5,3 13.5,4.5 L13.5,19.5 Q13.5,21 12,21 Q10.5,21 10.5,19.5 L10.5,4.5 Q10.5,3 12,3 Z M21,9 Q22.5,9 22.5,10.5 L22.5,13.5 Q22.5,15 21,15 Q19.5,15 19.5,13.5 L19.5,10.5 Q19.5,9 21,9 Z","M7.5,6 Q9,6 9,7.5 L9,16.5 Q9,18 7.5,18 Q6,18 6,16.5 L6,7.5 Q6,6 7.5,6 Z M16.5,6 Q18,6 18,7.5 L18,16.5 Q18,18 16.5,18 Q15,18 15,16.5 L15,7.5 Q15,6 16.5,6 Z"],"proyecto":["M3,8 L21,8 L21,19 Q21,21 19,21 L5,21 Q3,21 3,19 Z M9,11 L9,18 L16,14.5 Z","M3,3 L8,3 L5,7 L3,7 Z M10,3 L15,3 L12,7 L7,7 Z M17,3 L21,3 L21,7 L14,7 Z M9,11 L16,14.5 L9,18 Z"],"recursos":["M4,3 L20,3 Q22,3 22,5 L22,19 Q22,21 20,21 L4,21 Q2,21 2,19 L2,5 Q2,3 4,3 Z M5,6 L5,18 L19,18 L19,6 Z","M5,17 L9,11 L13,15 L16,12 L19,17 Z M18,9 A2,2 0 1 1 14,9 A2,2 0 1 1 18,9 Z"],"salida":["M3,12 L6,12 L6,17 L18,17 L18,12 L21,12 L21,20 Q21,22 19,22 L5,22 Q3,22 3,20 Z","M10.5,2 L13.5,2 L13.5,10 L17,10 L12,15 L7,10 L10.5,10 Z"],"entrada":["M2,9 Q2,7 4,7 L20,7 Q22,7 22,9 L20,20 L4,20 Z","M3,6 L3,4 L9,4 L12,7 L3,7 Z"]};
+  Object.assign(paths,{
+    history:["M12,3 A9,9 0 1 1 5.64,5.64 L3,3 L3,9 L9,9 L7.06,7.06 A7,7 0 1 0 12,5 Z M11,7 L13,7 L13,12 L17,14 L16,16 L11,13 Z","M11,7 L13,7 L13,12 L17,14 L16,16 L11,13 Z"],
+    search:["M10.5,3 A7.5,7.5 0 1 0 10.5,18 A7.5,7.5 0 1 0 10.5,3 Z M10.5,5 A5.5,5.5 0 1 1 10.5,16 A5.5,5.5 0 1 1 10.5,5 Z M15.8,14.4 L22,20.6 L20.6,22 L14.4,15.8 Z","M15.8,14.4 L22,20.6 L20.6,22 L14.4,15.8 Z"],
+    capture:["M4,6 L8,6 L9.5,4 L14.5,4 L16,6 L20,6 Q22,6 22,8 L22,18 Q22,20 20,20 L4,20 Q2,20 2,18 L2,8 Q2,6 4,6 Z M12,8 A5,5 0 1 0 12,18 A5,5 0 1 0 12,8 Z M12,10 A3,3 0 1 1 12,16 A3,3 0 1 1 12,10 Z","M12,10 A3,3 0 1 1 12,16 A3,3 0 1 1 12,10 Z"],
+    upload:["M4,15 L6,15 L6,19 L18,19 L18,15 L20,15 L20,20 Q20,21 19,21 L5,21 Q4,21 4,20 Z M11,16 L11,5 L7,9 L5.6,7.6 L12,1.2 L18.4,7.6 L17,9 L13,5 L13,16 Z","M11,16 L11,5 L7,9 L5.6,7.6 L12,1.2 L18.4,7.6 L17,9 L13,5 L13,16 Z"],
+    view:["M2,12 Q6,5 12,5 Q18,5 22,12 Q18,19 12,19 Q6,19 2,12 Z M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 Z","M12,8 A4,4 0 1 0 12,16 A4,4 0 1 0 12,8 Z"],
+    reset:["M5,7 L19,7 L18,20 Q18,21 17,21 L7,21 Q6,21 6,20 Z M4,4 L9,4 L10,2 L14,2 L15,4 L20,4 L20,6 L4,6 Z M9,9 L11,9 L11,18 L9,18 Z M13,9 L15,9 L15,18 L13,18 Z","M9,9 L11,9 L11,18 L9,18 Z M13,9 L15,9 L15,18 L13,18 Z"]
+  });
+  const icon=key=>{const pair=paths[key]||paths.info;return '<svg class="hdzicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="'+pair[0]+'"/><path fill="#EF4444" fill-rule="evenodd" d="'+pair[1]+'"/></svg>'};window.hdzIcon=icon;
+  const style=document.createElement('style');style.id='hdzDesign';style.textContent=`
+  :root{--sub:#B0B0BC;--cardBorder:#303038;--radius:12px;--radiusSm:9px}
+  body{line-height:1.5}button,input,textarea,select{font-variant-numeric:tabular-nums}
+  .hdzicon{display:block;width:20px;height:20px;flex-shrink:0;color:var(--sub)}
+  .grphd{background:var(--card);border:1px solid var(--cardBorder);border-radius:10px;padding:12px 14px;margin:6px 0 12px;min-height:56px;display:grid;grid-template-columns:24px minmax(0,1fr) auto 18px;gap:12px}
+  .grphd .gi{grid-column:1;display:flex;align-items:center}.grphd .gt{grid-column:2;font-size:15px;font-weight:600;line-height:1.4}.grphd .groupSummary{grid-column:3;max-width:240px!important;font-size:12px}
+  .grphd .chev{grid-column:4;grid-row:1;width:18px;font-size:0}
+  .grphd .chev::before{content:'';display:block;width:7px;height:7px;margin:0 auto;border-right:1.6px solid var(--sub);border-bottom:1.6px solid var(--sub);transform:rotate(45deg);transition:transform .15s}
+  .grp.closed .grphd .chev::before{transform:rotate(-45deg)}
+  .grp.closed .grphd{margin-bottom:12px}.grphd:hover{border-color:#52525E;background:#1A1A20}.grphd:hover .gt{color:var(--text)}
+  .card{box-shadow:none;padding:18px;background:linear-gradient(160deg,#17171C,#131316)}
+  .card h3{font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px}.card h3 .ci{display:flex;filter:none}.card .d{font-size:13px;line-height:1.6}
+  .lbl{font-size:13px;font-weight:600}.btn{font-weight:600;min-height:44px}.btn:hover:not(:disabled){border-color:#62626D;background:#24242C}.btn.primary:hover:not(:disabled){background:var(--accentHover);border-color:var(--accentHover)}
+  .btn.primary{box-shadow:0 3px 10px rgba(217,43,43,.18)}.btn:disabled{opacity:.55;cursor:not-allowed}
+  .input::placeholder{color:#90909F}.input,select.input{background:#101014}.chip.on{box-shadow:none}.chip[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+  textarea.input{font-size:14px;line-height:1.65;min-height:180px}#capsBox{margin-top:12px}.credstatus{line-height:1.6}
+  .bbmore{flex-basis:100%;border:1px solid var(--cardBorder);border-radius:9px;padding:8px 10px}.bbmore summary{cursor:pointer;font-size:13px;min-height:28px;display:flex;align-items:center}.bbmore summary::after{content:'＋';margin-left:auto;color:var(--sub)}.bbmore[open] summary::after{content:'−'}.bbmore .morebuttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .snav{min-height:48px;font-size:14px}.snav .si,.tab .ic{filter:none;display:flex;align-items:center;justify-content:center}.snav.active .hdzicon,.tab.active .hdzicon{color:var(--accentHover)}.shint{font-size:12px}.slbl{color:var(--sub)}
+  .pill{font-size:12px}.sechead{font-weight:600;letter-spacing:.8px}.sheet .hd b{font-size:16px}.sheet .path{font-size:12px;line-height:1.6}
+  .btn:focus-visible,.chip:focus-visible,.switch:focus-visible,.snav:focus-visible,.tab:focus-visible,.grphd:focus-visible,summary:focus-visible{outline:2px solid var(--accentHover);outline-offset:3px}
+  @media(min-width:920px){main{max-width:1372px}.card h3 .ci{display:flex}.card{padding:20px}.side{border-right:1px solid var(--cardBorder)}.bbtools button{min-height:36px}}
+  @media(max-width:600px){.grphd{grid-template-columns:24px minmax(0,1fr) 18px;gap:6px 10px}.grphd .chev{grid-column:3}.grphd .groupSummary{grid-column:2;grid-row:2;max-width:100%!important}.groupSummary:empty{display:none}.card{padding:16px}.btn.sm{font-size:13px}textarea.input{font-size:16px}.tab .hdzicon{width:22px;height:22px}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  `;document.head.append(style);
+  const sections={general:'entrada',proyecto:'proyecto',audio:'audio',subs:'subs',salida:'salida',entrega:'torrent',recursos:'recursos'};
+  for(const [id,key] of Object.entries(sections)){const header=document.querySelector('#grp-'+id+' .grphd');if(!header)continue;let image=header.querySelector('.gi');if(!image){image=document.createElement('span');image.className='gi';header.prepend(image)}image.innerHTML=icon(key)}
+  for(const nav of document.querySelectorAll('.snav,.tab')){const image=nav.querySelector('.si,.ic');if(image)image.innerHTML=icon({crear:'proyecto',torrent:'torrent',ajustes:'ajustes'}[nav.dataset.sec]);if(nav.dataset.sec==='ajustes'&&nav.classList.contains('snav'))nav.querySelector('.sl').textContent='Ajustes';}
+  const syncNavigation=()=>document.querySelectorAll('.snav,.tab').forEach(nav=>{if(nav.classList.contains('active'))nav.setAttribute('aria-current','page');else nav.removeAttribute('aria-current')});const previousGo=go;go=section=>{previousGo(section);syncNavigation()};syncNavigation();
+  document.querySelectorAll('.card h3 .ci').forEach(image=>{const title=image.parentNode.textContent.toLowerCase();const key=/audio|dolby|dts/.test(title)?'audio':/subtítulo|pgs/.test(title)?'subs':/captura|logo|imagen|firma/.test(title)?'recursos':/torrent|tracker|public/.test(title)?'torrent':/salida|original/.test(title)?'salida':/proyecto|identifica|clasifica|datos/.test(title)?'proyecto':'info';image.innerHTML=icon(key)});
+  document.querySelectorAll('.btn.icon').forEach(button=>{if(/^📂/.test(button.textContent.trim())){button.innerHTML=icon('entrada');button.setAttribute('aria-label','Elegir carpeta')}});
+  const labels=document.querySelectorAll('.slbl');if(labels[0])labels[0].textContent='MONTAJE';if(labels[1])labels[1].textContent='PUBLICACIÓN';
+  const toolbar=document.getElementById('bbToolbar'),buttons=Array.from(toolbar.children);const more=document.createElement('details');more.className='bbmore';more.innerHTML='<summary>Más formatos</summary><div class="morebuttons"></div>';const box=more.querySelector('.morebuttons');buttons.forEach((b,i)=>{if(i>4&&b.id!=='btnDescriptionImage')box.append(b)});toolbar.append(more);
+}
+initInterface();
+initHdzDesign();
+function initHdzProduct(){
+  const style=document.createElement('style');style.id='hdzProduct';style.textContent=`
+  :root{--bg:#101014;--card:#18181E;--chip:#202028;--chipBorder:#383842}
+  .pageintro{display:flex;gap:20px;align-items:center;justify-content:space-between;margin:6px 0 22px}.pageintro .eyebrow{font-size:10.5px;letter-spacing:1.1px;color:var(--sub);font-weight:600}.pageintro h1{font-size:28px;line-height:1.2;letter-spacing:-.5px;font-weight:600;margin:5px 0 8px}.pageintro p{margin:0;color:var(--sub);font-size:13px;line-height:1.6}.pagebadge{font-size:12px;color:var(--sub);border:1px solid var(--cardBorder);border-radius:20px;padding:7px 12px;white-space:nowrap;flex-shrink:0}
+  .workoverview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;background:var(--card);border:1px solid var(--cardBorder);border-radius:12px;padding:15px 18px;margin-bottom:18px}.workoverview .metric{min-width:0}.metric small{display:block;font-size:10.5px;letter-spacing:.7px;color:var(--sub);margin-bottom:5px}.metric strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+  .settingsjumps{display:flex;gap:8px;overflow-x:auto;padding:3px 0 12px;margin-bottom:12px}.settingsjumps button{flex-shrink:0}.settingsgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}.settingsgrid .card{margin:0;min-width:0;scroll-margin-top:110px}
+  .card{background:#18181E;border-color:#30303A}.grphd{background:#17171D}.grphd:hover{background:#202027}.grpbody{padding:0 2px}.input{border-color:#383842}.card h3{font-size:16px}.btn{border-radius:9px}.chip{border-radius:9px}.chip.on{background:var(--accentSoft);border-color:var(--accent);color:var(--text)}.chips.seg .chip.on{background:var(--accent);color:#fff}.chips.list .chip.on{background:var(--accentSoft)}
+  .dock{background:rgba(16,16,20,.97);border-top:1px solid #383842}.dock[data-tone=error] #estadoSummary{color:#FF8E9A}.dock[data-tone=warn] #estadoSummary{color:var(--warn)}.dock[data-tone=ok] #estadoSummary{color:var(--ok)}
+  @media(min-width:1100px){.settingsgrid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.settingsgrid .card:first-child{grid-row:span 2}.pageintro{margin-bottom:24px}.pageintro h1{font-size:30px}}
+  @media(max-width:600px){.pageintro{align-items:flex-start;gap:12px;flex-direction:column;margin-bottom:18px}.pageintro h1{font-size:25px}.pagebadge{padding:5px 10px;font-size:11px}.workoverview{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:14px}.workoverview .metric:last-child{grid-column:1/-1}.metric strong{font-size:13px}.settingsjumps{scrollbar-width:thin}.card h3{font-size:15px}}
+  @media(max-width:919px){.dockrow .btn.icon{width:auto;height:auto;max-width:44%;min-width:44px;min-height:44px;padding:7px 10px;display:flex;align-items:center;justify-content:center;gap:7px;white-space:normal}.dockrow .btn.icon .hdzicon{width:18px;height:18px}.dockrow .btn.icon .rlbl{display:block;max-width:84px;margin:0;font-size:11px;line-height:1.15;text-align:center;white-space:normal;overflow-wrap:anywhere}.dockrow #btnIni{min-width:0;flex:1 1 0;padding-left:8px;padding-right:8px;white-space:normal;line-height:1.2}}
+  @media(max-width:359px){.dockrow .btn.icon{max-width:39%;padding:6px}.dockrow .btn.icon .rlbl{max-width:68px;font-size:10px}}
+  `;document.head.append(style);
+  const pages={crear:['ESPACIO DE TRABAJO','Proyecto','Prepara tus fuentes, revisa las pistas y define el resultado.'],torrent:['PUBLICACIÓN','Torrent y subida','Revisa la ficha, la descripción y los recursos antes de publicar.'],ajustes:['CONFIGURACIÓN','Ajustes','Gestiona tus conexiones, preferencias y carpetas predeterminadas.']};
+  for(const [id,copy] of Object.entries(pages)){const page=document.getElementById('sec-'+id),hero=document.createElement('header');hero.className='pageintro';hero.innerHTML='<div><div class="eyebrow">'+copy[0]+'</div><h1>'+copy[1]+'</h1><p>'+copy[2]+'</p></div><span class="pagebadge" id="pageState-'+id+'">Control remoto</span>';page.querySelector('.sechead')?.remove();page.prepend(hero)}
+  const overview=document.createElement('div');overview.className='workoverview';overview.id='workOverview';overview.innerHTML=['ENTRADA','TRABAJO','DESTINO'].map((title,i)=>'<div class="metric"><small>'+title+'</small><strong id="workMetric-'+i+'">—</strong></div>').join('');document.querySelector('#sec-crear .pageintro').after(overview);
+  const desktopEntry=document.querySelector('.deskbar');if(desktopEntry)overview.after(desktopEntry);
+  const settings=document.getElementById('sec-ajustes'),jumps=document.createElement('nav');jumps.className='settingsjumps';jumps.setAttribute('aria-label','Secciones de ajustes');const grid=document.createElement('div');grid.className='settingsgrid';
+  for(const [label,key] of [['Tracker','cfgTrackerUrl'],['TMDB','cfgTmdbKey'],['Imágenes','cfgImgbbKey'],['Carpetas','cfgCarpetaTorrent'],['Soporte','cfgUsuarioSoporte']]){const card=settings.querySelector('[data-in="'+key+'"]')?.closest('.card');if(!card)continue;card.id='settings-'+key;const button=document.createElement('button');button.className='btn sm';button.textContent=label;button.onclick=()=>{card.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});card.tabIndex=-1;card.focus({preventScroll:true})};jumps.append(button)}
+  for(const card of Array.from(settings.children).filter(c=>c.classList.contains('card')))grid.append(card);settings.querySelector('.pageintro').after(jumps);settings.append(grid);
+  document.getElementById('estadoSummary').setAttribute('aria-live','polite');document.getElementById('estadoSummary').setAttribute('aria-atomic','true');
+}
+function updateHdzProduct(d){
+  if(!document.getElementById('workOverview'))return;
+  const files=d.lote||[],count=Array.isArray(files)?files.length:0;
+  const scope=d.interfaz?.seleccion||d.resumenLote||d.resumen||'Selecciona tus vídeos';
+  const values=[scope,d.inputs?.titulo||'Identificación pendiente',d.interfaz?.salidas?.mkv||'Carpeta de origen'];
+  values.forEach((text,i)=>{const field=document.getElementById('workMetric-'+i);field.textContent=text;field.title=text});
+  document.getElementById('pageState-crear').textContent=d.busy?'Petición en curso':count?count+' archivo(s) analizados':'Control remoto';
+  document.getElementById('pageState-torrent').textContent=d.torrentRuta||d.torrentNombre?'Torrent cargado':'Sin torrent cargado';
+  const creds=d.interfaz?.credentials;document.getElementById('pageState-ajustes').textContent=creds?Object.values(creds).filter(Boolean).length+' claves configuradas':'Preferencias del PC';
+  document.querySelector('.dock').dataset.tone=['error','warn','ok'].includes(d.estadoTipo)?d.estadoTipo:'info';
+}
+initHdzProduct();
+const compactStyle=document.createElement('style');compactStyle.id='hdzCompact';compactStyle.textContent=`
+ :root{--bg:#0E0E12;--card:#141418;--chip:#1C1C23;--cardBorder:#292930;--radius:9px;--radiusSm:8px}
+ .pageintro{margin:0 0 14px;display:block}.pageintro h1{font-size:20px;letter-spacing:-.2px;margin:0;line-height:1.4}.pageintro .eyebrow,.pageintro p,.pagebadge,.workoverview{display:none}
+ .grphd{border:0;border-bottom:1px solid #303038;border-radius:0;background:transparent;min-height:45px;padding:10px 8px;margin:4px 0 10px}.grp.closed .grphd{margin-bottom:10px}.grphd:hover{background:#19191F;border-color:#52525E}.grphd .gt{font-size:15px}.grphd .hdzicon{width:18px;height:18px}
+ .card{background:linear-gradient(145deg,#17171C,#131317);border-color:#292930;border-radius:9px;padding:16px;margin-bottom:10px}.card h3{font-size:15px}.card .d{font-size:12.5px;line-height:1.55}.grpbody{padding:0}.input{background:#0F0F14;border-color:#33333D}.chips .chip{border-radius:8px}.btn.primary{box-shadow:none}
+ .settingsjumps{margin-bottom:8px}.settingsgrid{gap:12px}.dock{background:rgba(14,14,18,.98)}
+ @media(min-width:920px){.card{padding:18px}.pageintro h1{font-size:20px}.pageintro{margin-bottom:14px}}
+ @media(max-width:600px){.grphd{gap:4px 10px}.grphd .groupSummary{font-size:11.5px}.card{padding:15px}.pageintro{margin-bottom:12px}.pageintro h1{font-size:20px}.card h3{font-size:15px}}
+ main{max-width:none!important}.hdzicon{width:22px!important;height:22px!important}.grphd .hdzicon{width:22px!important;height:22px!important}
+`;document.head.append(compactStyle);
+function initHdzWorkspace(){
+ const audioCard=document.createElement('div');audioCard.className='card workspace-wide';audioCard.id='cardAudioTracksWeb';audioCard.style.display='none';audioCard.innerHTML='<h3>Pistas de audio a mantener</h3><p class="d">Marca cada pista que quieras incluir. También se aplica el filtro de idiomas. Las pistas desmarcadas no se convierten.</p><div id="audioTrackRows"></div>';
+ document.getElementById('cardAudioLangs').before(audioCard);
+ const style=document.createElement('style');style.id='hdzWorkspace';style.textContent=`
+ :root{--bg:#101318;--card:#181D24;--cardBorder:#303844;--chip:#222A34;--chipBorder:#36404D;--sub:#ABB7C6;--radius:12px;--radiusSm:8px;--accentSoft:rgba(239,68,68,.11)}
+ body{background:var(--bg)}main{max-width:none!important;padding-top:24px}.pageintro{display:flex;align-items:center;margin:0 0 22px}.pageintro h1{font-size:26px!important;letter-spacing:-.6px;font-weight:650}.pageintro .eyebrow,.pageintro p,.pagebadge,.workoverview{display:none}
+ .side{background:#0B0E12}.slbl{color:#8491A2!important;font-size:10px;letter-spacing:1px;font-weight:600}.snav{border-radius:10px!important;min-height:52px!important}.snav.active{background:#322029}.snav.active .hdzicon{color:var(--text)}.shint{font-size:12px;line-height:1.7}.slogo{padding:8px 0 14px}
+ .workspace-nav{display:flex;gap:6px;padding:6px;background:#141920;border:1px solid var(--cardBorder);border-radius:12px;margin:0 0 22px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#36404D transparent;min-width:0}
+ .workspace-tab{display:flex;align-items:center;justify-content:center;gap:9px;flex:1 0 auto;min-height:46px;padding:10px 14px;border:1px solid transparent;border-radius:8px;color:var(--sub);font-size:14px;font-weight:600;white-space:nowrap}
+ .workspace-tab:hover{background:#222A34;color:var(--text)}.workspace-tab[aria-pressed=true]{background:#322029;border-color:rgba(239,68,68,.45);color:#fff}.workspace-tab .hdzicon{color:inherit}
+ .workspace-tab:focus-visible{outline:2px solid #EF4444;outline-offset:2px}.workspace-heading{margin:0 0 20px}.workspace-heading h2{font-size:20px;font-weight:600;letter-spacing:-.3px;margin:0 0 5px}.workspace-heading p{color:var(--sub);font-size:13px;line-height:1.6;margin:0}
+ #sec-crear>.grp{display:none!important}#sec-crear>.grp.workspace-active{display:block!important}#sec-crear>.grp>.grphd{display:none!important}#sec-crear>.grp>.grpbody{display:block}
+ .card{background:var(--card);border:1px solid var(--cardBorder);border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:none}.card h3{font-size:15px;font-weight:600;letter-spacing:0;margin-bottom:7px}.card h3 .ci{display:none!important}.card .d{font-size:13px;line-height:1.65;color:var(--sub)}.input,select.input{background:#11161D;border-color:#36404D;border-radius:8px}.input::placeholder{color:#8491A2}.lbl{color:#D7DFE9;font-size:12px;letter-spacing:.1px}.btn{background:#222A34;border-color:#36404D;min-height:44px;border-radius:8px}.btn:hover:not(:disabled){background:#2B3542;border-color:#526175}.btn.primary{background:var(--accent);border-color:var(--accent);box-shadow:none}.btn.primary:hover:not(:disabled){background:#EF4444}
+ .chip{border-radius:8px!important;min-height:40px}.chips.seg .chip.on,.chips.list .chip.on{background:#322029;border-color:#EF4444;color:white}.chip.on{background:#322029;color:white;border-color:#EF4444}.chips.seg{max-width:none}.deskbar{position:static;background:#181D24;border:1px solid #36404D;border-radius:12px;padding:18px;margin:0 0 20px;box-shadow:none}.deskbar .row>span{display:none}
+ .dock{background:#11161D;border-top:1px solid #36404D;padding-top:12px;padding-bottom:12px}.dockrow .primary{min-height:48px}.tabs{background:#0B0E12;border-top:1px solid #303844}.tab.active{background:transparent}.tab.active .hdzicon{color:var(--text)}.tab.active .tx{color:#EF4444}.pill{background:#181D24;border-color:#36404D}.appbar{background:rgba(11,14,18,.97);border-color:#303844}.grphd{background:#141920;border:1px solid #303844;border-radius:12px;margin:0 0 16px;padding:14px;min-height:52px}.grp.closed .grphd{margin-bottom:16px}
+ #sec-torrent .card:has(.dockrow:empty){display:none}.settingsjumps{margin-bottom:16px}.settingsgrid{gap:16px;align-items:start}.settingsgrid .card:first-child{grid-row:auto}.bbtools{gap:6px!important}.bbmore{background:#11161D;border-color:#36404D}textarea.input{font-family:Consolas,monospace;line-height:1.7}.caps{gap:12px}#loadedTorrent,#effectivePaths{overflow-wrap:anywhere}
+ @media(min-width:1200px){#sec-crear>.grp>.grpbody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}#sec-crear .grpbody>.card{margin:0;min-width:0}#sec-crear .grpbody>.workspace-wide{grid-column:1/-1}#sec-torrent.active{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}#sec-torrent>.pageintro,#sec-torrent>.grp,#sec-torrent>.workspace-wide,#sec-torrent>#subTabs{grid-column:1/-1}#sec-torrent>.card{margin:0;min-width:0}#grp-recursos .grpbody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}#grp-recursos .grpbody>.card{margin:0;min-width:0}#grp-recursos .grpbody>.workspace-wide{grid-column:1/-1}.settingsgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ @media(min-width:1800px){.settingsgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+ @media(max-width:919px){main{padding-top:18px}.workspace-nav{margin-bottom:18px}.workspace-tab{flex:0 0 auto;padding:9px 12px;font-size:13px}.workspace-heading h2{font-size:19px}.workspace-heading p{font-size:12.5px}.pageintro{margin-bottom:16px}.pageintro h1{font-size:24px!important}.card{padding:18px}.workspace-heading{margin-bottom:16px}}
+ @media(max-width:360px){.card{padding:15px}.workspace-tab{padding:8px 10px}.workspace-nav{border-radius:10px}.workspace-heading h2{font-size:18px}}
+ `;document.head.append(style);
+ const outputBody=document.querySelector('#grp-salida .grpbody'),deliveryBody=document.querySelector('#grp-entrega .grpbody');
+ const deliveryTitle=document.createElement('h3');deliveryTitle.className='workspace-wide';deliveryTitle.textContent='Entrega';deliveryBody.prepend(deliveryTitle);
+ const outputTitle=document.createElement('h3');outputTitle.className='workspace-wide';outputTitle.textContent='Salida y originales';deliveryBody.append(outputTitle,...Array.from(outputBody.children));
+ const torrentRow=document.querySelector('[data-in="salidaTorrent"]').closest('.row'),torrentLabel=torrentRow.previousElementSibling;
+ const updateTorrentDestination=()=>{const enabled=['INDIVIDUAL','PACK','AMBOS'].includes(document.querySelector('[data-group="torrent"] .chip.on')?.dataset.v);torrentRow.style.display=enabled?'':'none';torrentLabel.style.display=enabled?'':'none'};
+ document.querySelector('[data-group="torrent"]').addEventListener('click',updateTorrentDestination);
+ const audioBody=document.querySelector('#grp-audio .grpbody'),subsBody=document.querySelector('#grp-subs .grpbody');
+ for(const [key,body] of [['audio',audioBody],['subs',subsBody]]){const section=document.createElement('div');section.className='trackbody workspace-wide';section.dataset.trackBody=key;section.append(...Array.from(body.children));const label=document.createElement('h3');label.className='workspace-wide';label.textContent=key==='audio'?'Audio':'Subtítulos';audioBody.append(label,section)}
+ const tracksStyle=document.createElement('style');tracksStyle.textContent='.trackbody{min-width:0}.trackbody>.card{margin-bottom:16px}@media(min-width:1200px){.trackbody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}.trackbody>.card{margin:0;min-width:0}.trackbody>.workspace-wide{grid-column:1/-1}#sec-torrent.active{grid-template-columns:minmax(0,1fr)}}';document.head.append(tracksStyle);
+ const entries=[['general','Fuentes','Fuentes',''],['proyecto','Identidad','Identificación y origen',''],['audio','Audio y subtítulos','Audio y subtítulos',''],['entrega','Entrega y salida','Entrega y salida','']];
+ const project=document.getElementById('sec-crear'),nav=document.createElement('nav');nav.className='workspace-nav';nav.setAttribute('aria-label','Preparación del montaje');
+ const heading=document.createElement('div');heading.className='workspace-heading';heading.innerHTML='<h2></h2><p hidden></p>';
+ let stage='general';
+ const select=(name,scroll=false)=>{if(name==='salida')name='entrega';if(name==='subs')name='audio';const entry=entries.find(e=>e[0]===name);if(!entry)return;stage=name;for(const [id] of entries){const group=document.getElementById('grp-'+id);group.classList.toggle('workspace-active',id===name);group.classList.toggle('closed',id!==name);nav.querySelector('[data-stage="'+id+'"]').setAttribute('aria-pressed',id===name);group.querySelector('.grphd').setAttribute('aria-expanded',id===name)}heading.querySelector('h2').textContent=entry[2];heading.querySelector('p').textContent=entry[3];const bar=document.querySelector('.deskbar');if(bar)bar.style.display=name==='general'?'':'none';const button=nav.querySelector('[data-stage="'+name+'"]'),left=button.getBoundingClientRect().left-nav.getBoundingClientRect().left+nav.scrollLeft;if(left<nav.scrollLeft)nav.scrollLeft=left;else if(left+button.offsetWidth>nav.scrollLeft+nav.clientWidth)nav.scrollLeft=left+button.offsetWidth-nav.clientWidth;if(scroll)window.scrollTo({top:0,behavior:'instant'});};
+ for(const [id,label] of entries){const button=document.createElement('button');button.className='workspace-tab';button.dataset.stage=id;button.setAttribute('aria-controls','grp-'+id);button.innerHTML=document.querySelector('#grp-'+id+' .gi').innerHTML+'<span>'+label+'</span>';button.onclick=()=>select(id,true);nav.append(button)}
+ project.querySelector('.pageintro').after(nav);nav.after(heading);const bar=document.querySelector('.deskbar');if(bar)heading.after(bar);
+ // Keep old group commands compatible; the visible interaction is the inspector navigation.
+ const oldToggle=toggleGrp;toggleGrp=name=>{if(['salida','subs'].includes(name)||entries.some(e=>e[0]===name))select(name);else oldToggle(name)};
+ const oldGo=go;go=name=>{oldGo(name);if(name==='crear')select(stage);window.scrollTo({top:0,behavior:'instant'})};
+ const full=el=>{if(el)el.classList.add('workspace-wide')};
+ full(document.getElementById('cardRemezclaWeb'));full(document.getElementById('fileList')?.closest('.card'));full(document.getElementById('selCount')?.closest('.card'));full(document.getElementById('cardConvAudioWeb'));full(document.getElementById('cardUndAudioWeb'));full(document.getElementById('cardUndSubsWeb'));
+ full(document.querySelector('[data-combo="numCapturas"]')?.closest('.card'));full(document.getElementById('cardTorrentDescarga'));full(document.getElementById('subTabs'));full(document.getElementById('firmasCard'));full(document.getElementById('effectivePaths'));
+ document.querySelector('#sec-torrent .pageintro h1').textContent='Publicar';document.querySelector('#sec-torrent .pageintro p').textContent='Identidad, recursos y revisión final antes de subir al tracker.';
+ for(const key of ['audio','subs']){const empty=document.createElement('div');empty.className='card workspace-empty workspace-wide';empty.innerHTML='<p class="d">Las opciones aparecerán cuando analices vídeos con estas pistas. Vuelve a Fuentes para elegir los archivos.</p>';document.querySelector('[data-track-body="'+key+'"]').append(empty)}
+ const updateEmpty=()=>{for(const key of ['audio','subs']){const body=document.querySelector('[data-track-body="'+key+'"]'),empty=body.querySelector('.workspace-empty');empty.style.display=Array.from(body.children).some(c=>c!==empty&&getComputedStyle(c).display!=='none')?'none':''}};
+ const oldRender=render;render=s=>{oldRender(s);updateEmpty();updateTorrentDestination()};
+ const loadCard=document.querySelector('#sec-torrent .card');loadCard.querySelector('h3').textContent='Cargar o crear torrent';loadCard.querySelector('.d').textContent='Carga un .torrent existente o créalo a partir de vídeos ya procesados. Se leerán sus datos y recursos.';
+ document.getElementById('selCount').closest('.card').querySelector('h3').textContent='Archivos y fuentes del trabajo';
+ document.querySelectorAll('.btn,.tile').forEach(button=>{
+  if(button.querySelector('svg,input')||button.closest('#bbToolbar')||['btnIni','btnIniTodos','btnUploadWeb','btnSendLogWeb'].includes(button.id))return;
+  const text=button.textContent.trim(),clean=text.replace(/^(?:📂|📁|🎬|🎞|🧲|📦|⬆|📥|🔍|🌐|📷|📸|🖼|🌱|➕|🗑|☁|♻️|🔄|🕘|📝|🔎|📋|＋|✚|↑|▣)\s*/u,'');
+  const key=button.dataset.icon||(/historial|rutas de salida/i.test(clean)?'history':/buscar en tmdb/i.test(clean)?'search':/^crear$/i.test(clean)?'capture':/subir y añadir/i.test(clean)?'upload':/^ver$/i.test(clean)?'view':/torrent|tracker|subida/i.test(clean)?'torrent':/vídeo|archivo|carpeta|temporada/i.test(clean)?'entrada':/captura|logo|imagen/i.test(clean)?'recursos':null);
+  if(!key||!clean)return;
+  const label=button.querySelector('.rlbl');
+  button.innerHTML=window.hdzIcon(key)+(label?label.outerHTML:'<span>'+esc(clean)+'</span>');
+ });
+ window.hdzWorkspaceSelect=select;select('general');updateEmpty();updateTorrentDestination();
+}
+initHdzWorkspace();
+if(!window.HDZ_TEST_NO_POLL)tick();
+</script>
+</body>
+</html>

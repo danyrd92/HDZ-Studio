@@ -1,0 +1,34 @@
+# Herramientas de terceros: se publican en la release «herramientas», no en git.
+bin/*.exe
+bin/*.msi
+
+# Paquetes, respaldos y salidas generadas
+distribucion/
+respaldo/
+logs/
+instalacion/copia-seguridad/
+instalacion/Salida/
+instalacion/ultimo-resultado.json
+instalacion/ultima-actualizacion.json
+/version.json
+/version.sig
+*.tmp
+
+# Configuración y datos privados del equipo
+soporte.cfg
+agente.url
+*.settings.json
+*.env
+Firmas/
+
+# Operación privada (relay, despliegue, notas internas). Solo se publican las pruebas.
+soporte/*
+!soporte/tests/
+
+# Compilación del menú moderno y enlaces locales
+modern-menu/bin/
+modern-menu/obj/
+microsoft.system.package.metadata/
+HDR10plus-a-HDR10
+__pycache__/
+node_modules/

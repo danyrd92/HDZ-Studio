@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual · HD ZERO Studio</title>
+<style>
+  :root{
+    --bg:#0C0C0F; --card:#131316; --card2:#17171b; --border:#2E2E35; --border2:#242429;
+    --field:#0E0E11; --accent:#D92B2B; --accentH:#EF4444; --text:#EDEDEF; --sub:#9C9CA8;
+    --warn:#E0A422; --ok:#3FB950; --info:#4493F8;
+    --radius:14px; --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:radial-gradient(1200px 700px at 80% -10%, #1a0c0c 0%, transparent 55%), var(--bg);
+    color:var(--text); font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; font-size:15.5px;
+  }
+  a{color:var(--accentH); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{background:#000; border:1px solid var(--border2); border-radius:6px; padding:1px 6px; font-size:.86em; color:#f3c0c0; font-family:"Cascadia Code",Consolas,monospace}
+
+  /* Layout */
+  .wrap{display:grid; grid-template-columns:268px 1fr; max-width:1180px; margin:0 auto; gap:0}
+  /* Sidebar */
+  aside{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    padding:26px 18px 40px; border-right:1px solid var(--border2); background:rgba(10,10,12,.6);
+  }
+  aside .brand{display:flex; align-items:center; gap:9px; font-size:21px; font-weight:800; letter-spacing:.5px; margin-bottom:4px}
+  aside .brand .hd{color:var(--accent)} aside .brand .zero{color:var(--text)}
+  aside .ver{color:var(--sub); font-size:12px; margin-bottom:22px}
+  nav a{display:block; color:var(--sub); padding:7px 12px; border-radius:9px; font-size:13.5px; font-weight:500; margin:1px 0; border-left:2px solid transparent}
+  nav a:hover{background:var(--card); color:var(--text); text-decoration:none}
+  nav a.sec{margin-top:14px; color:#6a6a74; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; padding-left:12px; pointer-events:none}
+  main{padding:46px 54px 90px; min-width:0}
+
+  /* Hero */
+  .hero{border:1px solid var(--border); border-radius:var(--radius); background:linear-gradient(135deg,#1b0e0e 0%, var(--card) 60%); padding:40px 42px; box-shadow:var(--shadow); margin-bottom:40px; position:relative; overflow:hidden}
+  .hero::after{content:""; position:absolute; right:-60px; top:-60px; width:240px; height:240px; background:radial-gradient(circle, rgba(217,43,43,.22), transparent 70%)}
+  .hero h1{font-size:40px; margin:0 0 6px; letter-spacing:.5px}
+  .hero h1 .hd{color:var(--accent)} .hero h1 .zero{color:var(--text)} .hero h1 .st{color:var(--sub); font-weight:400; font-size:22px}
+  .hero p{font-size:17px; color:var(--sub); max-width:640px; margin:10px 0 0}
+  .hero .pills{margin-top:22px; display:flex; gap:10px; flex-wrap:wrap}
+  .pill{background:#000; border:1px solid var(--border); border-radius:999px; padding:6px 14px; font-size:12.5px; color:var(--text)}
+  .pill b{color:var(--accentH)}
+
+  h2{font-size:26px; margin:54px 0 4px; padding-top:14px; letter-spacing:.3px; scroll-margin-top:20px}
+  h2 .em{font-size:24px; margin-right:8px}
+  .lead{color:var(--sub); margin:0 0 22px; font-size:15px}
+  h3{font-size:18.5px; margin:30px 0 8px; color:#fff}
+  h2+h3{margin-top:18px}
+
+  /* Cards */
+  .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; margin:16px 0; box-shadow:0 4px 18px rgba(0,0,0,.25)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+  /* Steps */
+  .steps{counter-reset:s; margin:14px 0; padding:0; list-style:none}
+  .steps>li{counter-increment:s; position:relative; padding:4px 0 16px 50px; margin:0}
+  .steps>li::before{content:counter(s); position:absolute; left:0; top:0; width:34px; height:34px; border-radius:50%; background:var(--accent); color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px rgba(217,43,43,.15)}
+  .steps>li::after{content:""; position:absolute; left:16px; top:38px; bottom:2px; width:2px; background:var(--border2)}
+  .steps>li:last-child::after{display:none}
+  .steps>li b{color:#fff}
+
+  /* Feature list */
+  .feat{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:18px 0}
+  .feat .f{background:var(--card); border:1px solid var(--border2); border-radius:12px; padding:16px 18px}
+  .feat .f .ic{font-size:22px}
+  .feat .f h4{margin:8px 0 4px; font-size:15.5px}
+  .feat .f p{margin:0; color:var(--sub); font-size:13.5px}
+
+  /* Nav chips visual */
+  .navchips{display:flex; flex-direction:column; gap:6px}
+  .navchip{display:flex; align-items:center; gap:12px; background:var(--field); border:1px solid var(--border2); border-radius:10px; padding:11px 14px}
+  .navchip .em{font-size:19px; width:26px; text-align:center}
+  .navchip b{font-size:14.5px} .navchip span{color:var(--sub); font-size:13px}
+
+  /* Callouts */
+  .note{border-left:4px solid var(--info); background:rgba(68,147,248,.07); border-radius:0 10px 10px 0; padding:13px 18px; margin:16px 0; font-size:14px}
+  .tip{border-left:4px solid var(--ok); background:rgba(63,185,80,.07); border-radius:0 10px 10px 0; padding:13px 18px; margin:16px 0; font-size:14px}
+  .warn{border-left:4px solid var(--warn); background:rgba(224,164,34,.07); border-radius:0 10px 10px 0; padding:13px 18px; margin:16px 0; font-size:14px}
+  .note b,.tip b,.warn b{color:#fff}
+
+  /* Table */
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:14px}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--border2)}
+  th{color:#fff; background:var(--card2); font-size:12.5px; text-transform:uppercase; letter-spacing:.6px}
+  td:first-child{color:#fff; font-weight:600; white-space:nowrap}
+  tr:hover td{background:rgba(255,255,255,.015)}
+
+  .kbtn{display:inline-block; background:var(--accent); color:#fff; font-weight:700; padding:3px 12px; border-radius:8px; font-size:13px; white-space:nowrap}
+  .kbtn.ghost{background:transparent; border:1px solid var(--border); color:var(--text); font-weight:600}
+
+  .foot{margin-top:60px; padding-top:22px; border-top:1px solid var(--border2); color:#56565e; font-size:12.5px}
+
+  @page{margin:0}
+  @media print{
+    aside{display:none}
+    .wrap{display:block; max-width:none}
+    main{padding:14mm 12mm}
+    body{background:var(--bg)}
+    .hero{margin-bottom:26px}
+    h2{break-after:avoid}
+    h3{break-after:avoid}
+    .card,.feat .f,.navchip,table,.steps>li,.note,.tip,.warn{break-inside:avoid}
+    .hero,.card{box-shadow:none}
+    a{color:var(--text)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside>
+  <div class="brand"><span class="hd">HD</span><span class="zero">ZERO</span></div>
+  <div class="ver">Studio · Manual de usuario · v1.2.1</div>
+  <nav>
+    <a class="sec">Empezar</a>
+    <a href="#que-es">Qué es</a>
+    <a href="#instalar">Instalación</a>
+    <a href="#bienvenida">Primer arranque</a>
+    <a href="#interfaz">La interfaz</a>
+    <a class="sec">Crear una release</a>
+    <a href="#general">1 · General</a>
+    <a href="#proyecto">2 · Proyecto</a>
+    <a href="#audio">3 · Audio</a>
+    <a href="#subs">4 · Subtítulos</a>
+    <a href="#montaje">▶ Iniciar montaje</a>
+    <a class="sec">Subir al tracker</a>
+    <a href="#subida">5 · Torrent y subida</a>
+    <a class="sec">Configuración</a>
+    <a href="#ajustes">6 · Ajustes / claves</a>
+    <a href="#lote">Modo lote y pestañas</a>
+    <a href="#updates">Actualizaciones</a>
+    <a href="#faq">Preguntas frecuentes</a>
+  </nav>
+</aside>
+
+<main>
+
+  <div class="hero">
+    <h1><span class="hd">HD</span> <span class="zero">ZERO</span> <span class="st">Studio</span></h1>
+    <p>La herramienta todo-en-uno para <b>preparar, montar y subir</b> tus releases a HDZERO. Detecta tus vídeos, adapta las opciones a lo que encuentra, hace el montaje sin preguntar nada en consola y te deja el torrent y la ficha listos para publicar.</p>
+    <div class="pills">
+      <span class="pill">🎬 Montaje <b>MKV</b> automático</span>
+      <span class="pill">🔊 Conversor de <b>audio</b></span>
+      <span class="pill">🧲 Crea <b>.torrent</b></span>
+      <span class="pill">☁ Subida a <b>HDZERO</b></span>
+      <span class="pill">🖼 Capturas + <b>descripción</b></span>
+    </div>
+  </div>
+
+  <!-- ============ QUÉ ES ============ -->
+  <h2 id="que-es"><span class="em">✨</span>Qué es y qué hace por ti</h2>
+  <p class="lead">En una sola ventana preparas un vídeo (o un lote entero) y lo dejas publicable. No necesitas tocar la consola ni ejecutar comandos.</p>
+
+  <div class="feat">
+    <div class="f"><div class="ic">🔎</div><h4>Analiza solo</h4><p>Escanea la carpeta, detecta pistas de audio, subtítulos, HDR/Dolby Vision e idiomas, y muestra solo las opciones que aplican.</p></div>
+    <div class="f"><div class="ic">🧩</div><h4>Monta el MKV</h4><p>Reordena y etiqueta pistas, limpia lo que sobra, convierte audio si lo pides y genera el archivo final.</p></div>
+    <div class="f"><div class="ic">📷</div><h4>Capturas automáticas</h4><p>Genera imágenes JPG del resultado (con tonemapping si el vídeo es HDR) listas para la descripción.</p></div>
+    <div class="f"><div class="ic">🧲</div><h4>Torrents privados</h4><p>Crea el <code>.torrent</code> con tu announce, por archivo o como pack de toda la temporada.</p></div>
+    <div class="f"><div class="ic">🎫</div><h4>Ficha lista</h4><p>Busca en TMDB, rellena IDs, monta la descripción en BBCode con logo, capturas y firma.</p></div>
+    <div class="f"><div class="ic">☁</div><h4>Sube por ti</h4><p>Publica directamente en HDZERO con todos los campos completos. Varias subidas a la vez con pestañas.</p></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">El flujo, de un vistazo</h3>
+    <ul class="steps">
+      <li><b>Elige la carpeta</b> con tus vídeos → el programa los analiza.</li>
+      <li><b>Revisa las opciones</b> en Proyecto, Audio y Subtítulos (vienen pre-rellenadas).</li>
+      <li>Pulsa <span class="kbtn">▶ Iniciar montaje</span> → obtienes el MKV final, las capturas y el <code>.torrent</code>.</li>
+      <li>Ve a <b>Torrent y subida</b>, completa la ficha y pulsa <span class="kbtn">☁ Subir a HDZERO</span>.</li>
+    </ul>
+  </div>
+
+  <!-- ============ INSTALACIÓN ============ -->
+  <h2 id="instalar"><span class="em">💿</span>Instalación</h2>
+  <p class="lead">Un único instalador. No requiere instalar nada más a mano: trae todo lo necesario dentro.</p>
+  <ul class="steps">
+    <li>Ejecuta <code>HD ZERO Studio.exe</code>.</li>
+    <li>Windows pedirá <b>permiso de administrador</b> mostrando el nombre <b>HD ZERO Studio</b>. Acepta para que pueda instalarse.</li>
+    <li>Espera a que termine de extraer (incluye su propio motor y herramientas; la primera vez tarda un poco).</li>
+    <li>Al terminar se abre el programa y aparece la <b>ventana de bienvenida</b> para configurar tus claves.</li>
+  </ul>
+  <div class="note"><b>¿Por qué pide administrador?</b> El programa se instala en <code>Archivos de programa</code> y necesita permiso para escribir ahí. Es normal y se pide una sola vez, en la instalación.</div>
+
+  <!-- ============ BIENVENIDA ============ -->
+  <h2 id="bienvenida"><span class="em">👋</span>Primer arranque: tus credenciales</h2>
+  <p class="lead">La primera vez, una ventana de bienvenida te pide los datos que el programa usará para subir. Puedes rellenarlos ahora o pulsar «Ahora no» y hacerlo después en <b>Ajustes / claves</b>.</p>
+  <table>
+    <tr><th>Campo</th><th>Para qué sirve</th><th>Dónde lo encuentras</th></tr>
+    <tr><td>URL del tracker</td><td>La dirección de HDZERO.</td><td>Por defecto <code>https://hdzero.org</code></td></tr>
+    <tr><td>Token de la API</td><td>Identifica tu cuenta al subir.</td><td>HDZERO → tu perfil → Configuración → Seguridad</td></tr>
+    <tr><td>URL de anuncio (announce)</td><td>Va dentro de los <code>.torrent</code> que crees.</td><td>La que usas para subir torrents (incluye tu <i>passkey</i>)</td></tr>
+    <tr><td>Clave de TMDB <span style="color:var(--sub)">(opcional)</span></td><td>Búsqueda automática de título, IDs y logos.</td><td>themoviedb.org → Ajustes → API</td></tr>
+  </table>
+  <div class="warn"><b>🔒 Tus claves son solo tuyas.</b> Se guardan <b>únicamente en tu equipo</b> (<code>%APPDATA%</code>). Nunca se comparten ni viajan con el programa. Cada usuario pone las suyas.</div>
+
+  <!-- ============ INTERFAZ ============ -->
+  <h2 id="interfaz"><span class="em">🧭</span>La interfaz</h2>
+  <p class="lead">A la izquierda, un menú con seis secciones. A la derecha, el contenido de la sección activa. Abajo, los botones de acción. El menú se puede plegar con el botón <span class="kbtn ghost">☰</span>.</p>
+  <div class="card">
+    <div class="navchips">
+      <div class="navchip"><span class="em">🏠</span><div><b>General</b> &nbsp;·&nbsp; <span>Carpeta, análisis del lote, modo, torrents y carpetas de salida.</span></div></div>
+      <div class="navchip"><span class="em">🎬</span><div><b>Proyecto</b> &nbsp;·&nbsp; <span>Título, año, origen, plataforma y capturas. La identidad de la release.</span></div></div>
+      <div class="navchip"><span class="em">🔊</span><div><b>Audio</b> &nbsp;·&nbsp; <span>Convertir pistas, audio por defecto y pistas sin idioma.</span></div></div>
+      <div class="navchip"><span class="em">💬</span><div><b>Subtítulos</b> &nbsp;·&nbsp; <span>Idiomas a mantener, forzados/completos y OCR de PGS.</span></div></div>
+      <div class="navchip"><span class="em">☁</span><div><b>Torrent y subida</b> &nbsp;·&nbsp; <span>Ficha, capturas, descripción y publicación en HDZERO.</span></div></div>
+      <div class="navchip"><span class="em">⚙</span><div><b>Ajustes / claves</b> &nbsp;·&nbsp; <span>Credenciales del tracker, host de imágenes y TMDB.</span></div></div>
+    </div>
+  </div>
+  <div class="tip"><b>Todo se decide en la ventana.</b> Una vez pulses «Iniciar montaje», el proceso corre solo: no te hará preguntas en la consola (la única pausa posible es si eliges hacer OCR de subtítulos PGS).</div>
+
+  <!-- ============ GENERAL ============ -->
+  <h2 id="general"><span class="em">🏠</span>1 · General</h2>
+  <p class="lead">El punto de partida: indica dónde están los vídeos y cómo quieres tratar el lote.</p>
+
+  <h3>Carpeta de vídeos</h3>
+  <p>Escribe la ruta, pulsa <span class="kbtn ghost">Examinar…</span> o <b>arrastra la carpeta</b> a la ventana. Al elegirla, el programa la analiza y ajusta las opciones a lo que detecta.</p>
+  <div class="note">Si en la carpeta hay originales renombrados con <code>.procesado</code> (de una pasada anterior), aparece un aviso con el botón <span class="kbtn ghost">Quitar «.procesado»</span> para volver a trabajar con ellos.</div>
+
+  <h3>Análisis del lote</h3>
+  <p>Lista los vídeos detectados. Con <span class="kbtn ghost">Todos</span> / <span class="kbtn ghost">Ninguno</span> eliges cuáles procesar.</p>
+
+  <h3>Modo de procesamiento</h3>
+  <table>
+    <tr><th>Modo</th><th>Cuándo usarlo</th></tr>
+    <tr><td>Mismo proyecto<br><span style="color:var(--sub);font-weight:400">(homogéneo)</span></td><td>Todos los archivos comparten identidad: p. ej. los episodios de <b>una temporada</b>. Defines los datos una vez y se aplican a todos.</td></tr>
+    <tr><td>Cada archivo distinto<br><span style="color:var(--sub);font-weight:400">(heterogéneo)</span></td><td>Varias películas diferentes en la misma carpeta. Cada una tendrá su <b>propia pestaña</b> con su título, año y plataforma. Ver <a href="#lote">Modo lote y pestañas</a>.</td></tr>
+  </table>
+
+  <h3>Más opciones de General</h3>
+  <table>
+    <tr><th>Opción</th><th>Qué hace</th></tr>
+    <tr><td>Archivos originales al terminar</td><td><b>Borrarlos</b> ahorra espacio; <b>conservarlos</b> los renombra añadiendo <code>.procesado</code>.</td></tr>
+    <tr><td>Sufijo «-HDZ»</td><td>Añade <code>-HDZ</code> al nombre del archivo final.</td></tr>
+    <tr><td>Crear archivos .torrent</td><td>Torrents <b>privados</b>. Uno por archivo, un <b>PACK</b> del lote completo, o ambos. La announce se toma de Ajustes.</td></tr>
+    <tr><td>Carpetas de salida <span style="color:var(--sub);font-weight:400">(opcional)</span></td><td>Dónde dejar el MKV final y el <code>.torrent</code>. Vacío = junto a los vídeos de origen. Las capturas siempre quedan en la carpeta de origen.</td></tr>
+    <tr><td>Reprocesar archivos -HDZ</td><td>Para volver a tratar archivos que ya llevan el sufijo, cuando no hay vídeos nuevos en la carpeta.</td></tr>
+  </table>
+
+  <!-- ============ PROYECTO ============ -->
+  <h2 id="proyecto"><span class="em">🎬</span>2 · Proyecto</h2>
+  <p class="lead">La identidad de la release. El <b>título y el año</b> se usan para nombrar el resultado. El título es obligatorio.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Identificación</h3>
+      <p><b>Título limpio</b> y <b>Año</b>. Activa <b>«Es una serie»</b> para que detecte el patrón <code>SxxEyy</code> del nombre.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Origen</h3>
+      <p>Indica si viene de <b>WEB</b> (y de qué <b>plataforma</b>: Netflix, Max, etc.) o de un <b>formato físico</b> (Blu-ray…). Puedes escribir uno que no esté en la lista.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Capturas por archivo</h3>
+    <p>Número de imágenes JPG que se generan del resultado final (con tonemapping si el vídeo es HDR). En modo «Cada archivo distinto», cada película puede llevar su propio número.</p>
+  </div>
+  <p>Campo opcional <b>Etiquetas extra</b> para añadir matices al nombre.</p>
+
+  <!-- ============ AUDIO ============ -->
+  <h2 id="audio"><span class="em">🔊</span>3 · Audio</h2>
+  <p class="lead">Convierte pistas, decide la pista por defecto y asigna idioma a las que no lo declaran.</p>
+
+  <h3>⭐ Convertir audio</h3>
+  <p>Elige una pista del vídeo y conviértela al formato que quieras. Las opciones de destino <b>se adaptan a los canales</b> de la pista de origen.</p>
+  <table>
+    <tr><th>Origen</th><th>Destinos disponibles</th></tr>
+    <tr><td>2.0</td><td>DD+, DD o AAC en 2.0</td></tr>
+    <tr><td>5.1</td><td>DD+, DD o AAC en 5.1</td></tr>
+    <tr><td>7.1</td><td>DD+/DD en 5.1, o AAC en 7.1 y 5.1</td></tr>
+  </table>
+  <div class="feat">
+    <div class="f"><div class="ic">➕</div><h4>Varias conversiones</h4><p>Pulsa <b>«+ Añadir conversión»</b> para convertir varias pistas del mismo vídeo.</p></div>
+    <div class="f"><div class="ic">🔁</div><h4>Mantener original</h4><p>Decides si la pista de origen <b>se conserva</b> junto a la nueva o <b>se sustituye</b>.</p></div>
+    <div class="f"><div class="ic">⏱</div><h4>Sincronía intacta</h4><p>El <i>delay</i> de la pista se preserva en la conversión.</p></div>
+  </div>
+  <div class="note"><b>¿Y el DTS?</b> El antiguo apartado de DTS ya no existe por separado: ahora una pista DTS es simplemente un origen más que puedes convertir a DD o DD+ desde aquí.</div>
+
+  <h3>Pista de audio predeterminada</h3>
+  <p>Cuando el idioma principal tiene a la vez audio <b>Dolby</b> y <b>DTS</b>, eliges cuál se marca como pista por defecto. El orden de pistas no cambia.</p>
+
+  <h3>Audios sin idioma definido</h3>
+  <p>Pistas que no declaran idioma: asígnale el suyo a cada una, o déjalas como indeterminado (<code>und</code>).</p>
+
+  <!-- ============ SUBS ============ -->
+  <h2 id="subs"><span class="em">💬</span>4 · Subtítulos</h2>
+  <p class="lead">Limpia y ordena los subtítulos del resultado.</p>
+  <table>
+    <tr><th>Tarjeta</th><th>Qué decides</th></tr>
+    <tr><td>Sin idioma definido</td><td>Asigna el idioma de cada subtítulo, o déjalo en <code>und</code>.</td></tr>
+    <tr><td>Idiomas a mantener</td><td>Quitar un idioma elimina <b>todos</b> sus subtítulos (forzados y completos). Los audios no se tocan.</td></tr>
+    <tr><td>Forzado o completo</td><td>Para subtítulos que aparecen solos en su idioma y no indican su tipo, decides cuál es.</td></tr>
+    <tr><td>Subtítulos PGS (OCR)</td><td>Si eliges extraerlos a <code>.sup</code>, el proceso <b>pausará en consola</b> para que los conviertas a SRT con Subtitle Edit y continúes pulsando ENTER.</td></tr>
+  </table>
+  <div class="warn"><b>Única pausa del proceso.</b> Salvo que actives el OCR de PGS, el montaje no se detiene en ningún momento.</div>
+
+  <!-- ============ MONTAJE ============ -->
+  <h2 id="montaje"><span class="em">▶</span>Iniciar montaje</h2>
+  <p class="lead">Cuando tengas las opciones a tu gusto, pulsa el botón rojo <span class="kbtn">▶ Iniciar montaje</span> abajo a la derecha.</p>
+  <ul class="steps">
+    <li>El programa monta el MKV final de cada archivo seleccionado (pistas, idiomas, conversiones de audio).</li>
+    <li>Genera las <b>capturas</b> en la carpeta de origen.</li>
+    <li>Crea los <code>.torrent</code> que hayas pedido (por archivo y/o pack).</li>
+    <li>Al terminar, los archivos quedan listos para la sección <b>Torrent y subida</b>.</li>
+  </ul>
+  <div class="tip">El botón <span class="kbtn ghost">🗑 Empezar de Zero</span> borra la carpeta seleccionada y todas las opciones, dejando el programa como recién abierto.</div>
+
+  <!-- ============ SUBIDA ============ -->
+  <h2 id="subida"><span class="em">☁</span>5 · Torrent y subida</h2>
+  <p class="lead">Prepara la ficha de la release y publícala en HDZERO. Cada pestaña es una subida independiente: puedes preparar varias y subirlas una a una.</p>
+
+  <ul class="steps">
+    <li><b>Torrent a subir.</b> Carga un <code>.torrent</code> ya creado, o créalo aquí <span class="kbtn ghost">🧲 De un archivo…</span> / <span class="kbtn ghost">🧲 De una carpeta (pack)…</span>. Se localiza el vídeo, se extrae el MediaInfo y las specs, y se cargan las capturas que haya al lado.</li>
+    <li><b>Datos del torrent.</b> Título de la release, categoría, tipo, resolución, temporada/episodio y palabras clave.</li>
+    <li><b>Identificación.</b> Pulsa <span class="kbtn ghost">🔍 Buscar en TMDB</span>: al elegir un resultado se rellenan solos los IDs (TMDB / IMDB / TVDB / MAL). También puedes escribirlos a mano.</li>
+    <li><b>Logo de TMDB.</b> Clic en un logo para ponerlo como primera línea de la descripción.</li>
+    <li><b>Capturas.</b> Marca las que quieras (o créalas con 📷) y pulsa <span class="kbtn ghost">⬆ Subir y añadir a descripción</span>: se suben al host y se insertan como imágenes.</li>
+    <li><b>Descripción (BBCode).</b> Va centrada. Da formato con los botones o escribe BBCode a mano. Pestañas <span class="kbtn ghost">✎ Escribir</span> y <span class="kbtn ghost">👁 Vista previa</span>.</li>
+    <li><b>Firma + MediaInfo.</b> Elige una firma (se añade al final) y revisa el MediaInfo (se regenera con el botón).</li>
+    <li><b>Opciones</b> y pulsa <span class="kbtn">☁ Subir a HDZERO</span>.</li>
+  </ul>
+
+  <h3>Opciones de la subida</h3>
+  <p>Marca las que apliquen: <b>Anónimo</b>, <b>Personal release</b>, <b>Audio editado</b>, <b>Proper</b>, <b>Dolby Vision</b>, <b>HDR10+</b>, <b>HDR10</b>, <b>Cola de moderación</b>. Opcionalmente, un <b>NFO</b>.</p>
+  <div class="note"><b>Varias subidas a la vez.</b> Usa <span class="kbtn ghost">➕ Nueva</span> para abrir otra pestaña de subida —p. ej. 3 películas— cada una con su propio torrent, capturas, descripción e IDs.</div>
+
+  <!-- ============ AJUSTES ============ -->
+  <h2 id="ajustes"><span class="em">⚙</span>6 · Ajustes / claves</h2>
+  <p class="lead">Se configura una sola vez. Todo se guarda <b>solo en tu equipo</b>.</p>
+  <table>
+    <tr><th>Apartado</th><th>Qué pones</th></tr>
+    <tr><td>Credenciales del tracker</td><td>URL base, <b>token de la API</b> (perfil → Configuración → Seguridad) y <b>URL de anuncio</b> con tu passkey (se usa al crear los torrents).</td></tr>
+    <tr><td>Host de imágenes</td><td>Clave API de <b>imgbb</b> para subir las capturas.</td></tr>
+    <tr><td>TMDB</td><td>Tu <b>Clave API</b> (corta) o el <b>Token de lectura</b> (largo, empieza por <code>eyJ</code>). Se detecta solo cuál es.</td></tr>
+  </table>
+  <div class="warn"><b>🔒 Privacidad.</b> Estas claves se guardan en <code>%APPDATA%\HDZ-GUI.settings.json</code>, en tu PC. <b>Nunca</b> se comparten ni se incluyen en el programa que pasas a otros.</div>
+
+  <!-- ============ LOTE ============ -->
+  <h2 id="lote"><span class="em">🗂</span>Modo lote y pestañas</h2>
+  <p class="lead">Cómo se comporta el programa cuando procesas varios archivos a la vez.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">Mismo proyecto</h3>
+      <p>Para <b>una temporada</b>: defines título, origen y plataforma <b>una vez</b> y se aplican a todos los episodios. La interfaz no cambia.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Cada archivo distinto</h3>
+      <p>Para <b>películas diferentes</b>. Aparece una <b>barra de pestañas</b> (estilo MKVToolNix), <b>una por película</b>, con el nombre del archivo. Cada pestaña tiene su propio título, año, origen, plataforma, audio y subtítulos.</p>
+    </div>
+  </div>
+  <div class="tip">En modo «Cada archivo distinto», las secciones <b>Proyecto</b>, <b>Audio</b> y <b>Subtítulos</b> muestran las pestañas: configura una película, cambia de pestaña y configura la siguiente. Cerrar una pestaña deselecciona ese archivo.</div>
+
+  <!-- ============ UPDATES ============ -->
+  <h2 id="updates"><span class="em">🔄</span>Actualizaciones automáticas</h2>
+  <p class="lead">No tienes que reinstalar para tener lo último.</p>
+  <ul class="steps">
+    <li>Al abrir, el programa comprueba si hay una versión más nueva.</li>
+    <li>Si la hay, te avisa con las novedades y te pregunta si quieres actualizar.</li>
+    <li>Si aceptas, descarga e instala los cambios solo. Tus claves y ajustes se mantienen.</li>
+  </ul>
+  <div class="note">La versión actual de este manual corresponde a <b>HD ZERO Studio v1.2.1</b> (conversor de audio por pista + ventana de bienvenida).</div>
+
+  <!-- ============ FAQ ============ -->
+  <h2 id="faq"><span class="em">❓</span>Preguntas frecuentes</h2>
+  <div class="card">
+    <h3 style="margin-top:0">¿El programa viene con tus claves?</h3>
+    <p>No. Cada usuario introduce las suyas en la ventana de bienvenida o en Ajustes, y se guardan solo en su propio equipo.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">¿Me pregunta cosas en una ventana negra (consola)?</h3>
+    <p>No, salvo que actives el OCR de subtítulos PGS, que pausa para que conviertas a SRT con Subtitle Edit y pulses ENTER. Todo lo demás se decide en la ventana.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">¿Puedo recuperar mis archivos originales?</h3>
+    <p>Sí, si elegiste conservarlos: quedan con el sufijo <code>.procesado</code>. El aviso de la sección General trae un botón para quitarlo.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">¿Por qué Windows pide permiso de administrador al instalar?</h3>
+    <p>Porque se instala en <code>Archivos de programa</code>. Es solo en la instalación, y el aviso muestra el nombre <b>HD ZERO Studio</b>.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">¿Puedo preparar varias subidas a la vez?</h3>
+    <p>Sí. En «Torrent y subida», el botón <b>➕ Nueva</b> abre otra pestaña, cada una con su torrent, capturas y ficha independientes.</p>
+  </div>
+
+  <div class="foot">
+    HD ZERO Studio · Manual de usuario · v1.2.1 — Las opciones de la interfaz se adaptan a lo detectado en cada vídeo, así que puede que no veas todas las tarjetas en todos los archivos.<br>
+    Consejo: pulsa <b>Ctrl+P</b> en el navegador para guardar este manual como PDF.
+  </div>
+
+</main>
+</div>
+</body>
+</html>

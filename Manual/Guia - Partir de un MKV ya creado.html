@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HD ZERO Studio · Partir de un MKV ya creado</title>
+<style>
+  :root{
+    --bg:#0C0C0F; --card:#15151a; --card2:#17171b; --border:#2E2E35; --border2:#242429;
+    --field:#0E0E11; --accent:#D92B2B; --accentH:#EF4444; --text:#EDEDEF; --sub:#9C9CA8;
+    --warn:#E0A422; --ok:#3FB950; --info:#4493F8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  body{
+    background:radial-gradient(900px 500px at 85% -8%, #1a0c0c 0%, transparent 55%), var(--bg);
+    color:var(--text); font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    line-height:1.55; font-size:15px;
+  }
+  .page{max-width:880px; margin:0 auto; padding:40px 46px 64px}
+  code{background:#000; border:1px solid var(--border2); border-radius:6px; padding:1px 7px; font-size:.85em; color:#f3c0c0; font-family:"Cascadia Code",Consolas,monospace}
+  .kbtn{display:inline-block; background:var(--accent); color:#fff; font-weight:700; padding:2px 11px; border-radius:7px; font-size:13px; white-space:nowrap}
+  .kbtn.ghost{background:transparent; border:1px solid var(--border); color:var(--text); font-weight:600}
+  .nav{display:inline-block; background:#000; border:1px solid var(--border); border-radius:7px; padding:2px 10px; font-size:13px; color:var(--text); white-space:nowrap}
+
+  /* Hero */
+  .hero{border:1px solid var(--border); border-radius:14px; background:linear-gradient(135deg,#1b0e0e 0%, var(--card) 60%); padding:30px 32px; position:relative; overflow:hidden; margin-bottom:26px}
+  .hero::after{content:""; position:absolute; right:-50px; top:-50px; width:200px; height:200px; background:radial-gradient(circle, rgba(217,43,43,.22), transparent 70%)}
+  .brand{font-size:18px; font-weight:800; letter-spacing:.5px; margin-bottom:10px}
+  .brand .hd{color:var(--accent)} .brand .zero{color:var(--text)}
+  h1{font-size:30px; line-height:1.1; letter-spacing:.3px}
+  .hero p{color:var(--sub); font-size:15px; margin-top:10px; max-width:600px}
+
+  h2{font-size:20px; margin:30px 0 10px; letter-spacing:.2px; display:flex; align-items:center; gap:9px}
+  h2 .em{font-size:19px}
+
+  /* Two flows */
+  .flows{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:10px 0 4px}
+  .flow{border-radius:12px; padding:16px 18px; border:1px solid var(--border)}
+  .flow.no{background:rgba(217,43,43,.06); border-color:#5a2630}
+  .flow.yes{background:rgba(63,185,80,.06); border-color:#2c5234}
+  .flow .tag{font-size:12px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; margin-bottom:6px}
+  .flow.no .tag{color:#ef6b6b} .flow.yes .tag{color:#5ed47a}
+  .flow h3{font-size:15px; margin-bottom:5px}
+  .flow p{font-size:13px; color:var(--sub)}
+
+  /* Steps */
+  .steps{counter-reset:s; list-style:none; margin:8px 0}
+  .steps>li{counter-increment:s; position:relative; padding:2px 0 16px 46px}
+  .steps>li::before{content:counter(s); position:absolute; left:0; top:0; width:31px; height:31px; border-radius:50%; background:var(--accent); color:#fff; font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px rgba(217,43,43,.14)}
+  .steps>li::after{content:""; position:absolute; left:15px; top:34px; bottom:0; width:2px; background:var(--border2)}
+  .steps>li:last-child::after{display:none}
+  .steps>li b{color:#fff}
+  .steps .sub{color:var(--sub); font-size:13.5px; margin-top:3px}
+  .steps ul{margin:6px 0 0 18px}
+  .steps ul li{color:var(--sub); font-size:13.5px; margin:2px 0}
+
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin:12px 0}
+  .card h3{font-size:15px; margin-bottom:7px; color:#fff}
+  .card ul{margin:0 0 0 18px} .card li{margin:3px 0; color:var(--sub); font-size:13.5px}
+  .card li b{color:var(--text)}
+
+  .note{border-left:4px solid var(--info); background:rgba(68,147,248,.07); border-radius:0 9px 9px 0; padding:11px 16px; margin:12px 0; font-size:13.5px}
+  .warn{border-left:4px solid var(--warn); background:rgba(224,164,34,.07); border-radius:0 9px 9px 0; padding:11px 16px; margin:12px 0; font-size:13.5px}
+  .note b,.warn b{color:#fff}
+
+  .summary{border:1px dashed var(--accent); border-radius:12px; padding:16px 18px; background:rgba(217,43,43,.05); margin-top:22px; font-size:15px}
+  .summary b{color:#fff}
+  .path{font-weight:700; color:var(--accentH)}
+
+  .foot{margin-top:30px; padding-top:16px; border-top:1px solid var(--border2); color:#56565e; font-size:12px}
+
+  @page{margin:0}
+  @media print{
+    body{background:var(--bg)}
+    .page{max-width:none; padding:13mm 14mm}
+    .flow,.card,.note,.warn,.summary,.steps>li,.hero{break-inside:avoid}
+    h2{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="brand"><span class="hd">HD</span> <span class="zero">ZERO</span> Studio</div>
+    <h1>Ya tengo el MKV creado:<br>¿cómo lo subo?</h1>
+    <p>Guía rápida para cuando partes de un <b>MKV ya terminado</b> y solo quieres crear su torrent, sacar capturas y subirlo — <b>sin volver a procesarlo</b>.</p>
+  </div>
+
+  <h2><span class="em">🧭</span>Lo primero: el flujo correcto</h2>
+  <div class="flows">
+    <div class="flow no">
+      <div class="tag">✗ No uses esto</div>
+      <h3>🏠 General → ▶ Iniciar montaje</h3>
+      <p>Es para material <b>en bruto</b> que aún hay que procesar (remuxea, reordena pistas, convierte audio). Con un MKV ya final, lo <b>volvería a procesar</b>.</p>
+    </div>
+    <div class="flow yes">
+      <div class="tag">✓ Usa esto</div>
+      <h3>☁ Torrent y subida</h3>
+      <p>La ruta pensada para un MKV ya hecho. <b>No re-muxea nada</b>: usa el archivo tal cual, crea su torrent y prepara la ficha.</p>
+    </div>
+  </div>
+
+  <h2><span class="em">⚙</span>Antes de empezar (una sola vez)</h2>
+  <div class="card">
+    <h3>En ⚙ Ajustes / claves</h3>
+    <ul>
+      <li><b>URL de anuncio (announce)</b> con tu passkey — va dentro del <code>.torrent</code>. Sin ella, el torrent sale mal.</li>
+      <li><b>Token de la API</b> del tracker — para poder subir.</li>
+      <li><b>Host de imágenes</b> (freeimage, imgbb o imgbox) — para las capturas.</li>
+    </ul>
+  </div>
+
+  <h2><span class="em">🚀</span>Paso a paso</h2>
+  <ol class="steps">
+    <li>
+      <b>Abre la sección <span class="nav">☁ Torrent y subida</span></b>
+      <div class="sub">Es la pestaña del menú de la izquierda.</div>
+    </li>
+    <li>
+      <b>Carga tu MKV en «…o crear el torrent de algo ya procesado»</b>
+      <ul>
+        <li><span class="kbtn ghost">🧲 De un archivo…</span> → eliges el MKV final (una película o un episodio).</li>
+        <li><span class="kbtn ghost">🧲 De una carpeta (pack)…</span> → una <b>temporada</b> entera (carpeta con los MKV) → torrent multi-archivo.</li>
+        <li>¿Ya te hiciste el torrent? Cárgalo en <b>«Cargar un .torrent existente»</b>.</li>
+      </ul>
+      <div class="sub">Al hacerlo, el programa crea el <code>.torrent</code>, extrae el <b>MediaInfo</b> y las specs, carga las capturas que haya al lado y rellena los campos. <b>No toca tu MKV.</b></div>
+    </li>
+    <li>
+      <b>Saca las capturas del propio MKV</b> — <span class="kbtn ghost">📷 Crear capturas</span>
+      <div class="sub">Genera imágenes JPG directamente del MKV y las deja junto al vídeo. Elige cuántas en el selector (3–10). Luego márcalas y <span class="kbtn ghost">⬆ Subir y añadir a descripción</span>.</div>
+    </li>
+    <li>
+      <b>Identifica el título</b> — <span class="kbtn ghost">🔍 Buscar en TMDB</span>
+      <div class="sub">Rellena TMDB/IMDB/TVDB/MAL y el logo automáticamente.</div>
+    </li>
+    <li>
+      <b>Completa la ficha y sube</b>
+      <div class="sub">Categoría, tipo, resolución, descripción, firma… y pulsa <span class="kbtn">☁ Subir a HDZERO</span>.</div>
+    </li>
+  </ol>
+
+  <h2><span class="em">📷</span>Sobre las capturas</h2>
+  <div class="card">
+    <ul>
+      <li>Se generan <b>del propio MKV</b> con ffmpeg; no hace falta procesarlo.</li>
+      <li><b>Requisito:</b> primero hay que cargar el archivo/torrent (paso 2) para que sepa de qué vídeo sacarlas. Si no, avisa: <i>«No hay vídeo asociado: carga o crea un torrent primero…»</i>.</li>
+      <li><b>HDR / Dolby Vision:</b> si el MKV es HDR, marca <b>Dolby Vision / HDR10+ / HDR10</b> en las opciones <u>antes</u> de generar, para que aplique tonemapping y no salgan lavadas.</li>
+      <li>¿Ya tienes JPG al lado del MKV? Se cargan solos. Y con <b>«Añadir imágenes…»</b> metes imágenes a mano.</li>
+    </ul>
+  </div>
+
+  <div class="warn"><b>Recuerda:</b> en un tracker privado <b>siempre</b> hace falta un <code>.torrent</code>. Aunque ya tengas el MKV, el programa te lo crea en este mismo paso — no es un paso extra que debas hacer aparte.</div>
+
+  <div class="summary">
+    <b>En una línea:</b> &nbsp; <span class="path">☁ Torrent y subida → 🧲 De un archivo… → 📷 Crear capturas → 🔍 TMDB → ☁ Subir.</span><br>
+    <span style="color:var(--sub); font-size:13.5px">Todo desde tu MKV, sin pasar por «Iniciar montaje» y sin re-procesarlo.</span>
+  </div>
+
+  <div class="foot">HD ZERO Studio · Guía: partir de un MKV ya creado · Consejo: imprime con Ctrl+P para guardar como PDF.</div>
+
+</div>
+</body>
+</html>
