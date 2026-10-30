@@ -24,7 +24,7 @@ foreach($test in @('Test-Media.ps1','Test-Hybrid.ps1','Test-CaptureHidden.ps1','
 & node (Join-Path $PSScriptRoot 'test_web_file_picker.cjs'); if($LASTEXITCODE -ne 0){throw 'Falló el selector de vídeos web'}
 & node (Join-Path $PSScriptRoot 'test_web_update.cjs'); if($LASTEXITCODE -ne 0){throw 'Falló el botón de actualización web'}
 & node (Join-Path $PSScriptRoot 'test_web_logos.cjs'); if($LASTEXITCODE -ne 0){throw 'Falló la interfaz de logos web'}
-& python (Join-Path $PSScriptRoot 'test_transport.py'); if($LASTEXITCODE -ne 0){throw 'Falló el almacén remoto'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-RemoteServer.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló el control remoto local'}
 if($IncludeMontaje){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1');if($LASTEXITCODE -ne 0){throw 'Falló el montaje completo'}}
 if($IncludeMontaje){foreach($format in @('480i','576i')){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1') -VideoFormat $format;if($LASTEXITCODE -ne 0){throw "Falló el montaje SD $format"}}}
 if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1') -CaptureFailure -TorrentMode $mode;if($LASTEXITCODE -ne 0){throw "Las capturas bloquean el torrent $mode"}}}

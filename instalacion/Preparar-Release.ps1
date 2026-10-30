@@ -7,7 +7,7 @@ $stage = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $stage) { throw 'La carpeta de publicación ya existe. Usa una carpeta nueva.' }
 if ($Version -ne (Get-Content -LiteralPath (Join-Path $root 'VERSION.txt') -Raw).Trim()) { throw 'VERSION.txt no coincide con la publicación.' }
 $scripts = @(
-    'HDZ-GUI.ps1','HDZ-Interface.ps1','HDZ-Design.ps1','HDZnew.ps1','HDZ-Core.ps1','HDZ-Async.ps1','HDZ-Capturas.ps1','HDZ-ImageHosts.ps1','HDZ-Torrent.ps1','HDZ-History.ps1','HDZ-Jobs.ps1',
+    'HDZ-GUI.ps1','HDZ-Interface.ps1','HDZ-Design.ps1','HDZ-Remote.ps1','web/index.html','HDZnew.ps1','HDZ-Core.ps1','HDZ-Async.ps1','HDZ-Capturas.ps1','HDZ-ImageHosts.ps1','HDZ-Torrent.ps1','HDZ-History.ps1','HDZ-Jobs.ps1',
     'HDZ-CapturasContexto.ps1','HDZ-CapturasSubida.ps1','Capturas-MenuContextual.ps1','Capturas-MenuContextual.vbs',
     'HDZ Studio.cmd','HDZ Studio.vbs','HDZ-update.config.json','VERSION.txt','HDZ.ico','hdz_logo_r.png','HDZero New logo.png','HDZStudio.png','AppxManifest.xml',
     'instalacion/Actualizar HDZ Studio.cmd','instalacion/Actualizar-HDZStudio.ps1','instalacion/Actualizar-Seguro.ps1',

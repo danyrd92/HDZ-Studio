@@ -35,11 +35,12 @@ $gui=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'HDZ-GU
 $check=$gui.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Iniciar-ChequeoActualizacion'},$true)
 $assignment=$check.Find({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$worker'},$true)
 $worker=[scriptblock]::Create($assignment.Right.Extent.Text.Trim().TrimStart('{').TrimEnd('}'))
-function Invoke-RestMethod {
+# GitHub sirve version.json como octet-stream: el chequeo usa Invoke-WebRequest y decodifica bytes.
+function Invoke-WebRequest {
     param($Uri)
     $script:requests.Add($Uri)
     if($Uri -like '*primary.invalid*' -or $script:allFail){throw 'Synthetic unavailable endpoint'}
-    return [pscustomobject]@{version='9.9.9'}
+    return [pscustomobject]@{Content=[Text.Encoding]::UTF8.GetBytes('{"version":"9.9.9"}')}
 }
 try {
     $script:allFail=$false; $script:requests.Clear(); $sync=@{Hecho=$false;Json=$null;Error=$null}
@@ -49,5 +50,5 @@ try {
     $script:allFail=$true; $sync=@{Hecho=$false;Json=$null;Error=$null}
     & $worker $bases $sync
     Assert ($sync.Hecho -and $sync.Error -and -not $sync.Json) 'El chequeo GUI oculta el fallo total'
-} finally {Remove-Item Function:Invoke-RestMethod}
+} finally {Remove-Item Function:Invoke-WebRequest}
 Write-Host 'UPDATE_NETWORK_REGRESSION_OK: retries, fallback, partial cleanup and visible GUI failure'

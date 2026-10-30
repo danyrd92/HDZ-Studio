@@ -58,18 +58,17 @@ try {
     Invoke-HdzBackground {Start-Sleep -Milliseconds 250} @{}
     Assert $script:observedBusy 'La espera de red desactiva toda la ventana y bloquea el scroll'
     Assert $ui.upTitulo.IsEnabled 'El editor queda bloqueado después de la espera'
-    $transport=[hashtable]::Synchronized(@{Estado=$dto;PushNow=$true;Stop=$false})
-    $worker=[powershell]::Create()
+    # El servidor remoto local serializa el DTO en su propio hilo, no en el de la UI.
+    $probePort=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0);$probePort.Start();$port=$probePort.LocalEndpoint.Port;$probePort.Stop()
+    $script:remoto=@{Enabled=$true;Port=$port;Tokens=@()};$script:agSync=$null
+    Start-HdzRemoteServer
     try {
-        $fakeHttp='function Invoke-RestMethod { param($Uri,$Method,$Body,$Headers,$ContentType,$TimeoutSec) $sync.CapturedBody=$Body;$sync.Stop=$true;return @{cmds=@()} };'
-        [void]$worker.AddScript($fakeHttp+' & { '+$agenteWorker.ToString()+' } @args').AddArgument('http://fixture.invalid/').AddArgument('fixture').AddArgument($transport).AddArgument((Join-Path $env:TEMP 'hdz-test-transport.log'))
-        $run=$worker.BeginInvoke()
-        if(-not $run.AsyncWaitHandle.WaitOne(5000)){$worker.Stop();throw 'El fixture de transporte agotó el tiempo de espera'}
-        [void]$worker.EndInvoke($run)
-        Assert (-not $worker.HadErrors) 'Falló el worker de transporte'
-        $sent=$transport.CapturedBody|ConvertFrom-Json
-        Assert ($sent.lote.Count -eq 60 -and $sent.session -eq $script:agSession) 'El worker no serializó el DTO de la UI'
-    }finally{$worker.Dispose()}
+        $limit=[datetime]::UtcNow.AddSeconds(10);while(-not $script:agSync.Listening -and [datetime]::UtcNow -lt $limit){Start-Sleep -Milliseconds 50}
+        $script:agSync.Estado=$dto;$script:agSync.EstadoAt=[datetime]::UtcNow
+        $token=((Invoke-RestMethod "http://127.0.0.1:$port/api/pair" -Method Post -Body (@{code=$script:agSync.PairCode}|ConvertTo-Json) -ContentType 'application/json').token)
+        $sent=(Invoke-RestMethod "http://127.0.0.1:$port/api/state" -Headers @{'X-HDZ-Panel'=$token}).data
+        Assert ($sent.lote.Count -eq 60 -and $sent.session -eq $script:agSession) 'El servidor remoto no serializó el DTO de la UI'
+    } finally { Stop-HdzRemoteServer }
     Write-Host 'RESPONSIVENESS_OK: snapshot DTO, throttled publication, stable task controls, valid TMDB results.'
 } finally {
     Detener-Agente

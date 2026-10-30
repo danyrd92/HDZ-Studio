@@ -266,35 +266,17 @@ function Anexar-LogMontaje($carpeta) {
     } catch {}
 }
 
-# --- Envío del log a soporte (vía relay propio; el token de Telegram vive SOLO en el servidor) ---
-# La URL del relay y la clave compartida NO van en el código (este archivo es público en GitHub):
-# se leen de "soporte.cfg", que viaja DENTRO del exe pero NO se publica en el repo. Si el archivo
-# no está (p. ej. instalación que aún no lo trae), el botón queda "no configurado".
-$script:soporteUrl = ""
-$script:soporteKey = ""
-$script:agentUrl   = ""   # URL del agente de control remoto (solo si tu soporte.cfg la trae; opt-in)
-# Lee soporte.cfg desde la carpeta del programa o, si no, desde %APPDATA% (ahí lo deja la descarga
-# silenciosa cuando un usuario migra al canal de actualización propio).
-function Cargar-SoporteCfg {
-    # Lee AMBOS ficheros (carpeta del programa y %APPDATA%) y toma cada campo del PRIMERO que lo traiga.
-    # Sin 'return' temprano: así, si un soporte.cfg trae url+key pero NO 'agent', el 'agent' del otro
-    # (p. ej. %APPDATA%) sí se recoge. Antes se cortaba en el primero y se perdía la URL del agente.
-    $dbg = Join-Path $env:TEMP "hdz_agente.log"
-    foreach ($p in @((Join-Path $env:APPDATA "HDZ-soporte.cfg"), (Join-Path $PSScriptRoot "soporte.cfg"))) {
-        try {
-            if (Test-Path -LiteralPath $p) {
-                $sop = Get-Content -LiteralPath $p -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ("$($sop.key)".Length -lt 16) { continue }
-                $script:soporteUrl = "$($sop.url)".Trim()
-                $script:soporteKey = "$($sop.key)".Trim()
-                $script:agentUrl = "$($sop.agent)".Trim()
-                try { "[$(Get-Date -f 'HH:mm:ss')] cfg '$p': url=$([bool]$sop.url) key=$([bool]$sop.key) agent=$([bool]$sop.agent)" | Out-File $dbg -Append -Encoding UTF8 } catch {}
-                return # Una identidad completa; nunca mezclar campos de equipos distintos.
-            }
-        } catch {}
-    }
+# --- Reporte de problemas en GitHub ---
+# Nada se envía automáticamente: se guarda una copia CENSURADA del último log y se abre la página
+# de nueva incidencia del repositorio para adjuntarla. El repositorio sale de HDZ-update.config.json.
+function Get-HdzIssueUrl {
+    $repo = 'danyrd92/HDZ-Studio'
+    try {
+        $cfg = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'HDZ-update.config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ("$($cfg.repo)" -match '^[\w.-]+/[\w.-]+$') { $repo = "$($cfg.repo)" }
+    } catch {}
+    return "https://github.com/$repo/issues/new"
 }
-Cargar-SoporteCfg
 
 function Get-UltimoLog {
     if ($script:logRuta -and (Test-Path -LiteralPath $script:logRuta)) { return $script:logRuta }
@@ -308,48 +290,30 @@ function Get-UltimoLog {
 
 function Enviar-LogSoporte {
     param([switch]$ConfirmadoRemoto)
-    if ([string]::IsNullOrWhiteSpace($script:soporteUrl)) { Cargar-SoporteCfg }
-    if ([string]::IsNullOrWhiteSpace($script:soporteUrl)) {
-        Set-Estado "El envío de logs a soporte aún no está configurado." "warn"; return
-    }
     $log = Get-UltimoLog
-    if (-not $log) { Set-Estado "Todavía no hay ningún log que enviar (procesa o sube algo primero)." "warn"; return }
+    if (-not $log) { Set-Estado "Todavía no hay ningún log que adjuntar (procesa o sube algo primero)." "warn"; return }
     $proyecto = if ($script:logCarpeta) { Split-Path $script:logCarpeta -Leaf } else { [System.IO.Path]::GetFileNameWithoutExtension($log) }
-    $confirm = if ($ConfirmadoRemoto) { $true } else { Show-DialogoHDZ -Owner $win -Icono "📤" -Titulo "Enviar log a soporte" `
-        -Mensaje "Se enviará el log del proyecto «$proyecto» al soporte para diagnóstico.`n`nLas claves (token, passkey, contraseña) van censuradas en el log. ¿Enviar?" `
-        -BotonSi "Enviar" -BotonNo "Cancelar" }
+    $confirm = if ($ConfirmadoRemoto) { $true } else { Show-DialogoHDZ -Owner $win -Icono "🐞" -Titulo "Reportar un problema" `
+        -Mensaje "Se guardará una copia del log del proyecto «$proyecto» con las claves (token, passkey, contraseñas) censuradas y se abrirá GitHub para crear una incidencia.`n`nRevisa el log antes de adjuntarlo: la incidencia será pública. ¿Continuar?" `
+        -BotonSi "Continuar" -BotonNo "Cancelar" }
     if (-not $confirm) { return }
-    $sanitizedLog = Join-Path $env:TEMP ('hdz_support_' + [guid]::NewGuid().ToString('N') + '.log')
     try {
         $safeText = Redacta-Log ([IO.File]::ReadAllText($log))
-        # También se censuran logs de versiones antiguas justo antes de enviarlos.
+        # GitHub admite adjuntos de hasta 25 MB; se conservan las últimas líneas si el log es enorme.
         if ([Text.Encoding]::UTF8.GetByteCount($safeText) -gt 7MB) {
             $safeText = "[Diagnóstico reducido a las últimas líneas por tamaño]`r`n" + ($safeText.Substring([math]::Max(0,$safeText.Length-1500000)))
         }
-        [IO.File]::WriteAllText($sanitizedLog,$safeText,[Text.UTF8Encoding]::new($false))
-        $ver = try { (Get-Content -LiteralPath (Join-Path $PSScriptRoot "VERSION.txt") -Raw -ErrorAction Stop).Trim() } catch { "$($script:HDZVersion)" }
-        $usuario = if ($ui.cfgUsuarioSoporte) { "$($ui.cfgUsuarioSoporte.Text)".Trim() } else { "" }
-        if ([string]::IsNullOrWhiteSpace($usuario)) { $usuario = "(sin alias)" }
-        $form = @{
-            log      = Get-Item -LiteralPath $sanitizedLog
-            proyecto = "$proyecto"
-            usuario  = "$usuario"
-            equipo   = "$env:COMPUTERNAME / $env:USERNAME"
-            version  = "$ver"
+        $destino = Join-Path (Get-DirLogs) ("reporte_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".log")
+        [IO.File]::WriteAllText($destino,$safeText,[Text.UTF8Encoding]::new($false))
+        $titulo = [Uri]::EscapeDataString("Problema en HDZ Studio $($script:HDZVersion)")
+        $cuerpo = [Uri]::EscapeDataString("**Versión:** $($script:HDZVersion)`n`n**Qué ocurrió:**`n`n**Pasos para reproducirlo:**`n`nAdjunta aquí el log censurado: $(Split-Path $destino -Leaf)")
+        if (-not $script:modoTest) {
+            Start-Process "$(Get-HdzIssueUrl)?title=$titulo&body=$cuerpo"
+            Start-Process explorer.exe -ArgumentList "/select,`"$destino`""
         }
-        $headers = @{ Accept = "text/plain" }
-        if ($script:soporteKey) { $headers["X-HDZ-Key"] = $script:soporteKey }
-        Set-Estado "Enviando log a soporte…"
-        if ($ui.btnEnviarLog) { $ui.btnEnviarLog.IsEnabled = $false }
-        [void](Invoke-HdzRestMethod -Uri $script:soporteUrl -Method Post -Form $form -Headers $headers -TimeoutSec 60)
-        Set-Estado "✓  Log enviado a soporte. ¡Gracias!" "ok"
+        Set-Estado "✓  Log censurado guardado en $destino. Adjúntalo en la incidencia de GitHub." "ok"
     } catch {
-        $det = $_.Exception.Message
-        if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $det = $_.ErrorDetails.Message }
-        Set-Estado "No se pudo enviar el log: $det" "error"
-    } finally {
-        if ($ui.btnEnviarLog) { $ui.btnEnviarLog.IsEnabled = $true }
-        if (Test-Path -LiteralPath $sanitizedLog) { Remove-Item -LiteralPath $sanitizedLog -Force }
+        Set-Estado "No se pudo preparar el log: $($_.Exception.Message)" "error"
     }
 }
 
@@ -1865,7 +1829,7 @@ $xaml = @'
                 <TextBlock Style="{StaticResource D}" Text="Si algo falla, envía el registro (log) del proyecto al soporte para diagnóstico. Las claves van censuradas; nunca se comparten."/>
                 <TextBlock Style="{StaticResource Lbl}" Text="Tu usuario / alias (para que el soporte sepa de quién es el log)"/>
                 <TextBox x:Name="cfgUsuarioSoporte" Style="{StaticResource Input}" Width="420" HorizontalAlignment="Left"/>
-                <Button x:Name="btnEnviarLog" Style="{StaticResource Ghost}" Content="📤  Enviar log a soporte" HorizontalAlignment="Left" Margin="0,12,0,0"/>
+                <Button x:Name="btnEnviarLog" Style="{StaticResource Ghost}" Content="🐞  Reportar un problema" HorizontalAlignment="Left" Margin="0,12,0,0"/>
               </StackPanel>
             </Border>
             <Border Style="{StaticResource Card}">
@@ -7183,20 +7147,13 @@ function Descargar-TorrentTracker($url, $token, $dirDest, $nombreFallback) {
 # Envía al relay el fichero YA descargado desde el tracker. Nunca se envía al navegador la URL
 # original (contiene la rsskey/passkey); el panel recibe únicamente un id opaco y el nombre.
 function Publicar-TorrentAgente($ruta) {
-    if (-not $ruta -or -not (Test-Path -LiteralPath $ruta)) { return $null }
-    $baseAgente = "$script:agentUrl".Trim()
-    if ($baseAgente -notmatch '(?i)/agent/sync/?(?:\?.*)?$') { return $null }
-    $endpoint = [regex]::Replace($baseAgente, '(?i)/agent/sync/?(?:\?.*)?$', '/agent/torrent')
+    # El .torrent original queda disponible para el móvil a través del control remoto local.
     try {
-        $form = @{ torrent = Get-Item -LiteralPath $ruta }
-        $r = Invoke-HdzRestMethod -Uri $endpoint -Method Post -Form $form `
-            -Headers @{ "X-HDZ-Key" = "$script:soporteKey"; "Accept" = "application/json" } -TimeoutSec 30
-        if ("$($r.ok)" -eq "True" -and "$($r.id)" -match '^[0-9a-f]{64}$') {
-            try { Log-Linea "Torrent publicado para descarga remota: id=$($r.id), nombre=$($r.name)" } catch {}
-            return $r
-        }
+        $r = Register-HdzRemoteTorrent $ruta
+        if ($r) { try { Log-Linea "Torrent disponible para descarga remota: id=$($r.id), nombre=$($r.name)" } catch {} }
+        return $r
     } catch {
-        try { Log-Linea "No se pudo publicar el torrent en la web remota: $(Redacta-Log $_.Exception.Message)" } catch {}
+        try { Log-Linea "No se pudo ofrecer el torrent a la web remota: $(Redacta-Log $_.Exception.Message)" } catch {}
     }
     return $null
 }
@@ -7261,6 +7218,10 @@ function Guardar-Ajustes {
             Announce       = & $keep $ui.txtAnnounce.Text "Announce"
             UltimaVersionDescartada = $script:ajusteVerDescartada
             BienvenidaVista = [bool]$script:bienvenidaVista
+            # Control remoto local: los tokens de los dispositivos emparejados van cifrados (DPAPI).
+            RemotoActivo   = $(if ($script:remoto) { [bool]$script:remoto.Enabled } else { [bool]$prev.RemotoActivo })
+            RemotoPuerto   = $(if ($script:remoto) { [int]$script:remoto.Port } elseif ($prev.RemotoPuerto) { [int]$prev.RemotoPuerto } else { 8787 })
+            RemotoTokens   = $(if ($script:remoto) { if (@($script:remoto.Tokens).Count) { Protect-Texto (ConvertTo-Json -InputObject @($script:remoto.Tokens) -Compress) } else { '' } } else { "$($prev.RemotoTokens)" })
         }
         # Defensa 3: escritura ATÓMICA con respaldo. Escribimos a un temporal, guardamos el
         # fichero actual como .bak (red de recuperación) y luego reemplazamos. Si algo falla a
@@ -8892,40 +8853,10 @@ $win.Add_Closing({ param($sender, $eventArgs)
 })
 
 # =========================================================================
-# AGENTE DE CONTROL REMOTO (Fase 2) — OPT-IN: solo si soporte.cfg trae "agent".
-# Empuja el estado del programa al relay (/agent/sync) y aplica los comandos que
-# manda el panel web. El HTTP va en un runspace aparte para no bloquear la UI; el
-# estado se COMPONE en el hilo de UI y los comandos se APLICAN en el hilo de UI.
+# CONTROL REMOTO — OPT-IN (Ajustes › Control remoto). HDZ-Remote.ps1 sirve la web en la red
+# local y encola las órdenes; aquí se COMPONE el estado y se APLICAN las órdenes en el hilo de UI.
 # =========================================================================
 $script:agSync = $null; $script:agPS = $null; $script:agTimer = $null; $script:agBrowse = $null
-$agenteWorker = {
-    param($url, $key, $sync, $dbg)
-    function _agl($m) { try { "[$(Get-Date -f 'HH:mm:ss')] $m" | Out-File $dbg -Append -Encoding UTF8 } catch {} }
-    _agl "worker ARRANCADO url=$url keyLen=$($key.Length)"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $last = [datetime]::MinValue; $n = 0
-    while (-not $sync.Stop) {
-        $now = [datetime]::UtcNow
-        # Empuja cada ~1,8 s O de inmediato si PushNow (tras aplicar un comando: navegar carpetas, etc.).
-        if ($sync.PushNow -or ($now - $last).TotalMilliseconds -ge 1800) {
-            $sync.PushNow = $false; $last = $now
-            try {
-                $snapshot = $sync.Estado
-                if ($null -ne $snapshot) {
-                    # El DTO solo contiene valores; serializar aquí deja libre el Dispatcher WPF.
-                    $body = if ($snapshot -is [string]) { $snapshot } else { ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress }
-                    $r = Invoke-RestMethod -Uri $url -Method Post -Body $body `
-                         -Headers @{ "X-HDZ-Key" = $key } -ContentType "application/json; charset=utf-8" -TimeoutSec 10
-                    $sync.Online = $true
-                    try { $sync.LastAckIds=@($(if($snapshot -is [string]){($body | ConvertFrom-Json)._acks}else{$snapshot._acks}) | ForEach-Object {$_.id}) } catch {}
-                    if ($n -lt 2) { _agl "push OK (len=$($body.Length))" }; $n++
-                    if ($r.cmds) { foreach ($c in @($r.cmds)) { [void]$sync.Cmds.Enqueue($c) } }
-                } else { if ($n -lt 6) { _agl "estado VACIO, no envio" }; $n++ }
-            } catch { $sync.Online = $false; _agl "push ERROR: $($_.Exception.Message)" }
-        }
-        Start-Sleep -Milliseconds 200
-    }
-}
 # Lista carpetas/vídeos de una ruta del PC para el explorador del panel. Ruta vacía = unidades.
 function Listar-CarpetaAgente($p, $filtro = "video") {
     $definition = 'function ReadFolder {' + (Get-Command Listar-CarpetaAgenteCore).ScriptBlock.ToString() + '}; ReadFolder $parameters.Path $parameters.Filter'
@@ -9491,57 +9422,13 @@ function Aplicar-ComandoAgente($c) {
         }
     }
 }
-function Resolver-AgentUrl {
-    # Lectura A PRUEBA DE BALAS de la URL del agente. NO depende de Get-Content ni de ConvertFrom-Json
-    # (que en el proceso GUI, por algun motivo de entorno, devolvian 'agent' vacio pese a estar en el
-    # fichero). Usa [System.IO.File]::ReadAllText (puro .NET) + regex sobre el texto crudo.
-    $dbg = Join-Path $env:TEMP "hdz_agente.log"
-    # Varias rutas y varias FORMAS de calcularlas: si $env:APPDATA se resolviera raro en este proceso,
-    # el equivalente via $env:USERPROFILE lo cubre.
-    $roamUP = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE "AppData\Roaming" } else { $null }
-    $cands = @(
-        (Join-Path $env:APPDATA "HDZ-agente.url"),
-        $(if ($roamUP) { Join-Path $roamUP "HDZ-agente.url" }),
-        (Join-Path $PSScriptRoot "agente.url"),
-        (Join-Path $env:APPDATA "HDZ-soporte.cfg"),
-        $(if ($roamUP) { Join-Path $roamUP "HDZ-soporte.cfg" }),
-        (Join-Path $PSScriptRoot "soporte.cfg")
-    ) | Where-Object { $_ } | Select-Object -Unique
-    foreach ($f in $cands) {
-        try {
-            if (-not [System.IO.File]::Exists($f)) { continue }
-            $txt = [System.IO.File]::ReadAllText($f)
-            $tlen = if ($txt) { $txt.Length } else { 0 }
-            $hasAgent = if ($txt) { $txt.Contains('agent') } else { $false }
-            if ([string]::IsNullOrWhiteSpace($txt)) {
-                try { "  [resolver] '$f' len=$tlen (vacio)" | Out-File $dbg -Append -Encoding UTF8 } catch {}
-                continue
-            }
-            $val = ""
-            if ($f -like "*.url") {
-                $u = $txt.Trim()
-                if ($u -match '(?i)^https?://') { $val = $u }
-            } else {
-                try { $j = $txt | ConvertFrom-Json; if ($j.agent) { $val = "$($j.agent)".Trim() } } catch {}
-                if (-not $val) {
-                    $m = [regex]::Match($txt, '"agent"\s*:\s*"([^"]+)"')
-                    if ($m.Success) { $val = $m.Groups[1].Value.Trim() }
-                }
-            }
-            try { "  [resolver] '$f' len=$tlen hasAgent=$hasAgent -> '$val'" | Out-File $dbg -Append -Encoding UTF8 } catch {}
-            if ($val) { return $val }
-        } catch {
-            try { "  [resolver] '$f' ERROR: $($_.Exception.Message)" | Out-File $dbg -Append -Encoding UTF8 } catch {}
-        }
-    }
-    return ""
-}
 function Update-HdzAgentState {
     param([switch]$Force)
     if(-not $script:agSync){return}
     $now=[datetime]::UtcNow
     if(-not $Force -and $script:agSnapshotAt -and ($now-$script:agSnapshotAt).TotalMilliseconds -lt 600){return}
     try {$script:agSync.Estado=Componer-EstadoAgente -Snapshot;$script:agSnapshotAt=[datetime]::UtcNow} catch {return}
+    $script:agSync.Acks=@($script:agCompleted.Values);$script:agSync.EstadoAt=[datetime]::UtcNow
     $script:agSync.PushNow=$true
 }
 function Start-HdzAgentStateTimer {
@@ -9552,62 +9439,33 @@ function Start-HdzAgentStateTimer {
     $script:agStateTimer.Start()
 }
 function Iniciar-Agente {
-    $script:agDbg = Join-Path $env:TEMP "hdz_agente.log"
-    try { "[$(Get-Date -f 'HH:mm:ss')] Iniciar-Agente: modoTest=$($script:modoTest) agentUrl='$($script:agentUrl)' keyLen=$($script:soporteKey.Length)" | Out-File $script:agDbg -Append -Encoding UTF8 } catch {}
     if ($script:modoTest) { return }
-    # Respaldo a prueba de balas: reresolvemos SIEMPRE con lectura .NET+regex (independiente de
-    # Get-Content/ConvertFrom-Json, que en el proceso GUI daban 'agent' vacio). Si el cfg cargado
-    # temprano no trajo la URL, esto la recupera del texto crudo del propio cfg o del .url dedicado.
-    if ([string]::IsNullOrWhiteSpace($script:agentUrl)) {
-        $r = Resolver-AgentUrl
-        if ($r) { $script:agentUrl = $r }
+    # Opt-in: solo si el usuario activó «Control remoto» en Ajustes (HDZ-Remote.ps1).
+    if (-not $script:remoto -or -not $script:remoto.Enabled) { return }
+    Start-HdzRemoteServer
+    if (-not $script:agTimer) {
+        $t = New-Object System.Windows.Threading.DispatcherTimer
+        $t.Interval = [TimeSpan]::FromMilliseconds(700)
+        $t.Add_Tick({
+            if (-not $script:agSync) { return }
+            # Aplica comandos PRIMERO, luego recompón el estado (así refleja el comando recién aplicado).
+            $q = $script:agSync.Cmds; $aplicado = $false
+            $budget=[Diagnostics.Stopwatch]::StartNew();$processed=0
+            while ($q.Count -gt 0 -and $processed -lt 4 -and ($processed -eq 0 -or $budget.ElapsedMilliseconds -lt 40)) { $c = $q.Dequeue(); Aplicar-ComandoAgente $c; $aplicado = $true; $processed++ }
+            try { if($aplicado){Update-HdzAgentState -Force}else{Update-HdzAgentState} } catch {}
+        })
+        $script:agTimer = $t
     }
-    try { "  APPDATA=$env:APPDATA  agentUrl(final)='$($script:agentUrl)'" | Out-File $script:agDbg -Append -Encoding UTF8 } catch {}
-    if ([string]::IsNullOrWhiteSpace($script:agentUrl)) {
-        try { "  -> agentUrl vacia; programo reintento" | Out-File $script:agDbg -Append -Encoding UTF8 } catch {}
-        # Reintento autorreparable: quizas el fichero aun no estaba listo. Reintenta unas cuantas veces.
-        if (-not $script:agReintentos) { $script:agReintentos = 0 }
-        if ($script:agReintentos -lt 8) {
-            $script:agReintentos++
-            $tr = New-Object System.Windows.Threading.DispatcherTimer
-            $tr.Interval = [TimeSpan]::FromSeconds(4)
-            $tr.Add_Tick({ $this.Stop(); try { Iniciar-Agente } catch {} })
-            $tr.Start()
-        }
-        return
-    }
-    $script:agSync = [hashtable]::Synchronized(@{
-        Estado = $null; Online = $false; Stop = $false; PushNow = $false
-        Cmds   = [System.Collections.Queue]::Synchronized((New-Object System.Collections.Queue))
-    })
-    $ps = [powershell]::Create()
-    [void]$ps.AddScript($agenteWorker.ToString()).AddArgument($script:agentUrl).AddArgument($script:soporteKey).AddArgument($script:agSync).AddArgument($script:agDbg)
-    [void]$ps.BeginInvoke(); $script:agPS = $ps
-    $script:agTickLog = $false
-    $t = New-Object System.Windows.Threading.DispatcherTimer
-    $t.Interval = [TimeSpan]::FromMilliseconds(700)
-    $t.Add_Tick({
-        if (-not $script:agSync) { return }
-        # Aplica comandos PRIMERO, luego recompón el estado (así refleja el comando recién aplicado)
-        # y pide empuje inmediato para que el panel vea el cambio sin esperar al ciclo normal.
-        $q = $script:agSync.Cmds; $aplicado = $false
-        $budget=[Diagnostics.Stopwatch]::StartNew();$processed=0
-        while ($q.Count -gt 0 -and $processed -lt 4 -and ($processed -eq 0 -or $budget.ElapsedMilliseconds -lt 40)) { $c = $q.Dequeue(); Aplicar-ComandoAgente $c; $aplicado = $true; $processed++ }
-        $err = $null
-        try { if($aplicado){Update-HdzAgentState -Force}else{Update-HdzAgentState} } catch { $err = "$($_.Exception.Message)" }
-        if (-not $script:agTickLog) { $script:agTickLog = $true; try { "[$(Get-Date -f 'HH:mm:ss')] UI tick #1: EstadoLen=$("$($script:agSync.Estado)".Length) ComponerErr=$err" | Out-File $script:agDbg -Append -Encoding UTF8 } catch {} }
-        if ($aplicado) { $script:agSync.PushNow = $true }
-    })
-    $t.Start(); $script:agTimer = $t
+    $script:agTimer.Start()
     # Un Tick que está ejecutando una orden no vuelve a entrar mientras espera.
     # Otro temporizador publica el progreso durante esas esperas asíncronas.
     Start-HdzAgentStateTimer
-    try { Set-Estado "🌐 Control remoto activo (panel web)." } catch {}
+    try { Set-Estado "🌐 Control remoto activo en la red local (Ajustes › Control remoto)." } catch {}
 }
 function Detener-Agente {
-    try { if ($script:agSync) { $script:agSync.Stop = $true } } catch {}
     try { if ($script:agTimer) { $script:agTimer.Stop() } } catch {}
     try { if ($script:agStateTimer) { $script:agStateTimer.Stop() } } catch {}
+    try { Stop-HdzRemoteServer } catch {}
 }
 
 # Logo del tracker (junto a la GUI); si no existe, texto de respaldo «HDZERO».
@@ -9663,6 +9521,8 @@ Construir-Firmas
 if ([string]::IsNullOrWhiteSpace($ui.upDescripcion.Text)) { Reset-Descripcion }
 . (Join-Path $PSScriptRoot 'HDZ-Interface.ps1')
 Initialize-HdzInterface
+. (Join-Path $PSScriptRoot 'HDZ-Remote.ps1')
+Initialize-HdzRemote $rutaAjustes
 Initialize-HdzAudioTracks
 . (Join-Path $PSScriptRoot 'HDZ-Design.ps1')
 Initialize-HdzDesign

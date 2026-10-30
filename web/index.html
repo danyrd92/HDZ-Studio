@@ -605,6 +605,47 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
 <div class="toast" id="toast"></div>
 <script>
 const API='/api';
+/* Control remoto local: cada dispositivo se empareja una vez con el código que muestra HDZ Studio
+   (Ajustes › Control remoto) y después envía su token en X-HDZ-Panel. Sin token o con un token
+   olvidado en el PC, el servidor responde 401 y se vuelve a pedir el código. */
+const PANEL_TOKEN='hdz_panel_token';
+function panelToken(){try{return localStorage.getItem(PANEL_TOKEN)||''}catch(e){return ''}}
+const nativeFetch=window.fetch.bind(window);
+window.fetch=(url,options={})=>{
+  const target=String(url);
+  if(!target.startsWith(API+'/'))return nativeFetch(url,options);
+  const headers=new Headers(options.headers||{});const token=panelToken();if(token)headers.set('X-HDZ-Panel',token);
+  return nativeFetch(url,{...options,headers}).then(r=>{if(r.status===401&&target!==API+'/pair')showPairing();return r;});
+};
+function showPairing(){
+  if(document.getElementById('pairing'))return;
+  const box=document.createElement('div');box.id='pairing';
+  box.style.cssText='position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)';
+  box.innerHTML='<form style="width:100%;max-width:360px;background:var(--card);border-radius:var(--radius);padding:20px;color:var(--text)">'
+    +'<h2 style="margin:0 0 8px">Emparejar con HDZ Studio</h2>'
+    +'<p style="margin:0 0 14px;color:var(--sub)">Escribe el código que aparece en el PC, en Ajustes › Control remoto.</p>'
+    +'<input id="pairCode" autocomplete="one-time-code" autocapitalize="characters" maxlength="8" required style="width:100%;box-sizing:border-box;font-size:22px;letter-spacing:4px;text-transform:uppercase;padding:10px;border-radius:10px;border:1px solid var(--chip);background:var(--bg);color:var(--text)">'
+    +'<button class="btn block mt" type="submit">Emparejar</button><p id="pairMsg" style="min-height:1.2em;color:var(--warn)"></p></form>';
+  document.body.append(box);
+  const input=box.querySelector('#pairCode');input.focus();
+  box.querySelector('form').addEventListener('submit',async e=>{
+    e.preventDefault();const msg=box.querySelector('#pairMsg');msg.textContent='';
+    try{
+      const r=await nativeFetch(API+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:input.value.trim().toUpperCase()})});
+      const j=await r.json();if(!r.ok||!j.token)throw new Error(j.error||'No se pudo emparejar');
+      try{localStorage.setItem(PANEL_TOKEN,j.token)}catch(err){throw new Error('El navegador no permite guardar el emparejamiento (modo privado).')}
+      location.reload();
+    }catch(err){msg.textContent=err.message||'Sin conexión con el PC';}
+  });
+}
+/* Los .torrent se descargan con el token en la cabecera, no en la URL. */
+document.addEventListener('click',e=>{
+  const link=e.target.closest('a[href^="/api/torrent"]');if(!link)return;
+  e.preventDefault();
+  fetch(link.getAttribute('href'),{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Torrent no disponible; vuelve a publicarlo desde el PC.');return r.blob();}).then(blob=>{
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=link.getAttribute('download')||'tracker.torrent';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }).catch(err=>{if(typeof toast==='function')toast(err.message,'warn');});
+});
 /* Reserva el espacio REAL del panel fijo: cambia con los avisos, barras de
    progreso, orientación y área segura del móvil. No depende del estado remoto. */
 const bottomDock=document.querySelector('.dock');
@@ -1169,7 +1210,7 @@ function initInterface(){
   const logoLabel=document.createElement('label');logoLabel.className='lbl';logoLabel.htmlFor='logoPersonalizado';logoLabel.textContent='Logo personalizado: URL HTTPS directa';logoRow.before(logoLabel);
   const credentials=document.querySelectorAll('#sec-ajustes input[type=password]');for(const input of credentials){const badge=document.createElement('span');badge.className='credstatus';badge.dataset.credential=input.dataset.in;input.after(badge);input.placeholder='Introduce una nueva clave para sustituirla';}
   const cfg=document.getElementById('sec-ajustes'),tmdb=cardFor('[data-in="cfgTmdbKey"]');cfg.children[0].after(tmdb);
-  const log=document.createElement('button');log.id='btnSendLogWeb';log.className='btn block mt';log.textContent='Enviar registro a soporte';log.onclick=()=>{if(confirm('Se enviará el registro del proyecto al soporte configurado. Los tokens, passkeys y contraseñas se censuran. ¿Enviar?'))cmd({type:'send_log',confirmed:true});};cardFor('[data-in="cfgUsuarioSoporte"]').append(log);
+  const log=document.createElement('button');log.id='btnSendLogWeb';log.className='btn block mt';log.textContent='Preparar reporte de problema';log.onclick=()=>{if(confirm('Se guardará en el PC una copia del registro con tokens, passkeys y contraseñas censurados, y se abrirá GitHub en el PC para crear la incidencia. ¿Continuar?'))cmd({type:'send_log',confirmed:true});};cardFor('[data-in="cfgUsuarioSoporte"]').append(log);
   const details=document.createElement('details');details.id='estadoDetails';details.className='hide';details.innerHTML='<summary id="estadoSummary">Ver detalles del estado</summary>';document.getElementById('estadoTxt').before(details);details.append(document.getElementById('estadoTxt'));
   new MutationObserver(()=>{const txt=document.getElementById('estadoTxt').textContent;details.classList.toggle('hide',!txt);document.getElementById('estadoSummary').textContent=txt?'Ver detalles · '+txt.split('\n')[0]:'Ver detalles del estado';}).observe(document.getElementById('estadoTxt'),{childList:true,subtree:true,characterData:true});
   const copy={'Keywords':'Palabras clave (separadas por comas)','Tipo':'Tipo de release','Banderas':'Etiquetas y opciones del tracker','Subtítulos sin señal: ¿forzado o completo?':'Subtítulos sin tipo definido: ¿forzado o completo?','Análisis del lote':'Archivos y fuentes del trabajo'};

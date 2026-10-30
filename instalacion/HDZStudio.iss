@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName "HDZ Studio"
-#define AppVer  "1.17.38"
+#define AppVer  "1.23"
 #ifndef StageRoot
   #error "Usa Preparar-Release.ps1 y compila con /DStageRoot=ruta_del_paquete_verificado"
 #endif
@@ -30,7 +30,7 @@ UsePreviousAppDir=no
 DefaultGroupName=HDZ Studio
 DisableProgramGroupPage=yes
 OutputDir=Salida
-OutputBaseFilename=HDZ Studio Setup
+OutputBaseFilename=HDZStudio-Setup-{#AppVer}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
