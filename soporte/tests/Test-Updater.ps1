@@ -103,6 +103,11 @@ try {
     Assert ($LASTEXITCODE -eq 0) 'No instaló el paquete zip verificado'
     foreach ($name in $names) { Assert ((Get-FileHash -LiteralPath (Join-Path $installed $name)).Hash -eq $zipHashes[$name]) "Hash instalado desde zip incorrecto: $name" }
     Assert ([IO.File]::ReadAllText((Join-Path $installed 'bin/tool.exe')) -eq 'tool v1') 'Tocó una herramienta que ya coincidía'
+    # Configuración sin fallbackUrls (la publicada para GitHub): no debe confundirse con una URL no HTTPS.
+    Remove-Item Env:HDZ_UPDATE_BASE
+    Write-Fixture (Join-Path $installed 'HDZ-update.config.json') '{"baseUrl":"https://127.0.0.1:9/"}'
+    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -NoRelanzar 2>&1 | Out-String
+    Assert ($output -notmatch 'alternativa' -and $output -match 'descargar version\.json') "Una lista de respaldo vacía bloqueó la actualización: $output"
     Write-Host "UPDATER_REGRESSION_OK — PS5.1 desde Start-Process/PS7, firma, SHA256, reversión y actualización acumulativa. Pruebas: $testRoot"
 } finally {
     $rsa.Dispose()

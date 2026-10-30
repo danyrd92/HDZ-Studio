@@ -8736,7 +8736,7 @@ function Iniciar-ChequeoActualizacion {
             $url = "https://github.com/$repo/releases/latest/download/version.json"
         }
         $urls = @($url)
-        foreach ($fallback in @($cfg.fallbackUrls)) {
+        foreach ($fallback in @($cfg.fallbackUrls | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") })) {
             if ("$fallback" -notmatch '^https://') { throw 'La conexión alternativa requiere HTTPS.' }
             $urls += "$fallback".TrimEnd('/') + '/version.json'
         }

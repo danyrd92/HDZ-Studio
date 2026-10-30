@@ -55,7 +55,7 @@ try {
     if ($base -notmatch '^https://' -and -not ($env:HDZ_UPDATE_BASE -and $base -match '^file:')) { throw 'Las actualizaciones requieren HTTPS.' }
     $bases = @($base)
     if (-not $env:HDZ_UPDATE_BASE) {
-        foreach ($fallback in @($config.fallbackUrls)) {
+        foreach ($fallback in @($config.fallbackUrls | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") })) {
             if ("$fallback" -notmatch '^https://') { throw 'La conexión alternativa de actualización requiere HTTPS.' }
             $bases += "$fallback".TrimEnd('/') + '/'
         }
