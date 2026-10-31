@@ -6,6 +6,58 @@
 # $onProgress (recibe el porcentaje 0-100); si es $null, no informa.
 # =========================================================================
 
+# Se compila al crear el primer torrent, no al cargar el módulo (no retrasa el arranque de la GUI).
+function Initialize-HdzPieceHasher {
+    if ('HdzTorrent.PieceHasher' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
+namespace HdzTorrent {
+  public static class PieceHasher {
+    // Lee los archivos en orden (las piezas cruzan sus límites) y calcula el SHA-1 de cada pieza
+    // en tareas paralelas; los resúmenes se escriben en el orden original. El progreso se notifica
+    // desde el hilo que llama, nunca desde las tareas.
+    public static byte[] Hash(string[] paths, long[] sizes, int pieceLen, Action<long> onRead) {
+      int workers = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 6));
+      var pending = new Queue<Task<byte[]>>();
+      var output = new MemoryStream();
+      byte[] current = ArrayPool<byte>.Shared.Rent(pieceLen); int fill = 0; long total = 0;
+      try {
+        for (int i = 0; i < paths.Length; i++) {
+          using (var fs = new FileStream(paths[i], FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan)) {
+            if (fs.Length != sizes[i]) throw new IOException("El archivo cambió antes de crear el torrent: " + paths[i]);
+            int n;
+            while ((n = fs.Read(current, fill, pieceLen - fill)) > 0) {
+              fill += n; total += n;
+              if (fill == pieceLen) { Submit(pending, current, fill, output, workers); current = ArrayPool<byte>.Shared.Rent(pieceLen); fill = 0; }
+              if (onRead != null) onRead(total);
+            }
+          }
+        }
+        if (fill > 0) { Submit(pending, current, fill, output, workers); current = null; }
+        while (pending.Count > 0) output.Write(pending.Dequeue().GetAwaiter().GetResult(), 0, 20);
+        return output.ToArray();
+      } finally {
+        foreach (var task in pending) { try { task.Wait(); } catch { } }
+        if (current != null) ArrayPool<byte>.Shared.Return(current);
+      }
+    }
+    static void Submit(Queue<Task<byte[]>> pending, byte[] buffer, int length, MemoryStream output, int workers) {
+      while (pending.Count >= workers + 1) output.Write(pending.Dequeue().GetAwaiter().GetResult(), 0, 20);
+      pending.Enqueue(Task.Run(() => {
+        try { return SHA1.HashData(new ReadOnlySpan<byte>(buffer, 0, length)); }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
+      }));
+    }
+  }
+}
+'@
+}
+
 function New-TorrentNucleo($nombre, $archivos, $rutaSalida, $announce = "", $source = "", $forzarMulti = $false, [scriptblock]$onProgress = $null) {
     $lista = @($archivos | ForEach-Object {
         $fi = Get-Item -LiteralPath $_.Ruta
@@ -20,39 +72,18 @@ function New-TorrentNucleo($nombre, $archivos, $rutaSalida, $announce = "", $sou
                 elseif ($tamTotal -le 32GB)  { 8MB }
                 else                         { 16MB }
 
-    $sha = [System.Security.Cryptography.SHA1]::Create()
     $piezas = New-Object System.IO.MemoryStream
     $ms = $null; $temporaryTorrent = $null
     try {
-    $buf = New-Object byte[] $pieceLen
-    $enBuf = 0
-    $leidoTotal = [long]0
-    $ultPct = -1
-    foreach ($a in $lista) {
-        $fs = [System.IO.File]::OpenRead($a.Ruta)
-        try {
-            if ($fs.Length -ne $a.Tam) { throw "El archivo cambió antes de crear el torrent: $($a.Ruta)" }
-            while ($true) {
-                $n = $fs.Read($buf, $enBuf, $pieceLen - $enBuf)
-                if ($n -le 0) { break }
-                $enBuf += $n
-                $leidoTotal += $n
-                if ($enBuf -eq $pieceLen) {
-                    $hash = $sha.ComputeHash($buf, 0, $pieceLen)
-                    $piezas.Write($hash, 0, 20)
-                    $enBuf = 0
-                }
-                if ($onProgress) {
-                    $pct = [int](100 * $leidoTotal / $tamTotal)
-                    if ($pct -ne $ultPct) { & $onProgress $pct; $ultPct = $pct }
-                }
-            }
-        } finally { $fs.Dispose() }
-    }
-    if ($enBuf -gt 0) {
-        $hash = $sha.ComputeHash($buf, 0, $enBuf)
-        $piezas.Write($hash, 0, 20)
-    }
+    # Las piezas se leen en orden y se hashean en paralelo (varios núcleos): con SSD/NVMe un solo
+    # núcleo de SHA-1 era el cuello de botella. El .torrent resultante es idéntico byte a byte.
+    $estadoPct = @{ Ultimo = -1 }
+    $alLeer = if ($onProgress) {
+        [Action[long]]{ param($leido) $pct = [int](100 * $leido / $tamTotal); if ($pct -ne $estadoPct.Ultimo) { $estadoPct.Ultimo = $pct; & $onProgress $pct } }
+    } else { $null }
+    Initialize-HdzPieceHasher
+    $bytesPiezas = [HdzTorrent.PieceHasher]::Hash([string[]]@($lista.Ruta), [long[]]@($lista.Tam), [int]$pieceLen, $alLeer)
+    $piezas.Write($bytesPiezas, 0, $bytesPiezas.Length)
     if ($onProgress) { & $onProgress 100 }
 
     # --- bencode (claves de cada diccionario en orden alfabético) ---
@@ -99,7 +130,7 @@ function New-TorrentNucleo($nombre, $archivos, $rutaSalida, $announce = "", $sou
     [System.IO.File]::Move($temporaryTorrent, $rutaSalida, $true)
     } finally {
         if ($temporaryTorrent -and (Test-Path -LiteralPath $temporaryTorrent)) { Remove-Item -LiteralPath $temporaryTorrent -Force }
-        $sha.Dispose(); $piezas.Dispose(); if ($ms) { $ms.Dispose() }
+        $piezas.Dispose(); if ($ms) { $ms.Dispose() }
     }
     return $rutaSalida
 }

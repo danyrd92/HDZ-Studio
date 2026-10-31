@@ -15,6 +15,10 @@
 # =========================================================================
 
 $ErrorActionPreference = "Stop"
+# ffprobe, mkvmerge y mediainfo escriben UTF-8. Sin esto PowerShell decodifica su salida con la
+# página de códigos de la consola (850 en Windows en español) y las tildes de títulos y pistas
+# llegan rotas al análisis («Inglés» -> «Ingl├®s»). El motor ya lo hace igual (HDZnew.ps1).
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 . (Join-Path $PSScriptRoot "HDZ-Core.ps1")
 . (Join-Path $PSScriptRoot "HDZ-Async.ps1")
 . (Join-Path $PSScriptRoot "HDZ-History.ps1")
@@ -2343,8 +2347,11 @@ Init-Combo $ui.cmbFormato    (@($formatosGui    | ForEach-Object { @{T=$_; V=$_}
 # congelar la interfaz. Devuelve filas con la información cruda de cada vídeo.
 $scanWorker = {
     param($rutas)
-    $resultado = @()
-    foreach ($ruta in $rutas) {
+    # Cada vídeo se analiza con dos procesos externos (ffprobe y mkvmerge -J) que pasan casi todo
+    # el tiempo esperando al disco o a la red. Se analizan hasta 4 vídeos a la vez y el resultado
+    # conserva el orden de $rutas.
+    $analizarVideo = {
+        param($ruta)
         $fila = @{ Ruta = $ruta; Nombre = (Split-Path $ruta -Leaf); Error = $null; Video = $null; Audios = @(); Subs = @() }
         try {
             $raw = & ffprobe -v error -show_streams -of json "$ruta" 2>$null | Out-String
@@ -2400,11 +2407,16 @@ $scanWorker = {
         } catch {
             $fila.Error = "$($_.Exception.Message)"
         }
-        $resultado += $fila
+        $fila
     }
-    return $resultado
+    $lista = @($rutas)
+    if ($lista.Count -le 1) { return @(foreach ($ruta in $lista) { & $analizarVideo $ruta }) }
+    $definicion = $analizarVideo.ToString()
+    $filas = @($lista | ForEach-Object -ThrottleLimit 4 -Parallel { & ([scriptblock]::Create($using:definicion)) $_ })
+    $porRuta = @{}
+    foreach ($fila in $filas) { $porRuta[$fila.Ruta] = $fila }
+    return @(foreach ($ruta in $lista) { $porRuta[$ruta] })
 }
-
 function Get-VideosCarpeta($carpeta) {
     return @(Get-ChildItem -LiteralPath $carpeta -File -ErrorAction SilentlyContinue |
              Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts)$" -and $_.Name -notmatch "_FINAL" } |
@@ -4371,21 +4383,7 @@ $ui.btnElegirVideos.Add_Click({
 # =========================================================================
 $script:remezclaCarpetas = @()   # filas: @{ Grid; Ruta; Archivo; Video(radio); Audio(cb); Subs(cb) }
 
-# Clave de emparejado de remezcla. SERIE: SOLO temporada+episodio (SxxEyy), ignorando el título —
-# así casan releases del mismo show con TÍTULO EN DISTINTO IDIOMA (4K inglés vs 1080p español) y/o
-# sin año. El usuario ya eligió las carpetas, así que SxxEyy identifica el capítulo. PELÍCULA (sin
-# episodio): título+año (si los títulos están en idiomas distintos puede no casar). Igual en el motor.
-function Get-ClaveRemezcla($baseName) {
-    $episodeKey = Get-HdzEpisodeKey "$baseName"
-    if ($episodeKey) { return $episodeKey }
-    $b = ("$baseName" -replace '[._]', ' ')
-    if ($b -match '(?i)\bS(\d{1,3})\s?E(\d{1,4})\b') { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
-    if ($b -match '(?i)\b(\d{1,3})x(\d{1,4})\b')     { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
-    $corte = $b.Length
-    if ($b -match '\b(19\d{2}|20\d{2})\b') { $anio = $Matches[1]; $i = $b.IndexOf($Matches[1]); if ($i -gt 0) { $corte = [Math]::Min($corte, $i) } } else { $anio = '' }
-    $titulo = (($b.Substring(0, $corte) -replace '[\(\)\[\]]', ' ') -replace '\s+', ' ').Trim().ToLower()
-    return "$titulo|$anio"
-}
+# Get-ClaveRemezcla (emparejado de remezcla) vive en HDZ-Core.ps1, compartida con el motor.
 # Lee la lista actual de carpetas (solo las que siguen en el panel — la ✕ las quita de la vista).
 function Leer-RemezclaCarpetas {
     $lista = @()

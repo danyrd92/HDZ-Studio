@@ -223,42 +223,114 @@ function Move-ConProgreso($origen, $destino, [string]$etiqueta = "Moviendo archi
     $gb = [math]::Round($total / 1GB, 2)
     Write-Host "   -> $etiqueta ($gb GB) entre discos distintos: hay que COPIAR, no vale renombrar. Esto tarda." -ForegroundColor DarkYellow
     Write-DiagPaso "$etiqueta : copia entre volúmenes ($volO -> $volD), $gb GB"
-    $buf = New-Object byte[] (8 * 1024 * 1024)
+    # Copia nativa de Windows (CopyFileEx): medido con un NAS por SMB, 61-66 MB/s frente a 48 MB/s
+    # de la copia por bloques de PowerShell (pide lecturas/escrituras en paralelo al servidor).
+    # El aviso de progreso llega en el mismo hilo, así que la 2ª barra sigue funcionando.
+    if (-not ('HdzCopia.Nativa' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+namespace HdzCopia {
+  public static class Nativa {
+    delegate uint Rutina(long total, long hecho, long sTotal, long sHecho, uint flujo, uint motivo, IntPtr o, IntPtr d, IntPtr dato);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern bool CopyFileExW(string origen, string destino, Rutina progreso, IntPtr dato, IntPtr cancelar, uint flags);
+    // COPY_FILE_FAIL_IF_EXISTS: nunca sobrescribe un destino existente.
+    public static void Copiar(string origen, string destino, Action<long, long> progreso) {
+      Rutina rutina = (total, hecho, a, b, f, m, o, d, x) => { if (progreso != null) progreso(hecho, total); return 0; };
+      if (!CopyFileExW(origen, destino, rutina, IntPtr.Zero, IntPtr.Zero, 1)) throw new Win32Exception(Marshal.GetLastWin32Error());
+      GC.KeepAlive(rutina);
+    }
+  }
+}
+'@
+    }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $in = $null; $out = $null; $destinationCreated = $false
+    $estado = @{ UltMs = -1000L }
+    $alAvanzar = [Action[long, long]]{
+        param($copiado, $tot)
+        # Refresco cada 500 ms: escribir el JSON de progreso en cada bloque costaría más que la copia.
+        if (($sw.ElapsedMilliseconds - $estado.UltMs) -lt 500 -and $copiado -lt $tot) { return }
+        $estado.UltMs = $sw.ElapsedMilliseconds
+        $seg = $sw.Elapsed.TotalSeconds
+        $pct = if ($tot -gt 0) { [int](100 * $copiado / $tot) } else { 0 }
+        $mbs = if ($seg -gt 0) { [math]::Round(($copiado / 1MB) / $seg, 1) } else { 0 }
+        $eta = if ($copiado -gt 0 -and $seg -gt 0) { Format-Restante ((($tot - $copiado) * $seg) / $copiado) } else { "?" }
+        Set-ProgresoGui2 $pct "$etiqueta ($gb GB) · $mbs MB/s · quedan $eta"
+    }
     try {
-        $in  = [System.IO.File]::Open($origen, 'Open', 'Read', 'Read')
-        $out = [System.IO.File]::Open($destino, 'CreateNew', 'Write', 'None')
-        $destinationCreated = $true
-        $copiado = 0L; $ultMs = 0L
-        while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
-            $out.Write($buf, 0, $n)
-            $copiado += $n
-            # Refresco cada 500 ms: escribir el JSON de progreso en cada bloque de 8 MB costaría
-            # más que la propia copia, y cada 1% serían saltos de ~570 MB (>20 s sin moverse).
-            if (($sw.ElapsedMilliseconds - $ultMs) -ge 500 -or $copiado -eq $total) {
-                $ultMs = $sw.ElapsedMilliseconds
-                $seg = $sw.Elapsed.TotalSeconds
-                $pct = if ($total -gt 0) { [int](100 * $copiado / $total) } else { 0 }
-                $mbs = if ($seg -gt 0) { [math]::Round(($copiado / 1MB) / $seg, 1) } else { 0 }
-                $eta = if ($copiado -gt 0 -and $seg -gt 0) { Format-Restante ((($total - $copiado) * $seg) / $copiado) } else { "?" }
-                Set-ProgresoGui2 $pct "$etiqueta ($gb GB) · $mbs MB/s · quedan $eta"
-            }
-        }
-        if ($copiado -ne $total) { throw 'La copia tiene un tamaño distinto al original.' }
-        $out.Flush($true)
-        $out.Close(); $out = $null
-        $in.Close();  $in = $null
+        [HdzCopia.Nativa]::Copiar([System.IO.Path]::GetFullPath($origen), [System.IO.Path]::GetFullPath($destino), $alAvanzar)
+        if ((Get-Item -LiteralPath $destino -Force).Length -ne $total) { throw 'La copia tiene un tamaño distinto al original.' }
         Remove-Item -LiteralPath $origen -Force -ErrorAction Stop   # solo tras copiar OK
         Set-ProgresoGui2 -1
         Write-DiagPaso "$etiqueta : copia OK en $(Format-Restante $sw.Elapsed.TotalSeconds)"
     } catch {
-        if ($out) { try { $out.Close() } catch {} }
-        if ($in)  { try { $in.Close() } catch {} }
-        # Copia a medias -> se borra el destino; el origen se queda donde estaba.
-        try { if ($destinationCreated -and (Test-Path -LiteralPath $destino)) { Remove-Item -LiteralPath $destino -Force -ErrorAction SilentlyContinue } } catch {}
+        # Copia a medias -> se borra el destino (lo creó esta copia: CopyFileEx no sobrescribe y el
+        # destino no existía al empezar); el origen se queda donde estaba.
+        # Excepto si falló justo porque el destino apareció entretanto (ERROR_FILE_EXISTS/ALREADY_EXISTS).
+        $yaExistia = $_.Exception.InnerException -is [System.ComponentModel.Win32Exception] -and $_.Exception.InnerException.NativeErrorCode -in @(80, 183)
+        try { if (-not $yaExistia -and (Test-Path -LiteralPath $destino)) { Remove-Item -LiteralPath $destino -Force -ErrorAction SilentlyContinue } } catch {}
         Set-ProgresoGui2 -1
         throw
+    }
+}
+
+# ¿La ruta está en una unidad de red (UNC o letra asignada a un recurso compartido)?
+function Test-HdzRutaRed([string]$ruta) {
+    try {
+        $full = [System.IO.Path]::GetFullPath($ruta)
+        if ($full.StartsWith('\\')) { return $true }
+        return ([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($full)).DriveType -eq 'Network')
+    } catch { return $false }
+}
+
+# Mueve el MKV terminado a su carpeta de salida sin sobrescribir (sufijo « (n)» si ya existe).
+function Move-HdzFinalASalida($ruta, $carpeta) {
+    [void][System.IO.Directory]::CreateDirectory($carpeta)
+    $leafFin = Split-Path $ruta -Leaf
+    $destFin = Join-Path $carpeta $leafFin
+    $kk = 1
+    while (Test-Path -LiteralPath $destFin) {
+        $destFin = Join-Path $carpeta ("{0} ({1}){2}" -f [IO.Path]::GetFileNameWithoutExtension($leafFin), $kk, [IO.Path]::GetExtension($leafFin)); $kk++
+    }
+    Move-ConProgreso $ruta $destFin "Moviendo el MKV final a su carpeta de salida"
+    Write-Host "   -> Movido a la carpeta de salida: $carpeta" -ForegroundColor DarkGray
+    return $destFin
+}
+
+# Acción sobre los originales (intactos / borrar / .procesado). Solo se llama cuando el MKV final
+# ya está verificado en su destino definitivo.
+function Invoke-AccionOriginales($fuentesOrig, $accion, $archivo) {
+    if ($accion -eq "INTACTO") {
+        Write-Host "   -> Originales intactos (sin cambios)." -ForegroundColor DarkGray
+    } elseif ($accion -eq "BORRAR") {
+        Write-Host "   -> Borrando archivos fuente originales..." -ForegroundColor DarkGray
+        foreach ($fo in $fuentesOrig) {
+            try { Remove-Item -LiteralPath $fo -ErrorAction Stop }
+            catch { Add-Incidencia $archivo "Original conservado: $($_.Exception.Message)" }
+        }
+    } else {
+        # PROCESADO: renombrar a «.procesado» (en su propia carpeta) y, si está configurada,
+        # archivarlos en la carpeta de procesados (Ajustes), con subcarpeta por proyecto.
+        Write-Host "   -> Marcando originales como procesados (.procesado)..." -ForegroundColor DarkGray
+        $procesadosNuevos = @()
+        foreach ($fo in $fuentesOrig) {
+            $leaf = Split-Path $fo -Leaf
+            try {
+                $r = Rename-Item -LiteralPath $fo -NewName "$leaf.procesado" -PassThru -ErrorAction Stop
+                $procesadosNuevos += $r.FullName
+            } catch { Add-Incidencia $archivo "No se pudo marcar el original: $($_.Exception.Message)" }
+        }
+        if ($dirProcesados -and $procesadosNuevos.Count -gt 0) {
+            try { [void][System.IO.Directory]::CreateDirectory($dirProcesados) } catch {}
+            foreach ($pp in $procesadosNuevos) {
+                try {
+                    $dstPP = Join-Path $dirProcesados (Split-Path $pp -Leaf)
+                    if (-not (Test-Path -LiteralPath $dstPP)) { Move-ConProgreso $pp $dstPP "Archivando original .procesado" }
+                } catch { Add-Incidencia $archivo "No se pudo archivar el .procesado: $($_.Exception.Message)" }
+            }
+        }
     }
 }
 
@@ -981,14 +1053,18 @@ function Test-Dependencias($necesarias) {
 }
 
 # Detecta si un archivo de vídeo trae al menos una pista PGS (para preguntar solo cuando aplica)
+$cacheTienePGS = @{}
 function Test-TienePGS($rutaVideo) {
+    # Se consulta varias veces por archivo (pre-escaneo, preguntas y extracción); cada consulta era
+    # un ffprobe nuevo, lento con archivos en red. Las pistas de un origen no cambian durante el lote.
+    if ($cacheTienePGS.ContainsKey("$rutaVideo")) { return $cacheTienePGS["$rutaVideo"] }
+    $tiene = $false
     try {
         $resultado = ffprobe -v error -select_streams s -show_entries stream=codec_name -of csv=p=0 $rutaVideo 2>$null
-        if (-not $resultado) { return $false }
-        return ($resultado -match "(?i)pgs|hdmv_pgs")
-    } catch {
-        return $false
-    }
+        if ($resultado) { $tiene = [bool]($resultado -match "(?i)pgs|hdmv_pgs") }
+    } catch {}
+    $cacheTienePGS["$rutaVideo"] = $tiene
+    return $tiene
 }
 
 # Detecta el fps real del vídeo (Bug 5) y devuelve la cadena tipo "24000/1001" o "25/1"
@@ -1853,22 +1929,6 @@ function Get-DatosProyecto($contexto) {
 # Detecta si un grupo es híbrido DV+HDR10 y devuelve un objeto con la información.
 # Cacheado: se llama varias veces por grupo (pre-escaneos de und/idiomas/subs/DTS/PGS y el
 # bucle principal) y cada llamada ejecutaba ffprobe completo sobre todos los archivos.
-# Clave de emparejado de remezcla. SERIE: SOLO temporada+episodio (SxxEyy), ignorando el título —
-# así casan releases del mismo show con TÍTULO EN DISTINTO IDIOMA (4K inglés vs 1080p español) y/o
-# sin año. El usuario ya eligió las carpetas, así que SxxEyy identifica el capítulo. PELÍCULA (sin
-# episodio): título+año. Debe ser IDÉNTICA a la de la GUI.
-function Get-ClaveRemezcla($baseName) {
-    $episodeKey = Get-HdzEpisodeKey "$baseName"
-    if ($episodeKey) { return $episodeKey }
-    $b = ("$baseName" -replace '[._]', ' ')
-    if ($b -match '(?i)\bS(\d{1,3})\s?E(\d{1,4})\b') { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
-    if ($b -match '(?i)\b(\d{1,3})x(\d{1,4})\b')     { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
-    $corte = $b.Length
-    if ($b -match '\b(19\d{2}|20\d{2})\b') { $anio = $Matches[1]; $i = $b.IndexOf($Matches[1]); if ($i -gt 0) { $corte = [Math]::Min($corte, $i) } } else { $anio = '' }
-    $titulo = (($b.Substring(0, $corte) -replace '[\(\)\[\]]', ' ') -replace '\s+', ' ').Trim().ToLower()
-    return "$titulo|$anio"
-}
-
 function Resolve-Hibrido($grupo) {
     $claveCache = (@($grupo.Group | ForEach-Object { $_.FullName }) -join "||")
     if ($cacheHibrido.ContainsKey($claveCache)) { return $cacheHibrido[$claveCache] }
@@ -2655,7 +2715,10 @@ function Invoke-ConversionDTSMultiidioma($origenesPistas, $modo = "SIEMPRE", $me
     # start_time/retardo para sincronizar con el vídeo, p.ej. 0.971s). Al extraer a un EAC3 crudo
     # ese delay se perdería y el audio quedaría adelantado. Leemos el start_time de la pista y lo
     # reaplicamos en la propia conversión con -af adelay, de modo que el EAC3 ya nace sincronizado.
-    $generados = @()
+    # Argumentos de salida de cada pista (mapa, delay, códec). Se agrupan por archivo de origen:
+    # FFmpeg demuxa el MKV completo aunque solo se pida una pista, así que convertir N idiomas en
+    # N procesos leía el archivo N veces. Con varias salidas en un proceso se lee UNA vez y los
+    # codificadores trabajan en paralelo. El audio resultante es el mismo.
     foreach ($conv in $aConvertir) {
         # Nombre intuitivo: "<nombre del video>_audio_<lang>.eac3" (antes: "audio_<lang>_temp.eac3").
         $baseNombre = [System.IO.Path]::GetFileNameWithoutExtension((Split-Path $conv.RutaArchivo -Leaf))
@@ -2667,20 +2730,41 @@ function Invoke-ConversionDTSMultiidioma($origenesPistas, $modo = "SIEMPRE", $me
         [double]::TryParse(("$startTimeRaw").Replace(',', '.'), [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$delaySeg) | Out-Null
         $delayMs = [int][Math]::Round($delaySeg * 1000)
 
+        $salidaArgs = @('-map', "0:$($conv.Index)")
+        # adelay inserta silencio al inicio para reproducir el retardo original (todos los canales).
+        if ($delayMs -gt 0) { $salidaArgs += @('-af', "adelay=${delayMs}:all=1") }
+        $salidaArgs += @('-c:a', 'eac3', '-b:a', '1024k', '-y', $audioEAC3_temp)
+        $conv | Add-Member -NotePropertyName Salida -NotePropertyValue $audioEAC3_temp -Force
+        $conv | Add-Member -NotePropertyName SalidaArgs -NotePropertyValue $salidaArgs -Force
+
         Write-Host "   -> Extrayendo DTS '$($conv.Lang)' (Index $($conv.Index)) a $($audioEAC3_temp | Split-Path -Leaf)..." -ForegroundColor Gray
-        Write-DiagPaso "  ffmpeg DTS->EAC3 INICIO: lang=$($conv.Lang) delay=${delayMs}ms"
-        if ($delayMs -gt 0) {
-            Write-Host "      (delay de origen: ${delayMs} ms, se preserva en el EAC3)" -ForegroundColor DarkGray
-            # adelay inserta silencio al inicio para reproducir el retardo original (todos los canales).
-            ffmpeg -i $conv.RutaArchivo -map "0:$($conv.Index)" -af "adelay=${delayMs}:all=1" -c:a eac3 -b:a 1024k $audioEAC3_temp -y -v error
+        if ($delayMs -gt 0) { Write-Host "      (delay de origen: ${delayMs} ms, se preserva en el EAC3)" -ForegroundColor DarkGray }
+        Write-DiagPaso "  ffmpeg DTS->EAC3 preparado: lang=$($conv.Lang) delay=${delayMs}ms"
+    }
+    $generados = @()
+    foreach ($porArchivo in @($aConvertir | Group-Object RutaArchivo)) {
+        $convs = @($porArchivo.Group)
+        $argsFf = @('-nostdin', '-v', 'error', '-i', $convs[0].RutaArchivo)
+        foreach ($conv in $convs) { $argsFf += $conv.SalidaArgs }
+        Write-DiagPaso "  ffmpeg DTS->EAC3 INICIO: $($convs.Count) pista(s) en una pasada de $(Split-Path $convs[0].RutaArchivo -Leaf)"
+        & ffmpeg @argsFf
+        $codigoFf = $LASTEXITCODE
+        Write-DiagPaso "  ffmpeg DTS->EAC3 FIN: exit=$codigoFf"
+        if ($codigoFf -ne 0 -and $convs.Count -gt 1) {
+            # Respaldo: pista a pista, para que un idioma problemático no deje sin convertir a los demás.
+            foreach ($conv in $convs) {
+                & ffmpeg @(@('-nostdin', '-v', 'error', '-i', $conv.RutaArchivo) + $conv.SalidaArgs)
+                $conv | Add-Member -NotePropertyName Ok -NotePropertyValue ($LASTEXITCODE -eq 0) -Force
+            }
         } else {
-            ffmpeg -i $conv.RutaArchivo -map "0:$($conv.Index)" -c:a eac3 -b:a 1024k $audioEAC3_temp -y -v error
+            foreach ($conv in $convs) { $conv | Add-Member -NotePropertyName Ok -NotePropertyValue ($codigoFf -eq 0) -Force }
         }
-        Write-DiagPaso "  ffmpeg DTS->EAC3 FIN: lang=$($conv.Lang) exit=$LASTEXITCODE"
-        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $audioEAC3_temp)) {
-            $generados += $audioEAC3_temp
-        } else {
-            Write-Host "   [!] ffmpeg falló convirtiendo DTS '$($conv.Lang)'." -ForegroundColor Red
+        foreach ($conv in $convs) {
+            if ($conv.Ok -and (Test-Path -LiteralPath $conv.Salida)) {
+                $generados += $conv.Salida
+            } else {
+                Write-Host "   [!] ffmpeg falló convirtiendo DTS '$($conv.Lang)'." -ForegroundColor Red
+            }
         }
     }
     Write-DiagPaso "Conversion DTS: FIN ($($generados.Count) pistas convertidas)"
@@ -2734,6 +2818,7 @@ function Invoke-ConversionAudioManual($conversiones, $archivoPrincipal) {
     }
 
     $n = 0
+    $preparadas = @()
     foreach ($c in $lista) {
         $n++
         $idx  = [int]$c.Index
@@ -2774,22 +2859,39 @@ function Invoke-ConversionAudioManual($conversiones, $archivoPrincipal) {
         $nomComercial = switch ($cod) { "eac3" { "DD+" } "ac3" { "DD" } "aac" { "AAC" } default { $cod.ToUpper() } }
         $layStr = switch ($ch) { 8 { "7.1" } 6 { "5.1" } 2 { "2.0" } 1 { "1.0" } default { "$ch ch" } }
         Write-Host "   -> Convirtiendo pista $idx ($lang) a $nomComercial $layStr (${br}k)..." -ForegroundColor Gray
-        Write-DiagPaso "  ffmpeg conv INICIO: idx=$idx -> $cod ${ch}ch ${br}k delay=${delayMs}ms"
-        if ($delayMs -gt 0) {
-            Write-Host "      (delay de origen: ${delayMs} ms, se preserva)" -ForegroundColor DarkGray
-            $null = ffmpeg -i $rutaFuente -map "0:$idx" -af "adelay=${delayMs}:all=1" -c:a $cod -ac $ch -b:a "${br}k" $salida -y -v error
-        } else {
-            $null = ffmpeg -i $rutaFuente -map "0:$idx" -c:a $cod -ac $ch -b:a "${br}k" $salida -y -v error
+        if ($delayMs -gt 0) { Write-Host "      (delay de origen: ${delayMs} ms, se preserva)" -ForegroundColor DarkGray }
+        $salidaArgs = @('-map', "0:$idx")
+        if ($delayMs -gt 0) { $salidaArgs += @('-af', "adelay=${delayMs}:all=1") }
+        $salidaArgs += @('-c:a', $cod, '-ac', "$ch", '-b:a', "${br}k", '-y', $salida)
+        $preparadas += [PSCustomObject]@{ Idx = $idx; RutaFuente = $rutaFuente; Salida = $salida; SalidaArgs = $salidaArgs; Cod = $cod; Ch = $ch; Lang = $lang; Etiqueta = "$nomComercial $layStr"; MkvAudioId = $mkvAudioId }
+    }
+
+    # Codificación: UNA lectura del archivo de origen para todas sus conversiones (FFmpeg demuxa el
+    # archivo entero aunque solo se pida una pista). Si el proceso conjunto falla, se repite pista a
+    # pista para dar el mismo error concreto que antes.
+    foreach ($porFuente in @($preparadas | Group-Object RutaFuente)) {
+        $grupoConv = @($porFuente.Group)
+        $argsFf = @('-nostdin', '-v', 'error', '-i', $grupoConv[0].RutaFuente)
+        foreach ($pc in $grupoConv) { $argsFf += $pc.SalidaArgs }
+        Write-DiagPaso "  ffmpeg conv INICIO: $($grupoConv.Count) pista(s) en una pasada de $(Split-Path $grupoConv[0].RutaFuente -Leaf)"
+        $null = & ffmpeg @argsFf
+        $codigoFf = $LASTEXITCODE
+        Write-DiagPaso "  ffmpeg conv FIN: exit=$codigoFf"
+        foreach ($pc in $grupoConv) {
+            if ($codigoFf -ne 0 -and $grupoConv.Count -gt 1) { $null = & ffmpeg @(@('-nostdin', '-v', 'error', '-i', $pc.RutaFuente) + $pc.SalidaArgs); $codigoPc = $LASTEXITCODE } else { $codigoPc = $codigoFf }
+            if ($codigoPc -ne 0 -or -not (Test-Path -LiteralPath $pc.Salida)) {
+                foreach ($tmpConv in $preparadas) { if (Test-Path -LiteralPath $tmpConv.Salida) { Remove-Item -LiteralPath $tmpConv.Salida -Force } }
+                throw "FFmpeg falló convirtiendo la pista $($pc.Idx) a $($pc.Etiqueta). Se conserva el archivo original."
+            }
         }
-        Write-DiagPaso "  ffmpeg conv FIN: idx=$idx exit=$LASTEXITCODE"
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $salida)) {
-            if (Test-Path -LiteralPath $salida) { Remove-Item -LiteralPath $salida -Force }
-            throw "FFmpeg falló convirtiendo la pista $idx a $nomComercial $layStr. Se conserva el archivo original."
-        }
+    }
+
+    foreach ($pc in $preparadas) {
+        $idx = $pc.Idx; $rutaFuente = $pc.RutaFuente; $salida = $pc.Salida; $cod = $pc.Cod; $ch = $pc.Ch; $lang = $pc.Lang; $mkvAudioId = $pc.MkvAudioId
         $convertedRaw = & ffprobe -v error -show_streams -of json $salida 2>$null
         $converted = if ($LASTEXITCODE -eq 0) { @( (($convertedRaw -join "`n") | ConvertFrom-Json).streams | Where-Object codec_type -eq audio) } else { @() }
         if ($converted.Count -ne 1 -or $converted[0].codec_name -ne $cod -or [int]$converted[0].channels -ne $ch) {
-            Remove-Item -LiteralPath $salida -Force
+            foreach ($tmpConv in $preparadas) { if (Test-Path -LiteralPath $tmpConv.Salida) { Remove-Item -LiteralPath $tmpConv.Salida -Force } }
             throw 'El audio convertido no contiene el formato solicitado. No se sustituye el original.'
         }
         $nomIdioma = Get-LanguageName $lang ""
@@ -2844,7 +2946,7 @@ function Invoke-ExtraccionPGS($origenPistas, $idiomasSubsMantener = $null, $pref
     if ($pistasPGS.Count -eq 0) {
         return 0
     }
-    $extraidos = 0
+    $aExtraer = @()
     foreach ($sub in $pistasPGS) {
         $lang = if ($sub.Lang) { $sub.Lang } else { "unk" }
         # Si el usuario eligió recortar idiomas, no extraemos los PGS de idiomas descartados.
@@ -2856,12 +2958,21 @@ function Invoke-ExtraccionPGS($origenPistas, $idiomasSubsMantener = $null, $pref
                 continue
             }
         }
-        $supName = "${prefijoArchivo}_sub_$($sub.Index)_$lang.sup"
-        ffmpeg -i $origenPistas -map 0:$($sub.Index) -c copy $supName -y -v error
-        Write-Host "      -> Extraído: $supName" -ForegroundColor Gray
-        $extraidos++
+        $aExtraer += [PSCustomObject]@{ Index = $sub.Index; Sup = "${prefijoArchivo}_sub_$($sub.Index)_$lang.sup" }
     }
-    return $extraidos
+    if ($aExtraer.Count -eq 0) { return 0 }
+    # UNA sola lectura del archivo para todas las pistas: antes cada PGS lanzaba su propio FFmpeg,
+    # que recorría el MKV entero (con un remux de 60 GB y 4 PGS se leían 240 GB).
+    $argsPgs = @('-nostdin', '-v', 'error', '-i', $origenPistas)
+    foreach ($pg in $aExtraer) { $argsPgs += @('-map', "0:$($pg.Index)", '-c', 'copy', '-y', $pg.Sup) }
+    & ffmpeg @argsPgs
+    if ($LASTEXITCODE -ne 0) {
+        # Respaldo: pista a pista, como siempre, para que una pista problemática no impida las demás.
+        Write-DiagLinea "Extracción PGS en una pasada falló (exit=$LASTEXITCODE); se repite pista a pista."
+        foreach ($pg in $aExtraer) { ffmpeg -nostdin -i $origenPistas -map 0:$($pg.Index) -c copy $pg.Sup -y -v error }
+    }
+    foreach ($pg in $aExtraer) { Write-Host "      -> Extraído: $($pg.Sup)" -ForegroundColor Gray }
+    return $aExtraer.Count
 }
 
 # Construye la lista bruta de pistas (internas + externas) con todos sus metadatos
@@ -3317,8 +3428,11 @@ function Format-Subs($subs, $rutaMkvOrigen = $null, $decisionesSubUnico = $null)
 }
 
 # Ensambla el MKV final con mkvmerge
-function Invoke-Ensamblaje($archivoPrincipal, $origenesPistas, $esHibrido, $videoA_Muxear, $idVideo, $audiosOrdenados, $subsOrdenados) {
-    $archivoSalidaTemporal = Join-Path $rutaCarpeta "Ensamblaje_$([guid]::NewGuid().ToString('N')).mkv"
+function Invoke-Ensamblaje($archivoPrincipal, $origenesPistas, $esHibrido, $videoA_Muxear, $idVideo, $audiosOrdenados, $subsOrdenados, $carpetaMux = $null) {
+    # mkvmerge escribe directamente en la carpeta de salida: si está en otro disco, se evita copiar
+    # después el MKV entero (decenas de GB) y además se lee de un disco mientras se escribe en otro.
+    $dirMux = if ($carpetaMux) { $carpetaMux } else { $rutaCarpeta }
+    $archivoSalidaTemporal = Join-Path $dirMux "Ensamblaje_$([guid]::NewGuid().ToString('N')).mkv"
     $argsMkv = @("-o", $archivoSalidaTemporal, "--no-global-tags", "--gui-mode")
 
     $listaArchivos = @($origenesPistas)
@@ -4181,6 +4295,12 @@ if ($modoLote -eq "HOMOGENEO" -and $decisionExtraerPGS) {
 # =========================================================================
 # FASE BATCH: BUCLE PRINCIPAL DE PROCESAMIENTO
 # =========================================================================
+# Si el lote acaba en una carpeta de temporada/pack, los MKV terminados se agrupan al final.
+# Misma condición que el bloque del pack (al final del script), calculada aquí por adelantado.
+$packAlFinal = ($modoTorrent -in @("PACK", "AMBOS")) -or (($modoLote -eq "HOMOGENEO") -and @($grupos).Count -gt 1 -and ($modoTorrent -ne "INDIVIDUAL"))
+# MKV terminados en el disco de trabajo que aún deben ir a su carpeta de salida (con su acción
+# sobre los originales, que espera a que el MKV esté verificado en el destino).
+$global:pendientesSalida = [System.Collections.Generic.List[object]]::new()
 foreach ($grupo in $grupos) {
     $archivoFinalDestino=''; $rutaTorrentFinal=''; $origenesPistas=@(); $archivosBorrables=@()
     # El índice interno comienza en 0, pero el progreso que ve el usuario es 1..N. Debe avanzar
@@ -4579,7 +4699,39 @@ foreach ($grupo in $grupos) {
         # Es lo que le pasaremos a mkvmerge.
         Write-DiagPistasFinal $audiosOrdenados $subsOrdenados $idVideo $altoVideo $codecVideo $hdrVideo
 
-        $archivoSalidaTemporal = Invoke-Ensamblaje $archivoPrincipal $origenesPistas $esHibrido $videoA_Muxear $idVideo $audiosOrdenados $subsOrdenados
+        # Carpeta de salida del MKV resultado. Puede elegirse POR ARCHIVO (mapa de la GUI); si este
+        # archivo no tiene una propia, se usa la global; si tampoco hay global, se queda en origen.
+        # Se resuelve ANTES de ensamblar para que mkvmerge escriba ya allí.
+        $carpetaSalidaArch = $carpetaSalidaGui
+        $csMap = Get-CfgGui "CarpetaSalidaPorArchivo"
+        $nmSal = $archivoPrincipal.Name
+        if ($csMap -and ($csMap.PSObject.Properties.Name -contains $nmSal)) {
+            $csVal = "$($csMap.$nmSal)".Trim()
+            if ($csVal) { $carpetaSalidaArch = $csVal }
+        }
+        # Dónde se hace el trabajo pesado (mux, banderas, verificación, capturas y hash del torrent):
+        #  - por defecto en la carpeta de trabajo, y el MKV terminado viaja UNA vez al final. Si la
+        #    salida es un HDD o un recurso de red, escribir allí y luego releerlo entero para el
+        #    torrent costaba dos viajes por el disco/red lentos;
+        #  - si el origen está en red y la salida es local, se ensambla directamente en la salida.
+        $carpetaMux = $null
+        $moverAlFinal = $false
+        $salidaDistinta = $carpetaSalidaArch -and ([IO.Path]::GetFullPath($carpetaSalidaArch).TrimEnd('\') -ine [IO.Path]::GetFullPath($rutaCarpeta).TrimEnd('\'))
+        if ($salidaDistinta -and -not ((Test-HdzRutaRed $rutaCarpeta) -and -not (Test-HdzRutaRed $carpetaSalidaArch))) {
+            $moverAlFinal = $true
+            Write-DiagLinea "Trabajo en la carpeta de origen; el MKV terminado se moverá a '$carpetaSalidaArch' al final."
+        } elseif ($salidaDistinta) {
+            try {
+                [void][System.IO.Directory]::CreateDirectory($carpetaSalidaArch)
+                $muxBytes = [long](@($origenesPistas | ForEach-Object { (Get-Item -LiteralPath $_).Length }) | Measure-Object -Sum).Sum + 100MB
+                Assert-HdzFreeSpace $carpetaSalidaArch $muxBytes
+                $carpetaMux = $carpetaSalidaArch
+            } catch {
+                # Sin acceso o sin espacio: se ensambla en origen y el movimiento posterior informa del error.
+                Write-DiagLinea "Ensamblaje en origen (carpeta de salida no utilizable): $($_.Exception.Message)"
+            }
+        }
+        $archivoSalidaTemporal = Invoke-Ensamblaje $archivoPrincipal $origenesPistas $esHibrido $videoA_Muxear $idVideo $audiosOrdenados $subsOrdenados $carpetaMux
         if (-not $archivoSalidaTemporal) {
             Write-Host "   Limpiando y saltando al siguiente archivo..." -ForegroundColor Yellow
             Add-Incidencia $global:archivoEnCurso "mkvmerge falló al ensamblar. Archivo SALTADO (no procesado)."
@@ -4732,66 +4884,21 @@ foreach ($grupo in $grupos) {
 
         # Las colisiones se resuelven con un sufijo; nunca se libera el nombre borrando la fuente.
         $archivoFinalDestino = Rename-EvitarColision $archivoSalidaTemporal $nombreFinal
-        # Carpeta de salida del MKV resultado. Puede elegirse POR ARCHIVO (mapa de la GUI); si este
-        # archivo no tiene una propia, se usa la global; si tampoco hay global, se queda en origen.
-        $carpetaSalidaArch = $carpetaSalidaGui
-        $csMap = Get-CfgGui "CarpetaSalidaPorArchivo"
-        $nmSal = $archivoPrincipal.Name
-        if ($csMap -and ($csMap.PSObject.Properties.Name -contains $nmSal)) {
-            $csVal = "$($csMap.$nmSal)".Trim()
-            if ($csVal) { $carpetaSalidaArch = $csVal; try { [void][System.IO.Directory]::CreateDirectory($csVal) } catch {} }
-        }
-        if ($carpetaSalidaArch -and (Split-Path $archivoFinalDestino -Parent) -ne $carpetaSalidaArch) {
-            try {
-                $leafFin = Split-Path $archivoFinalDestino -Leaf
-                $destFin = Join-Path $carpetaSalidaArch $leafFin
-                $kk = 1
-                while (Test-Path -LiteralPath $destFin) {
-                    $destFin = Join-Path $carpetaSalidaArch ("{0} ({1}){2}" -f [IO.Path]::GetFileNameWithoutExtension($leafFin), $kk, [IO.Path]::GetExtension($leafFin)); $kk++
-                }
-                Move-ConProgreso $archivoFinalDestino $destFin "Moviendo el MKV final a su carpeta de salida"
-                $archivoFinalDestino = $destFin
-                Write-Host "   -> Movido a la carpeta de salida: $carpetaSalidaArch" -ForegroundColor DarkGray
-            } catch { throw "No se pudo guardar en la carpeta de salida. Originales intactos: $($_.Exception.Message)" }
+        # Si se ensambló en la salida ya está allí; si se trabaja en origen, se mueve al final.
+        $yaEnSalida = $carpetaSalidaArch -and ([IO.Path]::GetFullPath((Split-Path $archivoFinalDestino -Parent)).TrimEnd('\') -ieq [IO.Path]::GetFullPath($carpetaSalidaArch).TrimEnd('\'))
+        if ($carpetaSalidaArch -and -not $yaEnSalida -and -not $moverAlFinal) {
+            try { $archivoFinalDestino = Move-HdzFinalASalida $archivoFinalDestino $carpetaSalidaArch }
+            catch { throw "No se pudo guardar en la carpeta de salida. Originales intactos: $($_.Exception.Message)" }
         }
         Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName
+        $fuentesOrig = @()
         if (Test-Path -LiteralPath $archivoFinalDestino) {
             # TODOS los archivos fuente de este grupo: 1 normal, 2 en híbrido, y vídeo+audios+subs en
             # remezcla (cada uno en su carpeta de origen). La acción se aplica a todos por igual.
             $fuentesOrig = @(@($origenesPistas) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)
             if (@($fuentesOrig).Count -eq 0 -and $archivoPrincipal) { $fuentesOrig = @($archivoPrincipal.FullName) }
-            if ($accionOrigEste -eq "INTACTO") {
-                Write-Host "   -> Originales intactos (sin cambios)." -ForegroundColor DarkGray
-            } elseif ($accionOrigEste -eq "BORRAR") {
-                Write-Host "   -> Borrando archivos fuente originales..." -ForegroundColor DarkGray
-                foreach ($fo in $fuentesOrig) {
-                    try { Remove-Item -LiteralPath $fo -ErrorAction Stop }
-                    catch { Add-Incidencia $global:archivoEnCurso "Original conservado: $($_.Exception.Message)" }
-                }
-            } else {
-                # PROCESADO: renombrar a «.procesado» (en su propia carpeta) y, si está configurada,
-                # archivarlos en la carpeta de procesados (Ajustes), con subcarpeta por proyecto.
-                Write-Host "   -> Marcando originales como procesados (.procesado)..." -ForegroundColor DarkGray
-                $procesadosNuevos = @()
-                foreach ($fo in $fuentesOrig) {
-                    $leaf = Split-Path $fo -Leaf
-                    try {
-                        $r = Rename-Item -LiteralPath $fo -NewName "$leaf.procesado" -PassThru -ErrorAction Stop
-                        $procesadosNuevos += $r.FullName
-                    } catch { Add-Incidencia $global:archivoEnCurso "No se pudo marcar el original: $($_.Exception.Message)" }
-                }
-                if ($dirProcesados -and $procesadosNuevos.Count -gt 0) {
-                    try { [void][System.IO.Directory]::CreateDirectory($dirProcesados) } catch {}
-                    foreach ($pp in $procesadosNuevos) {
-                        try {
-                            $dstPP = Join-Path $dirProcesados (Split-Path $pp -Leaf)
-                            if (-not (Test-Path -LiteralPath $dstPP)) { Move-ConProgreso $pp $dstPP "Archivando original .procesado" }
-                        } catch { Add-Incidencia $global:archivoEnCurso "No se pudo archivar el .procesado: $($_.Exception.Message)" }
-                    }
-                }
-            }
+            if (-not $moverAlFinal) { Invoke-AccionOriginales $fuentesOrig $accionOrigEste $global:archivoEnCurso }
         }
-        $global:archivosFinalesLote += $archivoFinalDestino
         # Las capturas van a la carpeta de «procesados + capturas» (ajuste) si está configurada (en su
         # subcarpeta por proyecto); si no, a la carpeta de origen (donde la subida también las localiza).
         $dirCapturasArchivo = if ($dirProcesados) { $dirProcesados } else { $rutaCarpeta }
@@ -4821,18 +4928,39 @@ foreach ($grupo in $grupos) {
             try {
                 $nomTorr = Split-Path $archivoFinalDestino -Leaf
                 Set-ProgresoGui2 0 "Hasheando torrent: $nomTorr"
-                $rutaTorrentFinal = New-TorrentArchivo $archivoFinalDestino $torrentAnnounce "" $carpetaTorrentGui {
+                # Si el MKV aún está en el disco de trabajo, el .torrent va ya a la carpeta de salida
+                # (donde lo dejaba antes, junto al MKV).
+                $carpetaTorrentArch = if ($carpetaTorrentGui) { $carpetaTorrentGui } elseif ($moverAlFinal) { $carpetaSalidaArch } else { "" }
+                $rutaTorrentFinal = New-TorrentArchivo $archivoFinalDestino $torrentAnnounce "" $carpetaTorrentArch {
                     param($pct) Set-ProgresoGui2 $pct "Hasheando torrent ($pct%)"
                 }
                 Set-ProgresoGui2 -1
                 Write-Host "   -> Torrent creado: $(Split-Path $rutaTorrentFinal -Leaf)" -ForegroundColor Green
-                # la GUI crea una pestaña de subida; le pasamos las capturas de ESTE archivo y la
-                # carpeta de origen para que las localice aunque el MKV se haya movido a otra carpeta.
-                Add-ResultadoGui "archivo" $rutaTorrentFinal $archivoFinalDestino $global:ultimasCapturas $rutaCarpeta
             } catch {
                 Write-Host "   [!] No se pudo crear el .torrent: $($_.Exception.Message)" -ForegroundColor Red
                 Add-Incidencia $global:archivoEnCurso "Fallo creando el .torrent: $($_.Exception.Message)"
             }
+        }
+
+        # Viaje único del MKV terminado (capturas y torrent ya hechos en el disco de trabajo).
+        if ($moverAlFinal -and -not $packAlFinal) {
+            Set-ProgresoGui ([int]($global:pctBaseGui + $global:pctPasoGui * 0.96)) "Moviendo a la carpeta de salida $($global:idxGrupoGui)/$($global:totalGruposGui)" (Split-Path $archivoFinalDestino -Leaf)
+            try {
+                $archivoFinalDestino = Move-HdzFinalASalida $archivoFinalDestino $carpetaSalidaArch
+                Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName
+                Invoke-AccionOriginales $fuentesOrig $accionOrigEste $global:archivoEnCurso
+            } catch {
+                Add-Incidencia $global:archivoEnCurso "No se pudo llevar el MKV a la carpeta de salida; sigue en '$archivoFinalDestino' y los originales no se han tocado: $($_.Exception.Message)"
+            }
+        } elseif ($moverAlFinal) {
+            # Se agrupa al final en la carpeta de temporada/pack (que se arma en el disco de trabajo).
+            $global:pendientesSalida.Add([pscustomobject]@{ Ruta = $archivoFinalDestino; Destino = $carpetaSalidaArch; Entregado = $false; Fuentes = $fuentesOrig; Accion = $accionOrigEste; Archivo = $global:archivoEnCurso; Audios = @($audiosOrdenados).Count; Subs = @($subsOrdenados).Count; Principal = $archivoPrincipal.FullName })
+        }
+        $global:archivosFinalesLote += $archivoFinalDestino
+        if ($rutaTorrentFinal) {
+            # la GUI crea una pestaña de subida; le pasamos las capturas de ESTE archivo y la
+            # carpeta de origen para que las localice aunque el MKV se haya movido a otra carpeta.
+            Add-ResultadoGui "archivo" $rutaTorrentFinal $archivoFinalDestino $global:ultimasCapturas $rutaCarpeta
         }
 
         try {
@@ -4924,7 +5052,18 @@ if ($hacerTorrentPack -or $agruparTemporada) {
         Write-Host "`n[>>] Agrupando $nFinales archivo(s) en la carpeta '$nombrePack'..." -ForegroundColor Cyan
         Set-ProgresoGui 98 $(if ($hacerTorrentPack) { "Creando torrent del pack…" } else { "Agrupando temporada…" }) $nombrePack
         $baseDirPack = if ($carpetaSalidaGui) { $carpetaSalidaGui } else { $rutaCarpeta }
-        $rutaPack = Join-Path $baseDirPack $nombrePack
+        $rutaPackFinal = Join-Path $baseDirPack $nombrePack
+        $pendientesPorRuta = @{}
+        foreach ($pend in $global:pendientesSalida) { $pendientesPorRuta[$pend.Ruta] = $pend }
+        # Si todos los MKV siguen en el disco de trabajo, el pack se arma y se hashea allí y después
+        # viaja una sola vez. Si no, como siempre: se arma directamente en la salida.
+        $packLocal = $pendientesPorRuta.Count -gt 0 -and @($global:archivosFinalesLote | Where-Object { -not $pendientesPorRuta.ContainsKey($_) }).Count -eq 0 -and
+                     ([IO.Path]::GetFullPath($baseDirPack).TrimEnd('\') -ine [IO.Path]::GetFullPath($rutaCarpeta).TrimEnd('\'))
+        $rutaPack = if ($packLocal) { Join-Path $rutaCarpeta $nombrePack } else { $rutaPackFinal }
+        if ($packLocal -and (Test-Path -LiteralPath $rutaPackFinal)) {
+            $ocupados = @($global:archivosFinalesLote | Where-Object { Test-Path -LiteralPath (Join-Path $rutaPackFinal (Split-Path $_ -Leaf)) })
+            if ($ocupados.Count) { throw "El pack de destino ya contiene '$(Split-Path $ocupados[0] -Leaf)'. No se reutiliza; los nuevos MKV se conservan en '$rutaCarpeta'." }
+        }
         [void][System.IO.Directory]::CreateDirectory($rutaPack)
         # Si el pack cae en otro disco, cada archivo se COPIA entero: progreso por archivo (i/n) y,
         # dentro de cada uno, el byte a byte que pinta Move-ConProgreso.
@@ -4940,17 +5079,41 @@ if ($hacerTorrentPack -or $agruparTemporada) {
                 if (-not (Test-Path -LiteralPath $destinoPack)) {
                     Set-ProgresoGui2 ([int](100 * ($iPack - 1) / $nPack)) "Moviendo al pack $iPack/$nPack…"
                     Move-ConProgreso $fFinal $destinoPack "Moviendo al pack ($iPack/$nPack)"
-                    [void](Add-HdzHistory @{kind='traslado';status='Guardado en el pack';sources=@($fFinal);video=$destinoPack})
+                    if ($pendientesPorRuta.ContainsKey($fFinal)) { $pendientesPorRuta[$fFinal].Ruta = $destinoPack }
+                    if (-not $packLocal) { [void](Add-HdzHistory @{kind='traslado';status='Guardado en el pack';sources=@($fFinal);video=$destinoPack}) }
                 }
             }
         }
         Set-ProgresoGui2 -1
         if ($hacerTorrentPack) {
             Set-ProgresoGui2 0 "Hasheando torrent del pack…"
-            $rutaTorrentPack = New-TorrentPack $rutaPack $torrentAnnounce "" $carpetaTorrentGui {
+            # Armado en local, el .torrent se guarda ya donde quedará el pack (junto a su carpeta).
+            $carpetaTorrentPack = if ($carpetaTorrentGui) { $carpetaTorrentGui } elseif ($packLocal) { $baseDirPack } else { "" }
+            $rutaTorrentPack = New-TorrentPack $rutaPack $torrentAnnounce "" $carpetaTorrentPack {
                 param($pct) Set-ProgresoGui2 $pct "Hasheando torrent del pack ($pct%)"
             } -expectedFiles @($global:archivosFinalesLote | ForEach-Object { Join-Path $rutaPack (Split-Path $_ -Leaf) })
             Set-ProgresoGui2 -1
+        }
+        if ($packLocal) {
+            # Viaje único de la temporada ya hasheada a su carpeta de salida.
+            [void][System.IO.Directory]::CreateDirectory($rutaPackFinal)
+            $iPack = 0
+            foreach ($pend in @($global:pendientesSalida)) {
+                $iPack++
+                if (-not (Test-Path -LiteralPath $pend.Ruta)) { continue }
+                $destinoPack = Join-Path $rutaPackFinal (Split-Path $pend.Ruta -Leaf)
+                Set-ProgresoGui2 ([int](100 * ($iPack - 1) / $nPack)) "Moviendo el pack a la salida $iPack/$nPack…"
+                Move-ConProgreso $pend.Ruta $destinoPack "Moviendo el pack a la salida ($iPack/$nPack)"
+                [void](Add-HdzHistory @{kind='traslado';status='Guardado en el pack';sources=@($pend.Ruta);video=$destinoPack})
+                $pend.Ruta = $destinoPack; $pend.Entregado = $true
+            }
+            Set-ProgresoGui2 -1
+            if (-not @(Get-ChildItem -LiteralPath $rutaPack -Force -ErrorAction SilentlyContinue).Count) { Remove-Item -LiteralPath $rutaPack -Force -ErrorAction SilentlyContinue }
+            $rutaPack = $rutaPackFinal
+        } else {
+            foreach ($pend in $global:pendientesSalida) { if ($pend.Ruta.StartsWith($rutaPackFinal.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { $pend.Entregado = $true } }
+        }
+        if ($hacerTorrentPack) {
             Write-Host "   -> Pack listo: carpeta '$nombrePack' + $(Split-Path $rutaTorrentPack -Leaf)" -ForegroundColor Green
             $primerVideoPack = @(Get-ChildItem -LiteralPath $rutaPack -File -Recurse -ErrorAction SilentlyContinue |
                                  Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4)$" } | Sort-Object FullName | Select-Object -First 1)
@@ -4965,6 +5128,23 @@ if ($hacerTorrentPack -or $agruparTemporada) {
     } catch {
         Write-Host "   [!] No se pudo agrupar/crear el torrent de la temporada: $($_.Exception.Message)" -ForegroundColor Red
         Add-Incidencia $null "Fallo agrupando la temporada/creando el torrent: $($_.Exception.Message)"
+    }
+}
+
+# MKV terminados que siguen en el disco de trabajo (sin pack, o si el pack falló): viaje a su
+# carpeta de salida. La acción sobre los originales solo se aplica si el MKV llegó y se verificó.
+foreach ($pend in @($global:pendientesSalida)) {
+    try {
+        if (-not $pend.Entregado -and (Test-Path -LiteralPath $pend.Ruta)) {
+            $pend.Ruta = Move-HdzFinalASalida $pend.Ruta $pend.Destino
+            $pend.Entregado = $true
+        }
+        if ($pend.Entregado) {
+            Assert-HdzMux $pend.Ruta $pend.Audios $pend.Subs $pend.Principal
+            Invoke-AccionOriginales $pend.Fuentes $pend.Accion $pend.Archivo
+        }
+    } catch {
+        Add-Incidencia $pend.Archivo "No se pudo llevar el MKV a la carpeta de salida; sigue en '$($pend.Ruta)' y los originales no se han tocado: $($_.Exception.Message)"
     }
 }
 

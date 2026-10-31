@@ -110,6 +110,21 @@ function Assert-HdzMux([string]$Path, [int]$AudioCount, [int]$SubtitleCount, [st
     }
 }
 
+# Clave de emparejado de remezcla, compartida por la GUI y el motor (antes duplicada en ambos).
+# SERIE: SOLO temporada+episodio (SxxEyy), ignorando el título — así casan releases del mismo
+# show con TÍTULO EN DISTINTO IDIOMA y/o sin año. PELÍCULA (sin episodio): título+año.
+function Get-ClaveRemezcla($baseName) {
+    $episodeKey = Get-HdzEpisodeKey "$baseName"
+    if ($episodeKey) { return $episodeKey }
+    $b = ("$baseName" -replace '[._]', ' ')
+    if ($b -match '(?i)\bS(\d{1,3})\s?E(\d{1,4})\b') { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
+    if ($b -match '(?i)\b(\d{1,3})x(\d{1,4})\b')     { return ('s{0}e{1}' -f [int]$Matches[1], [int]$Matches[2]) }
+    $corte = $b.Length
+    if ($b -match '\b(19\d{2}|20\d{2})\b') { $anio = $Matches[1]; $i = $b.IndexOf($Matches[1]); if ($i -gt 0) { $corte = [Math]::Min($corte, $i) } } else { $anio = '' }
+    $titulo = (($b.Substring(0, $corte) -replace '[\(\)\[\]]', ' ') -replace '\s+', ' ').Trim().ToLower()
+    return "$titulo|$anio"
+}
+
 # Emparejado sin usar títulos. E01 puede casar con SxxE01, pero nunca se
 # resuelve una ambigüedad escogiendo el primer archivo encontrado.
 function Test-HdzEpisodeMatch([string]$Left, [string]$Right) {

@@ -41,8 +41,9 @@ function Test-HdzVideoHdr {
 
         $primarias = "$($pista.colour_primaries)"
         $transferencia = "$($pista.transfer_characteristics)"
+        # TryParse: un BitDepth no numérico no debe abortar la detección (y con ella las capturas).
         $profBits = 0
-        if ($pista.BitDepth) { $profBits = [int]"$($pista.BitDepth)" }
+        [void][int]::TryParse("$($pista.BitDepth)", [ref]$profBits)
         if ($primarias -match '(?i)BT\.?2020' -and
             $transferencia -match '(?i)PQ|SMPTE ST 2084|ST 2084|HLG|ARIB' -and
             $profBits -ge 10) { return $true }
@@ -156,26 +157,48 @@ function New-HdzCapturas {
         $resultado.Inicio = $inic
         $resultado.Fin = $fin
 
-        # Saca UN fotograma en el segundo indicado. Solo devuelve la ruta si
-        # FFmpeg escribió realmente una imagen no vacía.
-        $sacarCaptura = {
+        # Cada captura es un FFmpeg independiente (búsqueda rápida + 1 fotograma). Se lanzan varias
+        # a la vez: el tonemapping HDR de zscale/tonemap usa casi un solo núcleo por proceso, así que
+        # en serie el equipo estaba casi ocioso. El resultado (PNG sin pérdida) es idéntico.
+        # Si «ffmpeg» está redefinido (función o alias, p. ej. en las pruebas), se respeta y se usa en serie.
+        $ffmpegCmd = Get-Command ffmpeg -ErrorAction Stop | Select-Object -First 1
+        $ffmpegExe = if ($ffmpegCmd.CommandType -eq 'Application') { $ffmpegCmd.Source } else { $null }
+        $maxParalelo = if ($ffmpegExe) { [Math]::Max(1, [Math]::Min(4, [int][Math]::Floor([Environment]::ProcessorCount / 2))) } else { 1 }
+        $filtro = if ($EsHdr) { 'zscale=t=linear:npl=250,tonemap=tonemap=reinhard:desat=2,zscale=p=709:t=709:m=709,format=rgb24' } else { 'format=rgb24' }
+
+        $iniciarCaptura = {
             param($t)
-            $ts = ([int]$t).ToString('D4')
-            $finalCapture = Join-Path $dirCap "${baseNombre}_cap_$ts.png"
             $rc = Join-Path $dirCap (".hdz_cap_" + [guid]::NewGuid().ToString('N') + '.png')
-            if ($EsHdr) {
-                & ffmpeg -noaccurate_seek -ss $t -i "$ArchivoVideo" -frames:v 1 `
-                    -vf 'zscale=t=linear:npl=250,tonemap=tonemap=reinhard:desat=2,zscale=p=709:t=709:m=709,format=rgb24' `
-                    -compression_level 6 "$rc" -y -loglevel fatal 2>$null | Out-Null
-            } else {
-                & ffmpeg -noaccurate_seek -ss $t -i "$ArchivoVideo" -frames:v 1 `
-                    -vf 'format=rgb24' -compression_level 6 "$rc" -y -loglevel fatal 2>$null | Out-Null
+            # -nostdin: con varios FFmpeg a la vez ninguno debe leer la consola.
+            $argumentos = @('-nostdin','-noaccurate_seek','-ss',"$t",'-i',"$ArchivoVideo",'-frames:v','1','-vf',$filtro,'-compression_level','6',"$rc",'-y','-loglevel','fatal')
+            if (-not $ffmpegExe) {
+                & ffmpeg @argumentos 2>$null | Out-Null
+                return [pscustomobject]@{ T = $t; Rc = $rc; Proc = $null; Exit = $LASTEXITCODE }
             }
+            $psi = [Diagnostics.ProcessStartInfo]::new($ffmpegExe)
+            foreach ($a in $argumentos) { $psi.ArgumentList.Add($a) }
+            $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $proc = [Diagnostics.Process]::Start($psi)
+            # Vaciar las tuberías en segundo plano para que FFmpeg nunca se bloquee escribiendo.
+            [pscustomobject]@{ T = $t; Rc = $rc; Proc = $proc; Out = $proc.StandardOutput.ReadToEndAsync(); Err = $proc.StandardError.ReadToEndAsync() }
+        }.GetNewClosure()
+
+        # Solo devuelve la ruta si FFmpeg escribió realmente una imagen PNG no vacía.
+        $terminarCaptura = {
+            param($job)
+            if ($job.Proc) { $job.Proc.WaitForExit(); $codigo = $job.Proc.ExitCode; $job.Proc.Dispose() } else { $codigo = $job.Exit }
+            $rc = $job.Rc
+            $finalCapture = Join-Path $dirCap "${baseNombre}_cap_$(([int]$job.T).ToString('D4')).png"
             # En SMB, el nombre temporal con punto puede recibir el atributo Hidden.
             # Sin -Force, Get-Item no lo devuelve y se descarta una captura válida.
-            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $rc) -and ((Get-Item -LiteralPath $rc -Force -ErrorAction SilentlyContinue).Length -gt 8)) {
-                $signature = [IO.File]::ReadAllBytes($rc)[0..7]
-                if ([BitConverter]::ToString([byte[]]$signature) -eq '89-50-4E-47-0D-0A-1A-0A') {
+            if ($codigo -eq 0 -and (Test-Path -LiteralPath $rc) -and ((Get-Item -LiteralPath $rc -Force -ErrorAction SilentlyContinue).Length -gt 8)) {
+                # Solo la firma PNG (8 bytes): leer la captura entera (decenas de MB en 4K) por SMB
+                # para comprobar la cabecera multiplicaba el tráfico sin ningún beneficio.
+                $signature = [byte[]]::new(8)
+                $header = [IO.File]::OpenRead($rc)
+                try { $leidos = $header.Read($signature, 0, 8) } finally { $header.Dispose() }
+                if ($leidos -eq 8 -and [BitConverter]::ToString($signature) -eq '89-50-4E-47-0D-0A-1A-0A') {
                     [IO.File]::Move($rc, $finalCapture, $true)
                     # Un atributo Hidden explícito puede sobrevivir al renombrado.
                     $attributes = [IO.File]::GetAttributes($finalCapture)
@@ -187,6 +210,35 @@ function New-HdzCapturas {
             }
             if (Test-Path -LiteralPath $rc) { Remove-Item -LiteralPath $rc -Force -ErrorAction SilentlyContinue }
             return $null
+        }.GetNewClosure()
+
+        # Saca un lote de capturas con $maxParalelo FFmpeg simultáneos. Devuelve las rutas
+        # válidas en el orden de los tiempos pedidos (el orden de las capturas no cambia).
+        $sacarLote = {
+            param($tiempos)
+            $rutas = [object[]]::new(@($tiempos).Count)
+            $cola = [Collections.Generic.List[object]]::new()
+            $siguiente = 0; $hechas = 0
+            try {
+                while ($hechas -lt $rutas.Count) {
+                    while ($cola.Count -lt $maxParalelo -and $siguiente -lt $rutas.Count) {
+                        $cola.Add(@{ I = $siguiente; Job = (& $iniciarCaptura $tiempos[$siguiente]) }); $siguiente++
+                    }
+                    $actual = $cola[0]; $cola.RemoveAt(0)
+                    $r = & $terminarCaptura $actual.Job
+                    $rutas[$actual.I] = $r; $hechas++
+                    if ($r) { Write-Host "   -> Captura en segundo $($tiempos[$actual.I])" -ForegroundColor Gray }
+                    else { Write-Host "   -> (sin imagen en el segundo $($tiempos[$actual.I]))" -ForegroundColor DarkYellow }
+                    & $setProgress ([int](100 * $hechas / $NumCapturas)) "Generando capturas ($hechas/$NumCapturas)"
+                }
+            } finally {
+                # Si algo falla a mitad, no quedan FFmpeg huérfanos ni temporales ocultos.
+                foreach ($pendiente in $cola) {
+                    if ($pendiente.Job.Proc) { try { if (-not $pendiente.Job.Proc.HasExited) { $pendiente.Job.Proc.Kill() }; $pendiente.Job.Proc.WaitForExit(); $pendiente.Job.Proc.Dispose() } catch {} }
+                    if (Test-Path -LiteralPath $pendiente.Job.Rc) { Remove-Item -LiteralPath $pendiente.Job.Rc -Force -ErrorAction SilentlyContinue }
+                }
+            }
+            @($rutas | Where-Object { $_ })
         }.GetNewClosure()
 
         # Calcula N segundos objetivo repartidos por igual en [inicio..fin].
@@ -202,18 +254,9 @@ function New-HdzCapturas {
         }.GetNewClosure()
 
         # 1ª pasada: reparto sobre la duración declarada.
-        $okCaps = @()
         $objetivos = @(& $puntos $inic $fin $NumCapturas)
-        for ($i = 0; $i -lt $objetivos.Count; $i++) {
-            & $setProgress ([int](100 * $i / $NumCapturas)) "Generando capturas ($($i + 1)/$NumCapturas)"
-            $r = & $sacarCaptura $objetivos[$i]
-            if ($r) {
-                $okCaps += $r
-                Write-Host "   -> Captura en segundo $($objetivos[$i])" -ForegroundColor Gray
-            } else {
-                Write-Host "   -> (sin imagen en el segundo $($objetivos[$i]))" -ForegroundColor DarkYellow
-            }
-        }
+        & $setProgress 0 "Generando capturas (0/$NumCapturas)"
+        $okCaps = @(& $sacarLote $objetivos)
 
         # Si faltan capturas y al menos una salió, normalmente la duración del
         # contenedor está inflada. Rehacemos el reparto dentro del último punto
@@ -231,14 +274,7 @@ function New-HdzCapturas {
                 foreach ($old in $okCaps) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
                 $okCaps = @()
                 $objetivos2 = @(& $puntos $inic $finReal $NumCapturas)
-                for ($i = 0; $i -lt $objetivos2.Count; $i++) {
-                    & $setProgress ([int](100 * $i / $NumCapturas)) "Generando capturas ($($i + 1)/$NumCapturas)"
-                    $r = & $sacarCaptura $objetivos2[$i]
-                    if ($r) {
-                        $okCaps += $r
-                        Write-Host "   -> Captura en segundo $($objetivos2[$i])" -ForegroundColor Gray
-                    }
-                }
+                $okCaps = @(& $sacarLote $objetivos2)
             }
         }
 

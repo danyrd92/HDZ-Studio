@@ -685,7 +685,7 @@ function go(sec){curSec=sec;document.querySelectorAll('.section').forEach(s=>s.c
 function toggleSide(){document.body.classList.toggle('scol');try{localStorage.setItem('hdz_scol',document.body.classList.contains('scol')?'1':'0')}catch(e){}}
 try{if(localStorage.getItem('hdz_scol')==='1')document.body.classList.add('scol')}catch(e){}
 let tT;function toast(m,t){const e=document.getElementById('toast');e.textContent=m;e.className='toast show'+(t?' '+t:'');clearTimeout(tT);tT=setTimeout(()=>e.className='toast',2000)}
-function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 // Conservar los nodos evita perder el foco, cerrar selectores y relanzar el
 // cálculo de alturas de toda la página en cada actualización de progreso.
 const markupCache=new Map();

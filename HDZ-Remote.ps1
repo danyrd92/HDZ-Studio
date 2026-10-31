@@ -52,6 +52,10 @@ $script:remoteServerWorker = {
         $now = [datetime]::UtcNow
         $hits = @(@($sync.PairHits[$ip]) | Where-Object { $_ -is [datetime] -and ($now - $_).TotalSeconds -lt 60 })
         $sync.PairHits[$ip] = @($hits) + $now
+        # Sin esto el registro crece con cada IP que haya intentado emparejar alguna vez.
+        foreach ($other in @($sync.PairHits.Keys)) {
+            if (-not @(@($sync.PairHits[$other]) | Where-Object { $_ -is [datetime] -and ($now - $_).TotalSeconds -lt 60 }).Count) { $sync.PairHits.Remove($other) }
+        }
         return $hits.Count -lt 5
     }
     $listener = $null
@@ -73,8 +77,11 @@ $script:remoteServerWorker = {
                 $ip = "$(([Net.IPEndPoint]$client.Client.RemoteEndPoint).Address)"
                 $stream = $client.GetStream()
                 # Cabeceras (máx. 16 KB) y cuerpo por Content-Length (máx. 512 KB).
+                # El servidor atiende de una en una: un plazo total evita que un cliente que envía
+                # byte a byte (cada lectura dentro de ReceiveTimeout) lo deje bloqueado indefinidamente.
+                $deadline = [datetime]::UtcNow.AddSeconds(15)
                 $buffer = [IO.MemoryStream]::new(); $chunk = [byte[]]::new(8192); $headerEnd = -1
-                while ($headerEnd -lt 0) {
+                while ($headerEnd -lt 0 -and [datetime]::UtcNow -lt $deadline) {
                     $read = $stream.Read($chunk, 0, $chunk.Length)
                     if ($read -le 0) { break }
                     $buffer.Write($chunk, 0, $read)
@@ -94,11 +101,12 @@ $script:remoteServerWorker = {
                 $bodyBytes = [IO.MemoryStream]::new()
                 $already = $raw.Length - ($headerEnd + 4)
                 if ($already -gt 0) { $bodyBytes.Write($raw, $headerEnd + 4, [Math]::Min($already, $length)) }
-                while ($bodyBytes.Length -lt $length) {
+                while ($bodyBytes.Length -lt $length -and [datetime]::UtcNow -lt $deadline) {
                     $read = $stream.Read($chunk, 0, [Math]::Min($chunk.Length, $length - $bodyBytes.Length))
                     if ($read -le 0) { break }
                     $bodyBytes.Write($chunk, 0, $read)
                 }
+                if ($bodyBytes.Length -lt $length) { Send-Json $stream 400 @{ok=$false;error='Petición incompleta'}; continue }
                 $body = $utf8.GetString($bodyBytes.ToArray())
                 $path = $target.Split('?')[0]
                 $query = @{}
@@ -183,8 +191,8 @@ $script:remoteServerWorker = {
 function New-HdzPairingCode {
     # Sin caracteres ambiguos (0/O, 1/I/L) para dictarlo o teclearlo en el móvil.
     $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-    $bytes = [byte[]]::new(8); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-    return -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
+    # GetInt32 reparte uniformemente; «byte % 31» favorecía las 8 primeras letras.
+    return -join (1..8 | ForEach-Object { $alphabet[[Security.Cryptography.RandomNumberGenerator]::GetInt32($alphabet.Length)] })
 }
 
 function Get-HdzLanAddresses {

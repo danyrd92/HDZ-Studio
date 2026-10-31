@@ -126,7 +126,7 @@ try {
         $previous=Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
         if($previous -and -not $previous.WaitForExit(30000)){throw 'El programa no se cerró a tiempo. No se han cambiado archivos.'}
     }
-    $active = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.Name -match '^pwsh\.exe$' -and $_.CommandLine -like "*$appRoot*" -and $_.CommandLine -match 'HDZ-GUI\.ps1|HDZnew\.ps1' })
+    $active = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.Name -match '^pwsh\.exe$' -and "$($_.CommandLine)".IndexOf($appRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine -match 'HDZ-GUI\.ps1|HDZnew\.ps1' })
     if ($active.Count) { throw 'Cierra HDZ Studio antes de actualizar. Si hay un montaje, espera a que termine.' }
     $backup = Join-Path $PSScriptRoot ('copia-seguridad\' + $localVersion + '_' + (Get-Date -Format yyyyMMdd_HHmmss))
     [void][IO.Directory]::CreateDirectory($backup)
@@ -176,7 +176,7 @@ try {
         try {
             $previous = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
             $previousGone = (-not $previous) -or $previous.WaitForExit(30000)
-            $active = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.Name -eq 'pwsh.exe' -and $_.CommandLine -like "*$appRoot*" -and $_.CommandLine -match 'HDZ-GUI\.ps1|HDZnew\.ps1' })
+            $active = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.Name -eq 'pwsh.exe' -and "$($_.CommandLine)".IndexOf($appRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine -match 'HDZ-GUI\.ps1|HDZnew\.ps1' })
             if ($previousGone -and -not $active.Count -and (Test-Path -LiteralPath (Join-Path $appRoot 'HDZ Studio.vbs'))) {
                 Start-Process wscript.exe -ArgumentList ('"' + (Join-Path $appRoot 'HDZ Studio.vbs') + '"') -WindowStyle Hidden
             }
