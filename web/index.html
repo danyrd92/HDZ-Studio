@@ -480,6 +480,7 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
     <div class="card"><h3><span class="ci">💬</span>Idiomas de subtítulos a mantener</h3><p class="d">Qué subtítulos conservar en el resultado.</p>
       <div class="chips list" data-group="filtro"><div class="chip" data-v="TODOS">Mantener todos</div><div class="chip" data-v="CAST_ENG">Solo castellano e inglés</div><div class="chip" data-v="PERSONALIZADA">Personalizada</div></div></div>
     <div class="card" id="cardSubsPersonalWeb" style="display:none"><h3><span class="ci">🌍</span>Idiomas (personalizada)</h3><p class="d">Marca los idiomas de subtítulos que quieres conservar.</p><div class="chips" id="subLangs"></div></div>
+    <div class="card" id="cardSubsTiposWeb" style="display:none"><h3><span class="ci">🗂</span>Tipos de subtítulos a mantener</h3><p class="d">Desmarca un tipo para quitarlo. Si hay varios del mismo tipo, idioma y formato, se conserva el primero.</p><div class="chips" id="subTipos"></div></div>
     <div class="card" id="cardSubsUnicosWeb" style="display:none"><h3><span class="ci">❔</span>Subtítulos sin señal: ¿forzado o completo?</h3><p class="d">Decide cada subtítulo que no trae esa información.</p><div id="subsUnicosRows"></div></div>
     <div class="card" id="cardPGSWeb" style="display:none"><h3><span class="ci">🧾</span>Subtítulos PGS (OCR con Subtitle Edit)</h3>
       <label class="lbl">Extraer PGS para OCR</label>
@@ -743,7 +744,7 @@ function cmd(c){
   const payload={...c,requestId:crypto.randomUUID().replaceAll('-',''),session:remoteData.session};
   const isUpload=['subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
   if(isUpload)payload.subidaTab=remoteData.tabSubidaActual;
-  else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_lang','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
+  else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_lang','set_sub_tipo','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
   commandPending++;
   const run=async()=>{
     try{
@@ -928,6 +929,7 @@ function renderUnd(items,tipo,cardId,boxId,visible){
   setMarkup(boxId,rows.map(r=>{const choices=r.opciones||remoteData.idiomasPistaOpciones||[],current=choices.find(o=>String(o.v)===String(r.valor));return `<div class="row wrap mt"><span class="d grow" style="color:var(--text)">${esc(r.etiqueta)}</span><select class="input" style="min-width:150px" onfocus="expandLanguageSelect(this)" onpointerdown="expandLanguageSelect(this)" onchange="cmd({type:'set_und',archivo:this.dataset.a,id:this.dataset.i,tipo:this.dataset.t,value:this.value})" data-a="${esc(r.archivo)}" data-i="${esc(r.id)}" data-t="${esc(r.tipo)}"><option value="${esc(r.valor)}" selected>${esc(current?.t||r.valor||'Automático')}</option></select></div>`;}).join(''));
 }
 function renderSubLangs(items,visible){const card=document.getElementById('cardSubsPersonalWeb');card.style.display=visible?'block':'none';setMarkup('subLangs',visible?(items||[]).map(x=>`<div class="chip${x.sel?' on':''}" onclick="this.classList.toggle('on');cmd({type:'set_sub_lang',code:this.dataset.v,value:this.classList.contains('on')})" data-v="${esc(x.v)}">${esc(x.t)}</div>`).join(''):'');}
+function renderSubTipos(items,visible){const card=document.getElementById('cardSubsTiposWeb');const show=visible&&(items||[]).length;card.style.display=show?'block':'none';setMarkup('subTipos',show?items.map(x=>`<div class="chip${x.sel?' on':''}" onclick="this.classList.toggle('on');cmd({type:'set_sub_tipo',code:this.dataset.v,value:this.classList.contains('on')})" data-v="${esc(x.v)}">${esc(x.t)}</div>`).join(''):'');}
 function renderSubsUnicos(items,visible){const card=document.getElementById('cardSubsUnicosWeb');const show=visible&&(items||[]).length;card.style.display=show?'block':'none';setMarkup('subsUnicosRows',show?items.map(r=>`<div class="row wrap mt"><span class="d grow" style="color:var(--text)">${esc(r.etiqueta)}</span><button class="btn sm${r.forzado?'':' primary'}" onclick="cmd({type:'set_sub_unico',idx:${r.i},forzado:false})">Completo</button><button class="btn sm${r.forzado?' primary':''}" onclick="cmd({type:'set_sub_unico',idx:${r.i},forzado:true})">Forzado</button></div>`).join(''):'');}
 let remixRows=[],remixLock=0;
 function pushRemix(){remixLock=Date.now()+2200;cmd({type:'set_remezcla',fuentes:remixRows.map(r=>({ruta:r.ruta,archivo:r.archivo,video:!!r.video,audio:!!r.audio,subs:!!r.subs}))});}
@@ -1002,6 +1004,7 @@ function render(s){
   renderUnd(d.undAudioSubs,'Audio','cardUndAudioWeb','undAudioRows',!!d.undAudioVisible);
   setCardVisible('cardPGSWeb',!!d.pgsVisible);
   renderSubLangs(d.idiomasSubs,!!d.idiomasSubsPersonalizadosVisible);
+  renderSubTipos(d.tiposSubs,!!d.tiposSubsVisible);
   renderSubsUnicos(d.subsUnicos,!!d.subsUnicosVisible);
   renderUnd(d.undAudioSubs,'Sub','cardUndSubsWeb','undSubsRows',!!d.undSubsVisible);
   document.getElementById('grpWeb').style.display=(o.origen==='WEB')?'block':'none';

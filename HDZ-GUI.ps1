@@ -1491,6 +1491,9 @@ $xaml = @'
                 <TextBlock Style="{StaticResource D}" Text="Quitar un idioma elimina todos sus subtítulos (forzados y completos). Los audios no se tocan."/>
                 <WrapPanel x:Name="chFiltro" Margin="0,11,0,0"/>
                 <WrapPanel x:Name="wrapIdiomas" Margin="0,6,0,-8" Visibility="Collapsed"/>
+                <TextBlock Style="{StaticResource H}" Text="Tipos de subtítulos a mantener" Margin="0,18,0,0"/>
+                <TextBlock Style="{StaticResource D}" Text="Desmarca un tipo para quitarlo. Si hay varios del mismo tipo, idioma y formato, se conserva el primero."/>
+                <WrapPanel x:Name="wrapTiposSub" Margin="0,11,0,-8"/>
               </StackPanel>
             </Border>
             <Border x:Name="cardSubsUnicos" Style="{StaticResource Card}">
@@ -1982,7 +1985,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "chOrigen","panWeb","chWebTipo","cmbPlataforma","txtPlataformaOtra",
           "panFisico","cmbFormato","txtFormatoOtro","txtEtiquetas","swAplicarTodos",
           "chDefAudio",
-          "chFiltro","wrapIdiomas","panSubsUnicos","chExtraerPGS","chConservarPGS",
+          "chFiltro","wrapIdiomas","wrapTiposSub","panSubsUnicos","chExtraerPGS","chConservarPGS",
           "lblEstado","btnIniciar","btnIniciarTodos","btnReset","btnConsola",
           "panProgreso","barProgreso","lblProgreso","lblProgresoPct",
           "panProgreso2","barProgreso2","lblProgreso2","lblProgreso2Pct","gridListado","gripListado",
@@ -2266,6 +2269,23 @@ function Reconstruir-ChipsIdiomas($detectados = $null) {
     }
 }
 
+# Tipos de subtítulos a conservar. Siempre los tres y todos marcados al empezar; con los tres
+# marcados no se envía filtro y el motor solo quita duplicados (se queda con el primero).
+$script:chipsTiposSub = @()
+function Reconstruir-ChipsTiposSub {
+    $ui.wrapTiposSub.Children.Clear()
+    $script:chipsTiposSub = @()
+    foreach ($t in @(@{V="Completos"; T="Completos"}, @{V="Forzados"; T="Forzados"}, @{V="SDH"; T="SDH"})) {
+        $tb = New-Object System.Windows.Controls.Primitives.ToggleButton
+        $tb.Style = $win.Resources["ChipToggle"]
+        $tb.Content = $t.T
+        $tb.Tag = $t.V
+        $tb.IsChecked = $true
+        [void]$ui.wrapTiposSub.Children.Add($tb)
+        $script:chipsTiposSub += $tb
+    }
+}
+
 # Selector independiente para AUDIO. A diferencia del filtro de subtítulos, aquí no hay modos:
 # se muestran los idiomas realmente detectados y todos arrancan marcados. El usuario solo desmarca.
 $script:chipsIdiomasAudio = @()
@@ -2337,6 +2357,7 @@ Add-ChipGroup $ui.chConservarPGS "conservarPGS" @(
 )
 
 Reconstruir-ChipsIdiomas
+Reconstruir-ChipsTiposSub
 Init-Combo $ui.cmbPlataforma (@($plataformasGui | ForEach-Object { @{T=$_; V=(Get-CodigoPlataforma $_)} }))
 Init-Combo $ui.cmbFormato    (@($formatosGui    | ForEach-Object { @{T=$_; V=$_} })) 2
 
@@ -2500,6 +2521,7 @@ function Reset-Adaptacion {
     $script:subsUnicosRows = @()
     $ui.lblSugerencia.Visibility = "Collapsed"
     Reconstruir-ChipsIdiomas
+    Reconstruir-ChipsTiposSub
     $ui.cardFiltroAudio.Visibility = "Collapsed"
     Reconstruir-ChipsIdiomasAudio
 }
@@ -7413,6 +7435,12 @@ function Iniciar-Montaje($scope) {
         $ui.navProyecto.IsChecked = $true
         return
     }
+    $tiposSubMarcados = @($script:chipsTiposSub | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
+    if ($ui.cardFiltro.Visibility -eq "Visible" -and $tiposSubMarcados.Count -eq 0) {
+        Set-Estado "Tipos de subtítulos: marca al menos uno (completos, forzados o SDH)." "error"
+        $ui.navProyecto.IsChecked = $true
+        return
+    }
     # Selección de archivos del análisis
     $todosNombresScan = @($script:ultimoScan | ForEach-Object { $_.Nombre })
     $marcadosSel = @($todosNombresScan | Where-Object { $script:seleccion[$_] -ne $false })
@@ -7487,6 +7515,10 @@ function Iniciar-Montaje($scope) {
 
     if ($filtroVal -eq "PERSONALIZADA") { $cfg.IdiomasSubsMantener = @($idiomasMarcados) }
     elseif ($null -ne $filtroVal)       { $cfg.IdiomasSubsMantener = $filtroVal }
+    # Tipos de subtítulos: solo se envía si se ha desmarcado alguno (los tres = sin filtro).
+    if ($tiposSubMarcados.Count -gt 0 -and $tiposSubMarcados.Count -lt @($script:chipsTiposSub).Count) {
+        $cfg.TiposSubsMantener = @($tiposSubMarcados)
+    }
     # REMEZCLA: la selección de idiomas de la tarjeta MANDA sobre el filtro de subs del panel Subs.
     # Audios: filtro propio (IdiomasAudioMantener). Si están TODOS marcados, no se filtra ese tipo.
     if ($remezclaOn) {
@@ -9043,6 +9075,7 @@ function Componer-EstadoAgente {
                                valor = "$(Get-ComboValor $r.Combo)" }
     }
     $subIdiomasAg = @($script:chipsIdiomas | ForEach-Object { [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked } })
+    $subTiposAg = @($script:chipsTiposSub | ForEach-Object { [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked } })
     $remezclaFuentesAg = @((Leer-RemezclaCarpetas) | ForEach-Object { [ordered]@{ ruta = "$($_.Ruta)"; archivo = "$($_.Archivo)"; video = [bool]$_.Video; audio = [bool]$_.Audio; subs = [bool]$_.Subs } })
     $remezclaAudioAg = @($script:remezclaChipsAudio | ForEach-Object { [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked } })
     $remezclaSubsAg = @($script:remezclaChipsSub | ForEach-Object { [ordered]@{ v = "$($_.Tag)"; t = "$($_.Content)"; sel = [bool]$_.IsChecked } })
@@ -9105,6 +9138,8 @@ function Componer-EstadoAgente {
         conversionesAudio = $convRowsAg; pistasConversionAudio = $convTracksAg
         pgsVisible = ("$($ui.cardPGS.Visibility)" -eq "Visible")
         idiomasSubs = $subIdiomasAg
+        tiposSubs = $subTiposAg
+        tiposSubsVisible = ("$($ui.cardFiltro.Visibility)" -eq "Visible")
         idiomasSubsPersonalizadosVisible = (("$($ui.cardFiltro.Visibility)" -eq "Visible") -and ((Get-ChipValor "filtro") -eq "PERSONALIZADA"))
         subsUnicosVisible = ("$($ui.cardSubsUnicos.Visibility)" -eq "Visible")
         subsUnicos = $subsUnicosAg
@@ -9324,6 +9359,12 @@ function Aplicar-ComandoAgente($c) {
                 $cod = "$($c.code)"
                 foreach ($tbSub in @($script:chipsIdiomas)) {
                     if ("$($tbSub.Tag)" -eq $cod) { $tbSub.IsChecked = [bool]$c.value; break }
+                }
+            }
+            "set_sub_tipo" {
+                $tipo = "$($c.code)"
+                foreach ($tbTipo in @($script:chipsTiposSub)) {
+                    if ("$($tbTipo.Tag)" -eq $tipo) { $tbTipo.IsChecked = [bool]$c.value; break }
                 }
             }
             "set_sub_unico" {

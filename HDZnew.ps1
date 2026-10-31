@@ -1735,6 +1735,85 @@ function Resolve-SubsExternosForzados($rutasArchivosMkv, $prefijoArchivo, $decis
 }
 # $rutaMkvOrigen: si se proporciona, cuando un grupo no tiene tamaños reportados se intentará
 # extraer cada sub interno y medir su peso en disco.
+# SDH (subtítulos para sordos). Señales, de más a menos fiable: flag hearing-impaired del MKV
+# (mkvmerge -J / ServiceKind=HI de mediainfo), el Title o el nombre del archivo, y por último el
+# contenido: un SDH describe sonidos ([música], ♪...) en muchas líneas; un completo normal, en casi ninguna.
+$patronTituloSdh = '(?i)(\bSDH\b|\bCC\b|\bHoH\b|sordos|hearing|malentendant)|(?-i:\bHI\b)'   # HI en mayúsculas: "hi" es hindi
+function Get-ProporcionSonidoSrt([string]$texto) {
+    $bloques = @($texto -split '\r?\n\s*\r?\n' | Where-Object { $_ -match '-->' })
+    if ($bloques.Count -eq 0) { return 0 }
+    $conSonido = @($bloques | Where-Object {
+        $lineas = (($_ -split '\r?\n') | Where-Object { $_ -notmatch '-->' -and $_ -notmatch '^\s*\d+\s*$' }) -join ' '
+        $lineas -match '\[[^\]]+\]|\([^\)]{3,}\)|♪'
+    }).Count
+    return $conSonido / $bloques.Count
+}
+function Set-FlagSdh($listaSubs) {
+    if (-not $listaSubs -or $listaSubs.Count -eq 0) { return }
+    foreach ($s in $listaSubs) {
+        $s | Add-Member -NotePropertyName "EsSDH" -NotePropertyValue ((-not $s.IsForced) -and [bool]$s.SdhFlag) -Force
+    }
+    # Contenido: solo en grupos (idioma, texto plano) con 2+ completos sin señal, que es donde un SDH
+    # sin marcar se confunde con el completo normal. Se extraen de una pasada por MKV de origen.
+    $candidatos = @{}
+    foreach ($s in $listaSubs) {
+        if ($s.IsForced -or $s.EsSDH) { continue }
+        if ("$($s.Format)" -notmatch '(?i)srt|subrip|utf-?8|text') { continue }
+        $k = "$($s.CodLang)"
+        if (-not $candidatos.ContainsKey($k)) { $candidatos[$k] = @() }
+        $candidatos[$k] += $s
+    }
+    $aMedir = @($candidatos.Values | Where-Object { @($_).Count -gt 1 } | ForEach-Object { $_ })
+    if ($aMedir.Count -eq 0) { return }
+    $temporales = @()
+    try {
+        foreach ($g in @($aMedir | Where-Object { $_.Origen -eq 'Interno' -and $_.ArchivoFuenteMkv } | Group-Object ArchivoFuenteMkv)) {
+            $argsExt = @($g.Name, 'tracks')
+            foreach ($s in $g.Group) {
+                $tmp = Join-Path $env:TEMP "hdz_sdh_$([guid]::NewGuid().ToString('N')).srt"
+                $temporales += $tmp
+                $s | Add-Member -NotePropertyName "RutaTextoSdh" -NotePropertyValue $tmp -Force
+                $argsExt += "$($s.ID):$tmp"
+            }
+            & mkvextract @argsExt 2>&1 | Out-Null
+        }
+        foreach ($s in $aMedir) {
+            $ruta = if ($s.Origen -eq 'Interno') { $s.RutaTextoSdh } else { "$($s.ID)" }
+            if (-not $ruta -or -not (Test-Path -LiteralPath $ruta)) { continue }
+            $prop = Get-ProporcionSonidoSrt (Get-Content -LiteralPath $ruta -Raw -Encoding UTF8)
+            if ($prop -ge 0.2) {
+                $s.EsSDH = $true
+                Write-Host "       -> Sub $($s.NomLang) ID=$($s.ID) marcado SDH por contenido ($([math]::Round($prop * 100))% de líneas con sonidos)" -ForegroundColor DarkGray
+            }
+        }
+    } finally {
+        foreach ($t in $temporales) { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue }
+    }
+}
+# Filtro de tipos (Completos / Forzados / SDH) elegido en la GUI y, después, un único sub por
+# idioma + tipo + formato: si el montaje trae varios iguales se queda el PRIMERO (orden de origen).
+function Select-SubsPorTipo($subs, $tiposMantener = $null) {
+    $lista = @($subs)
+    if ($tiposMantener -and @($tiposMantener).Count -gt 0) {
+        $antes = $lista.Count
+        $lista = @($lista | Where-Object { $_.TipoSub -in @($tiposMantener) })
+        if ($antes -ne $lista.Count) {
+            Write-Host "   [filtro tipos subs] Subs: $antes -> $($lista.Count) (se mantienen: $(@($tiposMantener) -join ', '))" -ForegroundColor DarkGray
+        }
+    }
+    $vistos = @{}; $res = @()
+    foreach ($s in ($lista | Sort-Object OrdenOrigen)) {
+        $k = "$($s.CodLang)|$($s.TipoSub)|$($s.FmtSub)"
+        if ($vistos.ContainsKey($k)) {
+            Write-Host "   [duplicados subs] Se descarta '$($s.NomFinal)' (ID=$($s.ID)): ya hay uno igual antes." -ForegroundColor DarkGray
+            continue
+        }
+        $vistos[$k] = $true
+        $res += $s
+    }
+    return ,@($res)
+}
+
 function Set-FlagForzados($listaSubs, $rutaMkvOrigen = $null, $decisionesSubUnico = $null) {
     if (-not $listaSubs -or $listaSubs.Count -eq 0) { return }
 
@@ -3108,6 +3187,13 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                 # marcamos como forzado. Algunos releases (Disney+, Apple TV) usan Title pero
                 # dejan el flag Forced=No, y sin esto se nos escapan.
                 if ($tituloPista -match "(?i)(forced|forzado|forzados)") { $forcedFlag = $true }
+                # SDH: flag hearing-impaired (mediainfo ServiceKind=HI o mkvmerge -J) o Title.
+                $sdhFlag = ("$($pista.ServiceKind)" -match '(?i)\bHI\b') -or ($tituloPista -match $patronTituloSdh)
+                if (-not $sdhFlag -and $pista.'@type' -eq "Text") {
+                    $mjSdh = Get-MkvmergeJson $rutaArchivo
+                    $tSdh = @($mjSdh.tracks | Where-Object { $_.id -eq [int]$idMkvmerge }) | Select-Object -First 1
+                    if ($tSdh -and $tSdh.properties.flag_hearing_impaired -eq $true) { $sdhFlag = $true }
+                }
 
                 $pistasBrutas += [PSCustomObject]@{
                     Origen = "Interno"; ID = $idMkvmerge
@@ -3118,6 +3204,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                     Comm = $pista.Format_Commercial_IfAny; Chan = $pista.Channels
                     Size = if ($pista.StreamSize) { [long]$pista.StreamSize } else { 0 }
                     IsForced = $false; MediainfoForcedFlag = $forcedFlag; NomFinal = ""
+                    SdhFlag = [bool]$sdhFlag
                 }
             }
         }
@@ -3296,6 +3383,9 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
         if ($ext.Name -match "(?i)\b(forced|forzado|forzados)\b") { $forcedFlag = $true }
         # Y si el Title (de mediainfo) lo indica también
         if ($tituloExt -match "(?i)(forced|forzado|forzados)") { $forcedFlag = $true }
+        # SDH en externos: ServiceKind=HI, Title o nombre del archivo (p. ej. "pelicula.es.sdh.srt").
+        $sdhFlagExt = ($pExt -and "$($pExt.ServiceKind)" -match '(?i)\bHI\b') -or ($tituloExt -match $patronTituloSdh) -or
+                      ($ext.BaseName -match '(?i)(?<![a-z])(sdh|cc|sordos)(?![a-z])')   # "hi" no: es el código de hindi
 
         $pistasBrutas += [PSCustomObject]@{
             Origen = "Externo"; ID = $ext.FullName; Tipo = $tipoPista
@@ -3307,6 +3397,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
             Chan    = if ($pExt) { $pExt.Channels } else { "" }
             Size    = if ($pExt -and $pExt.StreamSize) { [long]$pExt.StreamSize } elseif ($ext.Length) { [long]$ext.Length } else { 0 }
             IsForced = $false; MediainfoForcedFlag = $forcedFlag; NomFinal = ""
+            SdhFlag = [bool]$sdhFlagExt
             NombreExterno = $ext.Name
         }
     }
@@ -3416,15 +3507,21 @@ function Format-Audios($audios) {
 # Ordena subtítulos detectando forzados con flag de mediainfo + heurística (Bug 8)
 function Format-Subs($subs, $rutaMkvOrigen = $null, $decisionesSubUnico = $null) {
     Set-FlagForzados $subs $rutaMkvOrigen $decisionesSubUnico
-    $subsF = @()
+    Set-FlagSdh $subs
+    $subsF = @(); $orden = 0
     foreach ($s in $subs) {
-        $tStr = if ($s.IsForced) { "Forzados" } else { "Completos" }
+        $tStr = if ($s.IsForced) { "Forzados" } elseif ($s.EsSDH) { "SDH" } else { "Completos" }
         $fStr = if ($s.Format -match "(?i)srt|subrip|ass|ssa|utf-?8|text") { "Planos" } else { "PGS" }
         $s.NomFinal = "$($s.NomLang) $tStr $fStr"
         $s | Add-Member -NotePropertyName "FmtPeso" -NotePropertyValue (Get-PesoFormatoSub $fStr) -Force
+        $s | Add-Member -NotePropertyName "TipoSub" -NotePropertyValue $tStr -Force
+        $s | Add-Member -NotePropertyName "FmtSub" -NotePropertyValue $fStr -Force
+        $s | Add-Member -NotePropertyName "OrdenOrigen" -NotePropertyValue ($orden++) -Force
         $subsF += $s
     }
-    return ,@($subsF | Sort-Object FmtPeso, PesoLang, @{Expression={$_.IsForced}; Descending=$true})
+    $subsF = Select-SubsPorTipo $subsF (Get-CfgGui "TiposSubsMantener")
+    # Dentro de un idioma: forzados, completos y SDH al final; empates en orden de origen.
+    return ,@($subsF | Sort-Object FmtPeso, PesoLang, @{Expression={$_.IsForced}; Descending=$true}, EsSDH, OrdenOrigen)
 }
 
 # Ensambla el MKV final con mkvmerge
@@ -3676,13 +3773,15 @@ function Set-Banderas($archivoMkv, $audiosOrdenados, $subsOrdenados, $defaultPre
         # flag-default solo en el primero: es el que el reproductor debe autoseleccionar.
         $isF = if ($s.IsForced) { 1 } else { 0 }
         $isDef = if ($s.IsForced -and -not $forzActivo) { $forzActivo = $true; 1 } else { 0 }
+        $isH = if ($s.EsSDH -and -not $s.IsForced) { 1 } else { 0 }
         $langVal = if ([string]::IsNullOrWhiteSpace($s.CodLang)) { "und" } else { $s.CodLang }
         Invoke-Mkvpropedit @(
             $archivoMkv, "--edit", "track:s$i",
             "--set", "name=$($s.NomFinal)",
             "--set", "language=$langVal",
             "--set", "flag-forced=$isF",
-            "--set", "flag-default=$isDef"
+            "--set", "flag-default=$isDef",
+            "--set", "flag-hearing-impaired=$isH"
         ) "sub #$i" | Out-Null
     }
 }
