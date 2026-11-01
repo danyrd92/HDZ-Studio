@@ -16,7 +16,7 @@ const {chromium}=require(process.env.HDZ_PLAYWRIGHT||'playwright');
      pistasConversionAudio:[{v:'1',t:'Pista 1',destinos:[{v:'aac',t:'AAC'}]}],conversionesAudioVisible:true,conversionesAudio:[{Index:'1',Dest:'aac',MantenerOriginal:true}],
      lote:Array.from({length:60},(_,i)=>({nombre:'Fixture.S01E'+i+'.mkv',sel:true,badges:[{t:'HEVC',s:'gris'}]})),capturas:[],logos:[]};
    window.performanceFixture=d;render({online:true,responsive:true,data:d});go('crear');window.hdzWorkspaceSelect('audio');
-   const select=document.querySelector('#undAudioRows select');select.focus();select.value='eng';
+   document.querySelector('#undAudioRows').closest('details').open=true;const select=document.querySelector('#undAudioRows select');select.focus();select.value='eng';
    let mutations=0;const observer=new MutationObserver(records=>mutations+=records.length);
    for(const id of ['historyResults','tmdbResults','seasonFolders','firmasList','undAudioRows','convAudioRows','remixPairs'])observer.observe(document.getElementById(id),{childList:true,subtree:true});
    const started=performance.now();for(let i=0;i<12;i++)render({online:true,responsive:true,data:{...d,uiTs:d.uiTs+i,montaje:{activo:true,pct:i}}});

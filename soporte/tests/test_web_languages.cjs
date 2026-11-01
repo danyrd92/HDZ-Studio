@@ -10,6 +10,9 @@ const state={online:true,responsive:true,data:{protocol:2,session:'language-test
  await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:html});if(u.pathname==='/api/state')return route.fulfill({json:state});if(u.pathname==='/api/cmd/status')return route.fulfill({json:{status:'done'}});if(route.request().method()==='POST'){commands.push(route.request().postDataJSON());return route.fulfill({json:{id:'lang-1'}});}return route.fulfill({status:404,body:''});});
  await page.goto('https://hdz-language-test.local/');await page.waitForTimeout(600);
  await page.evaluate(()=>{go('crear');toggleGrp('audio');});
+ assert.equal(await page.locator('#cardUndAudioWeb details[open]').count(),0,'El selector por pista debe arrancar contraído');
+ assert.equal(await page.locator('#cardUndSubsWeb details[open]').count(),0,'El selector por pista de subtítulos debe arrancar contraído');
+ await page.locator('#cardUndAudioWeb summary').click();
  assert.equal(await page.locator('#undAudioRows select').count(),2);
  assert.equal(await page.locator('#undSubsRows select').count(),1);
  assert.equal(await page.locator('#undAudioRows select').nth(1).inputValue(),'tha');

@@ -472,7 +472,7 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
     <div class="card" id="cardConvAudioWeb" style="display:none"><h3><span class="ci">🎚</span>Convertir audio</h3><p class="d">Elige la pista, el formato de destino y si quieres conservar la original.</p><div id="convAudioRows"></div><button class="btn sm mt" onclick="addConv()">＋ Añadir conversión</button></div>
     <div class="card" id="cardDefAudioWeb" style="display:none"><h3><span class="ci">🔊</span>Pista de audio predeterminada</h3><p class="d">Cuál se marca como predeterminada cuando hay varias familias de códec.</p>
       <div class="chips seg" data-group="defAudio"><div class="chip" data-v="DOLBY">Dolby (DD+ / TrueHD / DD)</div><div class="chip" data-v="DTS">DTS (DTS-HD MA / DTS)</div></div></div>
-    <div class="card" id="cardUndAudioWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de audio</h3><p class="d">Elige el idioma real aunque el archivo indique otro. Automático conserva la identificación original; el archivo de origen no se modifica.</p><div id="undAudioRows"></div></div>
+    <div class="card" id="cardUndAudioWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de audio</h3><p class="d">Elige el idioma real aunque el archivo indique otro. Automático conserva la identificación original; el archivo de origen no se modifica.</p><details class="undmore mt"><summary>Mostrar pistas</summary><div id="undAudioRows"></div></details></div>
     </div></div><!-- /grp-audio -->
     <div class="grp closed" id="grp-subs">
     <div class="grphd" onclick="toggleGrp('subs')"><span class="gi">💬</span><span class="gt">Subtítulos</span><span class="chev" id="chev-subs">▸</span></div>
@@ -487,7 +487,7 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
       <div class="chips seg" data-group="extraerPGS" style="margin-top:0"><div class="chip" data-v="false">No extraer</div><div class="chip" data-v="true">Sí, extraer y pausar</div></div>
       <label class="lbl">Qué conservar tras el OCR</label>
       <div class="chips seg" data-group="conservarPGS" style="margin-top:0"><div class="chip" data-v="CONSERVAR_PGS">Mantener PGS + SRT</div><div class="chip" data-v="ELIMINAR_PGS">Solo SRT (borrar PGS)</div></div></div>
-    <div class="card" id="cardUndSubsWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de subtítulos</h3><p class="d">Elige el idioma real aunque su código sea erróneo. Automático conserva la identificación original; el archivo de origen no se modifica.</p><div id="undSubsRows"></div></div>
+    <div class="card" id="cardUndSubsWeb" style="display:none"><h3><span class="ci">🌐</span>Corregir idioma de las pistas de subtítulos</h3><p class="d">Elige el idioma real aunque su código sea erróneo. Automático conserva la identificación original; el archivo de origen no se modifica.</p><details class="undmore mt"><summary>Mostrar subtítulos</summary><div id="undSubsRows"></div></details></div>
     </div></div><!-- /grp-subs -->
   </section>
 
@@ -1296,7 +1296,7 @@ function initHdzDesign(){
   .btn.primary{box-shadow:0 3px 10px rgba(217,43,43,.18)}.btn:disabled{opacity:.55;cursor:not-allowed}
   .input::placeholder{color:#90909F}.input,select.input{background:#101014}.chip.on{box-shadow:none}.chip[aria-disabled=true]{opacity:.55;cursor:not-allowed}
   textarea.input{font-size:14px;line-height:1.65;min-height:180px}#capsBox{margin-top:12px}.credstatus{line-height:1.6}
-  .bbmore{flex-basis:100%;border:1px solid var(--cardBorder);border-radius:9px;padding:8px 10px}.bbmore summary{cursor:pointer;font-size:13px;min-height:28px;display:flex;align-items:center}.bbmore summary::after{content:'＋';margin-left:auto;color:var(--sub)}.bbmore[open] summary::after{content:'−'}.bbmore .morebuttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .bbmore{flex-basis:100%;border:1px solid var(--cardBorder);border-radius:9px;padding:8px 10px}.bbmore summary{cursor:pointer;font-size:13px;min-height:28px;display:flex;align-items:center}.bbmore summary::after{content:'＋';margin-left:auto;color:var(--sub)}.bbmore[open] summary::after{content:'−'}.undmore summary{cursor:pointer;font-size:13px;min-height:28px;display:flex;align-items:center;color:var(--sub)}.undmore summary::after{content:'＋';margin-left:auto}.undmore[open] summary::after{content:'−'}.bbmore .morebuttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .snav{min-height:48px;font-size:14px}.snav .si,.tab .ic{filter:none;display:flex;align-items:center;justify-content:center}.snav.active .hdzicon,.tab.active .hdzicon{color:var(--accentHover)}.shint{font-size:12px}.slbl{color:var(--sub)}
   .pill{font-size:12px}.sechead{font-weight:600;letter-spacing:.8px}.sheet .hd b{font-size:16px}.sheet .path{font-size:12px;line-height:1.6}
   .btn:focus-visible,.chip:focus-visible,.switch:focus-visible,.snav:focus-visible,.tab:focus-visible,.grphd:focus-visible,summary:focus-visible{outline:2px solid var(--accentHover);outline-offset:3px}

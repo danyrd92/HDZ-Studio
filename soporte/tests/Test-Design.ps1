@@ -10,6 +10,12 @@ try {
  Assert ($script:workspaceStages.Count -eq 4) 'Audio y subtítulos no están unidos'
  Set-HdzWorkspaceStage 'audio'
  Assert ($ui.panAudio.Visibility -eq 'Visible' -and $ui.panSubs.Visibility -eq 'Visible') 'No se muestran las dos partes de pistas'
+ foreach($k in @('Audio','Sub')){
+  Assert ($ui["bodyUnd$k"].Visibility -eq 'Collapsed' -and $ui["chevUnd$k"].Text -eq '▸') "El selector por pista ($k) no arranca contraído"
+  $clic=[Windows.Input.MouseButtonEventArgs]::new([Windows.Input.Mouse]::PrimaryDevice,0,[Windows.Input.MouseButton]::Left);$clic.RoutedEvent=[Windows.UIElement]::MouseLeftButtonUpEvent
+  $ui["hdrUnd$k"].RaiseEvent($clic);Assert ($ui["bodyUnd$k"].Visibility -eq 'Visible' -and $ui["chevUnd$k"].Text -eq '▾') "El selector por pista ($k) no se despliega"
+  $ui["hdrUnd$k"].RaiseEvent($clic);Assert ($ui["bodyUnd$k"].Visibility -eq 'Collapsed') "El selector por pista ($k) no se vuelve a contraer"
+ }
  Set-HdzWorkspaceStage 'entrega'
  $deliveryChildren=$script:workspaceStages.entrega.body.Children[0].Children
  Assert ($deliveryChildren[0].Text -eq 'Entrega') 'La entrega no aparece primero'

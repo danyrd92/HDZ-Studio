@@ -1430,13 +1430,17 @@ $xaml = @'
             </Border>
             <Border x:Name="cardUndAudio" Style="{StaticResource Card}" Visibility="Collapsed">
               <StackPanel>
-                <Grid>
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <!-- Contraída por defecto: hay una fila por pista y ocupa mucho. Se despliega con la cabecera. -->
+                <Grid x:Name="hdrUndAudio" Background="Transparent" Cursor="Hand" ToolTip="Mostrar / ocultar las pistas">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <TextBlock Style="{StaticResource H}" Text="Corregir idioma de las pistas de audio"/>
                   <TextBlock x:Name="bdgUndAudio" Style="{StaticResource Bdg}" Grid.Column="1"/>
+                  <TextBlock x:Name="chevUndAudio" Grid.Column="2" Text="▸" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="8,0,2,0"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier pista, aunque el archivo indique otro. Automático conserva la identificación original. No modifica el archivo de origen."/>
-                <StackPanel x:Name="panUndAudio" Margin="0,10,0,0"/>
+                <StackPanel x:Name="bodyUndAudio" Visibility="Collapsed">
+                  <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier pista, aunque el archivo indique otro. Automático conserva la identificación original. No modifica el archivo de origen."/>
+                  <StackPanel x:Name="panUndAudio" Margin="0,10,0,0"/>
+                </StackPanel>
               </StackPanel>
             </Border>
             <Border x:Name="phAudio" Style="{StaticResource Card}" Visibility="Collapsed">
@@ -1472,13 +1476,16 @@ $xaml = @'
             </StackPanel>
             <Border x:Name="cardUndSub" Style="{StaticResource Card}" Visibility="Collapsed">
               <StackPanel>
-                <Grid>
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid x:Name="hdrUndSub" Background="Transparent" Cursor="Hand" ToolTip="Mostrar / ocultar los subtítulos">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <TextBlock Style="{StaticResource H}" Text="Corregir idioma de las pistas de subtítulos"/>
                   <TextBlock x:Name="bdgUndSub" Style="{StaticResource Bdg}" Grid.Column="1"/>
+                  <TextBlock x:Name="chevUndSub" Grid.Column="2" Text="▸" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="8,0,2,0"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier subtítulo, aunque su código sea erróneo. Automático conserva la identificación original. No modifica el archivo de origen."/>
-                <StackPanel x:Name="panUndSub" Margin="0,10,0,0"/>
+                <StackPanel x:Name="bodyUndSub" Visibility="Collapsed">
+                  <TextBlock Style="{StaticResource D}" Text="Elige el idioma real de cualquier subtítulo, aunque su código sea erróneo. Automático conserva la identificación original. No modifica el archivo de origen."/>
+                  <StackPanel x:Name="panUndSub" Margin="0,10,0,0"/>
+                </StackPanel>
               </StackPanel>
             </Border>
             <Border x:Name="cardFiltro" Style="{StaticResource Card}">
@@ -1977,6 +1984,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "bdgFiltro","bdgSubsUnicos","bdgPGS","lblSugerencia",
           "cardModoLote","cardFiltroAudio","wrapIdiomasAudio","cardConvAudio","panConvFilas","btnConvAdd","cardDefAudio","cardUndAudio","cardUndSub",
           "cardFiltro","cardSubsUnicos","cardPGS","phAudio","phSubs","panUndAudio","panUndSub",
+          "hdrUndAudio","chevUndAudio","bodyUndAudio","hdrUndSub","chevUndSub","bodyUndSub",
           "swProyecto","panProyectoDatos","txtTitulo","txtAno","swSerie",
           "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer",
           "panProyTabs","panTabsProy","scrTabsProy","btnTabProyIzq","btnTabProyDer","cardCapturasProy","chCapturasProy",
@@ -4285,6 +4293,9 @@ Wire-SeccionColapsable $ui.secHdrGeneral  $ui.secChevGeneral  $ui.panGeneral
 Wire-SeccionColapsable $ui.secHdrProyecto $ui.secChevProyecto $ui.panProyecto
 Wire-SeccionColapsable $ui.secHdrAudio    $ui.secChevAudio    $ui.panAudio
 Wire-SeccionColapsable $ui.secHdrSubs     $ui.secChevSubs     $ui.panSubs
+# Selectores de idioma pista a pista: arrancan contraídos (ocupan mucho con lotes grandes).
+Wire-SeccionColapsable $ui.hdrUndAudio    $ui.chevUndAudio    $ui.bodyUndAudio
+Wire-SeccionColapsable $ui.hdrUndSub      $ui.chevUndSub      $ui.bodyUndSub
 
 # --- Menú lateral colapsable (solo iconos) ---
 $script:sidebarColapsado = $false
