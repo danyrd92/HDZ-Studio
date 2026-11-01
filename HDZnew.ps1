@@ -1754,7 +1754,9 @@ function Set-FlagSdh($listaSubs) {
         $s | Add-Member -NotePropertyName "EsSDH" -NotePropertyValue ((-not $s.IsForced) -and [bool]$s.SdhFlag) -Force
     }
     # Contenido: solo en grupos (idioma, texto plano) con 2+ completos sin señal, que es donde un SDH
-    # sin marcar se confunde con el completo normal. Se extraen de una pasada por MKV de origen.
+    # sin marcar se confunde con el completo normal. Basta con los primeros 10 minutos: ffmpeg los
+    # saca de una pasada por MKV de origen y el vídeo copiado a null le marca dónde parar (sin él lee
+    # el archivo entero). Si ffmpeg falla, mkvextract del sub completo.
     $candidatos = @{}
     foreach ($s in $listaSubs) {
         if ($s.IsForced -or $s.EsSDH) { continue }
@@ -1768,14 +1770,22 @@ function Set-FlagSdh($listaSubs) {
     $temporales = @()
     try {
         foreach ($g in @($aMedir | Where-Object { $_.Origen -eq 'Interno' -and $_.ArchivoFuenteMkv } | Group-Object ArchivoFuenteMkv)) {
+            $argsFf = @('-nostdin', '-y', '-v', 'error', '-i', $g.Name)
             $argsExt = @($g.Name, 'tracks')
             foreach ($s in $g.Group) {
                 $tmp = Join-Path $env:TEMP "hdz_sdh_$([guid]::NewGuid().ToString('N')).srt"
                 $temporales += $tmp
                 $s | Add-Member -NotePropertyName "RutaTextoSdh" -NotePropertyValue $tmp -Force
+                $argsFf += @('-map', "0:$($s.ID)", '-t', '600', '-c:s', 'srt', $tmp)
                 $argsExt += "$($s.ID):$tmp"
             }
-            & mkvextract @argsExt 2>&1 | Out-Null
+            $argsFf += @('-map', '0:v:0?', '-t', '600', '-c:v', 'copy', '-f', 'null', '-')
+            $null = & ffmpeg @argsFf 2>&1
+            $faltan = @($g.Group | Where-Object { -not (Test-Path -LiteralPath $_.RutaTextoSdh) -or (Get-Item -LiteralPath $_.RutaTextoSdh).Length -eq 0 })
+            if ($LASTEXITCODE -ne 0 -or $faltan.Count) {
+                Write-Host "       -> ffmpeg no sacó los 10 primeros minutos; se extraen completos con mkvextract" -ForegroundColor DarkGray
+                & mkvextract @argsExt 2>&1 | Out-Null
+            }
         }
         foreach ($s in $aMedir) {
             $ruta = if ($s.Origen -eq 'Interno') { $s.RutaTextoSdh } else { "$($s.ID)" }
@@ -1801,14 +1811,29 @@ function Select-SubsPorTipo($subs, $tiposMantener = $null) {
             Write-Host "   [filtro tipos subs] Subs: $antes -> $($lista.Count) (se mantienen: $(@($tiposMantener) -join ', '))" -ForegroundColor DarkGray
         }
     }
+    # Excepción: dos «completos» de tamaño muy distinto (el menor < 70% del mayor) pueden ser un
+    # forzado grande que la heurística del 35% no separó. Se conservan los dos antes que perder el forzado.
     $vistos = @{}; $res = @()
     foreach ($s in ($lista | Sort-Object OrdenOrigen)) {
         $k = "$($s.CodLang)|$($s.TipoSub)|$($s.FmtSub)"
         if ($vistos.ContainsKey($k)) {
+            $dudoso = $false
+            if ($s.TipoSub -eq 'Completos' -and [long]$s.Size -gt 0) {
+                foreach ($previo in $vistos[$k]) {
+                    if ([long]$previo.Size -le 0) { continue }
+                    $menor = [math]::Min([long]$previo.Size, [long]$s.Size); $mayor = [math]::Max([long]$previo.Size, [long]$s.Size)
+                    if ($menor -lt ($mayor * 0.7)) { $dudoso = $true } else { $dudoso = $false; break }
+                }
+            }
+            if ($dudoso) {
+                Write-Host "   [duplicados subs] DUDOSO: se conservan los dos '$($s.NomFinal)' (ID=$($s.ID), $($s.Size) bytes): por tamaño uno podría ser un forzado. Revísalo." -ForegroundColor Yellow
+                $vistos[$k] += $s; $res += $s
+                continue
+            }
             Write-Host "   [duplicados subs] Se descarta '$($s.NomFinal)' (ID=$($s.ID)): ya hay uno igual antes." -ForegroundColor DarkGray
             continue
         }
-        $vistos[$k] = $true
+        $vistos[$k] = @($s)
         $res += $s
     }
     return ,@($res)

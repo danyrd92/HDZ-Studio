@@ -21,6 +21,7 @@ function New-Srt($nombre, $texto, [int]$bloques, [switch]$Sonidos) {
 $esForz  = New-Srt 'es_forzado.srt' 'Cartel' 2
 $esCompA = New-Srt 'es_compA.srt'   'Primera traduccion' 18
 $esCompB = New-Srt 'es_compB.srt'   'Segunda traduccion' 18
+$esGrande = New-Srt 'es_grande.srt'  'Cartel grande' 10
 $esSdh   = New-Srt 'es_sdh.srt'     'Dialogo' 20 -Sonidos
 $esSdh2  = New-Srt 'es_sdh2.srt'    'Dialogo sin marca' 20 -Sonidos
 $frComp  = New-Srt 'fr_comp.srt'    'Traduction' 18
@@ -29,11 +30,13 @@ $video = Join-Path $fixtureDir 'video.mkv'
 & (Join-Path $tiposAppRoot 'bin/ffmpeg.exe') -v error -f lavfi -i 'color=c=blue:s=160x90:r=24:d=2' -f lavfi -i 'sine=frequency=440:duration=2' -map 0:v -map 1:a -c:v libx264 -preset ultrafast -c:a aac -metadata:s:a:0 language=spa -shortest $video
 Assert ($LASTEXITCODE -eq 0) 'No se pudo generar el vídeo sintético'
 $source = Join-Path $tiposTestRoot 'Subtipos.Test.2026.mkv'
-# Orden de origen: forzado, completo A, completo B, SDH (flag), SDH sin marca (solo contenido), fr completo, fr SDH (título).
+# Orden de origen: forzado, completo A, completo B, «completo» pequeño sin marca (forzado grande: 55%),
+# SDH (flag), SDH sin marca (solo contenido), fr completo, fr SDH (título).
 & (Join-Path $tiposAppRoot 'bin/mkvmerge.exe') -q -o $source $video `
     --language 0:spa --forced-display-flag 0:1 $esForz `
     --language 0:spa $esCompA `
     --language 0:spa $esCompB `
+    --language 0:spa $esGrande `
     --language 0:spa --hearing-impaired-flag 0:1 $esSdh `
     --language 0:spa $esSdh2 `
     --language 0:fre $frComp `
@@ -84,14 +87,20 @@ try {
         [pscustomobject]@{ Cfg = ($job.CfgJson | ConvertFrom-Json); Subs = (Get-SubsResultado $dir) }
     }
 
-    # Caso 1: los tres tipos. Un sub por idioma + tipo + formato; el primero de cada uno.
+    # Caso 1: los tres tipos. Un sub por idioma + tipo + formato; el primero de cada uno, salvo el
+    # «completo» de tamaño muy distinto, que se conserva como dudoso.
     $r1 = Invoke-Caso 'todos'
     Assert ($r1.Cfg.PSObject.Properties.Name -notcontains 'TiposSubsMantener') 'Con los tres marcados no debe enviarse filtro'
     $nombres = @($r1.Subs | ForEach-Object { $_.properties.track_name })
-    $esperado = @('Castellano Forzados Planos','Castellano Completos Planos','Castellano SDH Planos','Francés Completos Planos','Francés SDH Planos')
+    $esperado = @('Castellano Forzados Planos','Castellano Completos Planos','Castellano Completos Planos','Castellano SDH Planos','Francés Completos Planos','Francés SDH Planos')
     Assert ((@($nombres) -join '|') -eq ($esperado -join '|')) "Pistas inesperadas: $($nombres -join ' | ')"
     $compEs = $r1.Subs[1]
-    $sdhEs = $r1.Subs[2]
+    $grandeEs = $r1.Subs[2]
+    $sdhEs = $r1.Subs[3]
+    $log1 = Get-Content -LiteralPath (Join-Path $tiposTestRoot 'stdout_todos.txt') -Raw
+    Assert ($log1 -match 'DUDOSO') 'No se avisa del completo dudoso'
+    Assert ($log1 -match 'marcado SDH por contenido') 'No se analizó el contenido'
+    Assert ($log1 -notmatch 'ffmpeg no sacó') 'Se usó el respaldo en vez de los 10 primeros minutos'
     Assert ($sdhEs.properties.flag_hearing_impaired -eq $true) 'El SDH no lleva la marca hearing-impaired'
     Assert ($r1.Subs[1].properties.flag_hearing_impaired -ne $true) 'Un completo quedó marcado como SDH'
     # El completo que queda es el PRIMERO (A), no el B: se comprueba por contenido.
@@ -102,6 +111,9 @@ try {
     $outMkv = @(Get-ChildItem -LiteralPath (Join-Path $tiposTestRoot 'output_todos') -Filter '*.mkv')[0].FullName
     & (Join-Path $tiposAppRoot 'bin/mkvextract.exe') $outMkv tracks "$($compEs.id):$tmpA" | Out-Null
     Assert ((Get-Content -LiteralPath $tmpA -Raw) -match 'Primera traduccion') 'No se conservó el primer completo'
+    $tmpG = Join-Path $dirExtr 'grande.srt'
+    & (Join-Path $tiposAppRoot 'bin/mkvextract.exe') $outMkv tracks "$($grandeEs.id):$tmpG" | Out-Null
+    Assert ((Get-Content -LiteralPath $tmpG -Raw) -match 'Cartel grande') 'El dudoso conservado no es el pequeño'
     $tmpS = Join-Path $dirExtr 'sdhEs.srt'
     & (Join-Path $tiposAppRoot 'bin/mkvextract.exe') $outMkv tracks "$($sdhEs.id):$tmpS" | Out-Null
     Assert ((Get-Content -LiteralPath $tmpS -Raw) -match 'Dialogo 1\b') 'No se conservó el primer SDH (el marcado)'
@@ -113,7 +125,7 @@ try {
     $r2 = Invoke-Caso 'sinsdh'
     Assert ((@($r2.Cfg.TiposSubsMantener) -join ',') -eq 'Completos,Forzados') "Filtro enviado: $(@($r2.Cfg.TiposSubsMantener) -join ',')"
     $nombres2 = @($r2.Subs | ForEach-Object { $_.properties.track_name })
-    Assert ((@($nombres2) -join '|') -eq 'Castellano Forzados Planos|Castellano Completos Planos|Francés Completos Planos') "Sin SDH: $($nombres2 -join ' | ')"
+    Assert ((@($nombres2) -join '|') -eq 'Castellano Forzados Planos|Castellano Completos Planos|Castellano Completos Planos|Francés Completos Planos') "Sin SDH: $($nombres2 -join ' | ')"
 
     # Caso 3: ningún tipo marcado no lanza el montaje.
     foreach ($tb in $script:chipsTiposSub) { $tb.IsChecked = $false }
@@ -125,7 +137,7 @@ try {
     Assert ((Get-FileHash -LiteralPath $source).Hash -eq $sourceHash) 'El original fue modificado'
     Reset-Todo
     Assert (@($script:chipsTiposSub | Where-Object IsChecked).Count -eq 3) 'Empezar de Zero no restablece los tipos'
-    Write-Host "SUBTITLE_TYPES_OK: SDH por flag, título y contenido; filtro GUI/web; primero de cada tipo. $tiposTestRoot"
+    Write-Host "SUBTITLE_TYPES_OK: SDH por flag, título y contenido (10 primeros minutos); filtro GUI/web; primero de cada tipo; completo dudoso conservado. $tiposTestRoot"
 } finally {
     Remove-Item Env:HDZ_GUI_TEST,Env:HDZ_HISTORY_TEST_DIR -ErrorAction SilentlyContinue
 }
