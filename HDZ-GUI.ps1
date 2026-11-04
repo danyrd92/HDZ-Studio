@@ -20,6 +20,7 @@ $ErrorActionPreference = "Stop"
 # llegan rotas al análisis («Inglés» -> «Ingl├®s»). El motor ya lo hace igual (HDZnew.ps1).
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 . (Join-Path $PSScriptRoot "HDZ-Core.ps1")
+. (Join-Path $PSScriptRoot "HDZ-Disco.ps1")
 . (Join-Path $PSScriptRoot "HDZ-Async.ps1")
 . (Join-Path $PSScriptRoot "HDZ-History.ps1")
 . (Join-Path $PSScriptRoot "HDZ-Jobs.ps1")
@@ -1570,6 +1571,8 @@ $xaml = @'
                 <StackPanel Orientation="Horizontal">
                   <Button x:Name="btnCrearTorrentArchivo" Style="{StaticResource Ghost}" Content="🧲  De un archivo…"/>
                   <Button x:Name="btnCrearTorrentCarpeta" Style="{StaticResource Ghost}" Margin="9,0,0,0" Content="🧲  De una carpeta (pack)…"/>
+                  <Button x:Name="btnCrearTorrentDisco" Style="{StaticResource Ghost}" Margin="9,0,0,0" Content="💿  De un disco (ISO)…"
+                          ToolTip="Disco completo ya ripeado a .iso: propone el nombre, lo renombra si quieres, lee el BDInfo y crea el torrent."/>
                 </StackPanel>
                 <Border x:Name="panTorrentProgreso" Visibility="Collapsed" Margin="0,11,0,0"
                         Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource ChipBorderBrush}"
@@ -1725,10 +1728,13 @@ $xaml = @'
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="MediaInfo"/>
-                  <Button x:Name="btnMediaRefrescar" Style="{StaticResource GhostMini}" Grid.Column="1" Content="Regenerar"/>
+                  <TextBlock x:Name="lblMediainfoTitulo" Style="{StaticResource H}" Text="MediaInfo"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="btnBdinfoCargar" Style="{StaticResource GhostMini}" Content="Cargar BDInfo…" Visibility="Collapsed"/>
+                    <Button x:Name="btnMediaRefrescar" Style="{StaticResource GhostMini}" Content="Regenerar"/>
+                  </StackPanel>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Texto completo del archivo (del primer episodio si es una serie/pack). Se envía en el campo MediaInfo."/>
+                <TextBlock x:Name="lblMediainfoDesc" Style="{StaticResource D}" Text="Texto completo del archivo (del primer episodio si es una serie/pack). Se envía en el campo MediaInfo."/>
                 <Grid x:Name="gridMediaInfo" Height="120" Margin="0,9,0,0">
                   <TextBox x:Name="upMediainfo" Style="{StaticResource Input}" FontFamily="Consolas"
                            TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
@@ -2000,7 +2006,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panTareasAux",
           "navSubida","navAjustes","panSubida","panAjustes",
           "txtTorrentSubir","btnTorrentExaminar","btnTorrentUltimo","lblTorrentInfo",
-          "btnCrearTorrentArchivo","btnCrearTorrentCarpeta","panTorrentProgreso","barTorrentProgreso","lblTorrentProgreso","lblTorrentProgresoPct",
+          "btnCrearTorrentArchivo","btnCrearTorrentCarpeta","btnCrearTorrentDisco","lblMediainfoTitulo","lblMediainfoDesc","btnBdinfoCargar","panTorrentProgreso","barTorrentProgreso","lblTorrentProgreso","lblTorrentProgresoPct",
           "btnNuevaSubida","panTabsSubida","scrTabs","btnTabIzq","btnTabDer",
           "upTitulo","upCategoria","upTipo","upResolucion","panTV","upTemporada","upEpisodio","upKeywords",
           "btnBuscarTmdb","panResultadosTmdb","upTmdb","upImdb","upTvdb","upMal",
@@ -4868,7 +4874,7 @@ function Resolve-VideoDeTorrent($rutaTorrent, $nombreInterno) {
     # Respaldo: por nombre base en la carpeta del .torrent
     $base = [System.IO.Path]::GetFileNameWithoutExtension($nombreInterno)
     $v2 = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts)$" -and $_.BaseName -eq $base } | Select-Object -First 1)
+            Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts|iso)$" -and $_.BaseName -eq $base } | Select-Object -First 1)
     if ($v2.Count -gt 0) { return $v2[0].FullName }
     # Respaldo extra: el vídeo puede estar en una carpeta de salida distinta a la del .torrent.
     # Buscamos por nombre base (recursivo) en las carpetas conocidas: salida del archivo y trabajo.
@@ -4877,7 +4883,7 @@ function Resolve-VideoDeTorrent($rutaTorrent, $nombreInterno) {
     foreach ($od in $otras) {
         if ($od -eq $dir) { continue }
         $vx = @(Get-ChildItem -LiteralPath $od -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts)$" -and $_.BaseName -eq $base } | Select-Object -First 1)
+                Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts|iso)$" -and $_.BaseName -eq $base } | Select-Object -First 1)
         if ($vx.Count -gt 0) { return $vx[0].FullName }
     }
     return $null
@@ -4922,6 +4928,204 @@ function Get-SpecsVideo($ruta) {
         }
     } catch {}
     return $r
+}
+
+# =========================================================================
+# DISCOS COMPLETOS (ISO). El ripeo lo hace el programa del usuario (AnyDVD,
+# DVDFab…); aquí se parte del .iso ya creado: nombre de la release, BDInfo en
+# lugar de MediaInfo, specs, capturas y torrent. La lógica vive en HDZ-Disco.ps1.
+# =========================================================================
+function Test-SubidaEsDisco { [bool](Test-HdzEsDisco "$($script:videoSubir)") }
+
+# La tarjeta MediaInfo pasa a ser «BDInfo» cuando la subida es un disco completo.
+function Set-ModoDiscoSubida([bool]$EsDisco) {
+    if ($ui.lblMediainfoTitulo) { $ui.lblMediainfoTitulo.Text = if ($EsDisco) { 'BDInfo' } else { 'MediaInfo' } }
+    if ($ui.lblMediainfoDesc) {
+        $ui.lblMediainfoDesc.Text = if ($EsDisco) {
+            'Disco completo: pega aquí el informe de BDInfo o cárgalo desde el .txt que guarda BDInfo (si está junto al ISO, se carga solo). Se envía en el campo BDInfo.'
+        } else {
+            'Texto completo del archivo (del primer episodio si es una serie/pack). Se envía en el campo MediaInfo.'
+        }
+    }
+    if ($ui.btnBdinfoCargar) { $ui.btnBdinfoCargar.Visibility = if ($EsDisco) { 'Visible' } else { 'Collapsed' } }
+    if ($ui.btnMediaRefrescar) { $ui.btnMediaRefrescar.Visibility = if ($EsDisco) { 'Collapsed' } else { 'Visible' } }
+}
+
+# Datos técnicos del disco: del BDInfo si lo hay (lo más fiable) y, si no, del propio ISO con ffprobe.
+function Get-DatosDiscoGui([string]$RutaIso, [string]$TextoBdinfo = '') {
+    if ("$TextoBdinfo".Trim()) {
+        $d = ConvertFrom-HdzBdinfo $TextoBdinfo
+        if ($d.Resolucion -or $d.Codec) { return $d }
+    }
+    if (-not ($RutaIso -and (Test-Path -LiteralPath $RutaIso))) { return $null }
+    $disco = $null
+    try { $disco = Open-HdzDisco $RutaIso; return (Get-HdzDiscoDatos $disco) }
+    catch { return $null }
+    finally { Close-HdzDisco $disco }
+}
+
+# Specs de la ficha a partir de los datos del disco. Tipo: Full UHD (2160p) o Full BluRay.
+function Aplicar-DatosDiscoSubida($Datos) {
+    if (-not $Datos) { return }
+    if ($Datos.Resolucion) { Set-ComboValor $ui.upResolucion (Get-HdzResolutionTrackerId "$($Datos.Resolucion)") }
+    $ui.upDV.IsChecked = [bool]$Datos.DV
+    $ui.upHDR10P.IsChecked = [bool]$Datos.HDR10P
+    $ui.upHDR10.IsChecked = [bool]($Datos.HDR10 -or $Datos.HDR10P)
+    if ("$($Datos.Resolucion)" -eq '2160p') { Set-ComboValor $ui.upTipo 3 }
+    elseif ("$($Datos.Resolucion)" -match '^(1080|720)') { Set-ComboValor $ui.upTipo 1 }
+    Actualizar-TipoCategoria
+}
+
+# Campos de información técnica que viajan al tracker: un disco completo manda BDInfo, no MediaInfo.
+function Get-CamposInfoTecnica([string]$Texto, [bool]$EsDisco) {
+    if ($EsDisco) { return @{ mediainfo = ''; bdinfo = "$Texto" } }
+    return @{ mediainfo = "$Texto"; bdinfo = $null }
+}
+
+# Diálogo para revisar el nombre propuesto del disco. Devuelve @{ Accion; Nombre } con
+# Accion = 'renombrar' | 'mantener' | 'cancelar'.
+function Show-DialogoNombreDisco([string]$Propuesto, [string]$Actual, [string]$Detalle) {
+    if ($script:modoTest) {
+        if ($script:discoRespuestaTest) { return $script:discoRespuestaTest }
+        return @{ Accion = 'renombrar'; Nombre = $Propuesto }
+    }
+    $xamlDlg = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        SizeToContent="Height" Width="640" ResizeMode="NoResize" ShowInTaskbar="False"
+        FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
+  <Window.Resources>
+    <Style x:Key="P" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/><Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="bd" Background="#D92B2B" CornerRadius="9" Padding="22,10"><ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/></Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Background" Value="#EF4444"/></Trigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="bd" Property="Background" Value="#A81E1E"/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+    <Style x:Key="G" TargetType="Button">
+      <Setter Property="Foreground" Value="#C8C8CE"/><Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="bd" Background="#1A1A1F" BorderBrush="#2E2E35" BorderThickness="1" CornerRadius="9" Padding="20,10"><ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/></Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="BorderBrush" Value="#D92B2B"/><Setter Property="Foreground" Value="White"/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+  </Window.Resources>
+  <Border Background="#131316" BorderBrush="#2E2E35" BorderThickness="1" CornerRadius="14" Margin="16">
+    <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="7" Opacity="0.55" Color="#000000"/></Border.Effect>
+    <StackPanel Margin="28,24,28,22">
+      <DockPanel x:Name="barra" Margin="0,0,0,14">
+        <TextBlock FontSize="22" VerticalAlignment="Center" Margin="0,0,12,0" Text="💿"/>
+        <TextBlock Foreground="#EDEDEF" FontSize="16.5" FontWeight="SemiBold" VerticalAlignment="Center" Text="Nombre del disco"/>
+      </DockPanel>
+      <TextBlock x:Name="lblDetalle" Foreground="#9C9CA8" FontSize="13" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,12"/>
+      <TextBlock Foreground="#C8C8CE" FontSize="12" FontWeight="SemiBold" Text="Nombre de la release (es también el título en el tracker)" Margin="0,0,0,6"/>
+      <TextBox x:Name="txtNombre" FontSize="13.5" Padding="10,8" Background="#1A1A1F" Foreground="#EDEDEF" BorderBrush="#2E2E35" CaretBrush="#EDEDEF"/>
+      <TextBlock x:Name="lblArchivo" Foreground="#7C7C88" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,20"/>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button x:Name="btnCancelar" Style="{StaticResource G}" Margin="0,0,10,0" Content="Cancelar"/>
+        <Button x:Name="btnMantener" Style="{StaticResource G}" Margin="0,0,10,0" Content="Dejar el nombre actual"/>
+        <Button x:Name="btnRenombrar" Style="{StaticResource P}" Content="Renombrar y crear torrent"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>
+'@
+    $dlg = [Windows.Markup.XamlReader]::Parse($xamlDlg)
+    $g = @{}
+    foreach ($n in @('barra','lblDetalle','txtNombre','lblArchivo','btnCancelar','btnMantener','btnRenombrar')) { $g[$n] = $dlg.FindName($n) }
+    $respuesta = @{ Accion = 'cancelar'; Nombre = '' }
+    $g.lblDetalle.Text = $Detalle
+    $g.txtNombre.Text = $Propuesto
+    $actualizarArchivo = {
+        $archivo = ConvertTo-HdzNombreArchivo $g.txtNombre.Text
+        $g.lblArchivo.Text = "Archivo: $archivo.iso   ·   ahora: $Actual.iso"
+        $g.btnRenombrar.IsEnabled = -not [string]::IsNullOrWhiteSpace($archivo)
+    }.GetNewClosure()
+    & $actualizarArchivo
+    $g.txtNombre.Add_TextChanged($actualizarArchivo)
+    $g.btnRenombrar.IsDefault = $true
+    $g.btnCancelar.IsCancel = $true
+    $g.btnRenombrar.Add_Click({ $respuesta.Accion = 'renombrar'; $respuesta.Nombre = "$($g.txtNombre.Text)".Trim(); $dlg.DialogResult = $true }.GetNewClosure())
+    $g.btnMantener.Add_Click({ $respuesta.Accion = 'mantener'; $respuesta.Nombre = $Actual; $dlg.DialogResult = $true }.GetNewClosure())
+    $g.btnCancelar.Add_Click({ $dlg.DialogResult = $false }.GetNewClosure())
+    $g.barra.Add_MouseLeftButtonDown({ try { $dlg.DragMove() } catch {} }.GetNewClosure())
+    $dlg.Add_ContentRendered({ $g.txtNombre.Focus(); $g.txtNombre.SelectAll() }.GetNewClosure())
+    if ($win -and $win.IsVisible) { $dlg.Owner = $win; $dlg.WindowStartupLocation = 'CenterOwner' } else { $dlg.WindowStartupLocation = 'CenterScreen' }
+    [void]$dlg.ShowDialog()
+    return $respuesta
+}
+
+# Paso previo al torrent de un ISO: lee el disco y su BDInfo, busca el título en TMDB, propone
+# el nombre y, si el usuario lo acepta, renombra el ISO (y su BDInfo). Devuelve $null si cancela.
+function Preparar-DiscoParaTorrent([string]$RutaIso) {
+    $hoja = Split-Path $RutaIso -Leaf
+    $baseActual = [System.IO.Path]::GetFileNameWithoutExtension($RutaIso)
+    Set-Estado "Analizando el disco $hoja…"
+    try { [System.Windows.Forms.Application]::DoEvents() } catch {}
+    $bd = Get-HdzBdinfoJunto $RutaIso
+    $datos = Get-DatosDiscoGui $RutaIso $(if ($bd) { $bd.Texto } else { '' })
+    if (-not $datos) { $datos = [pscustomobject](New-HdzDiscoDatos) }
+
+    $ta = Get-HdzDiscoTituloDesdeArchivo $hoja
+    $titulo = $ta.Titulo; $anio = $ta.Anio; $tmdb = $null
+    if (-not [string]::IsNullOrWhiteSpace($ui.cfgTmdbKey.Text)) {
+        $busquedas = @($ta.Titulo)
+        if ($datos.Etiqueta) { $busquedas += ("$($datos.Etiqueta)" -replace '[_.]', ' ' -replace '(?i)\b(UHD|BD|DISC ?\d?|4K)\b', '').Trim() }
+        foreach ($q in @($busquedas | Where-Object { $_ } | Select-Object -Unique)) {
+            try {
+                $res = @(Search-Tmdb $q $ta.Anio 'movie')
+                if ($res.Count -gt 0) { $tmdb = $res[0]; break }
+            } catch {}
+        }
+        if ($tmdb) {
+            $titulo = "$($tmdb.Titulo)"
+            if ([int]$tmdb.AnioR -gt 0) { $anio = "$($tmdb.AnioR)" }
+        }
+    }
+    $propuesto = Get-HdzDiscoNombre -Titulo $titulo -Anio $anio -Datos $datos
+    $fuente = switch ("$($datos.Fuente)") { 'bdinfo' { "el BDInfo ($(Split-Path $bd.Ruta -Leaf))" } 'ffprobe' { 'el propio disco' } default { 'el nombre del archivo' } }
+    $detalle = "Datos técnicos leídos de $fuente." +
+        $(if ($tmdb) { " Título y año de TMDB: $($tmdb.Titulo) ($($tmdb.Fecha))." } elseif ($ui.cfgTmdbKey.Text) { ' TMDB no encontró el título: corrígelo a mano.' } else { ' Sin clave de TMDB: revisa el título y el año.' }) +
+        $(if (-not $bd) { ' No hay BDInfo junto al ISO; podrás pegarlo en la ficha antes de subir.' } else { '' })
+    $r = Show-DialogoNombreDisco $propuesto $baseActual $detalle
+    if (-not $r -or $r.Accion -eq 'cancelar') { return $null }
+
+    $ruta = (Resolve-Path -LiteralPath $RutaIso).Path
+    $nombreTracker = if ($r.Accion -eq 'renombrar' -and "$($r.Nombre)".Trim()) { "$($r.Nombre)".Trim() } else { $baseActual }
+    if ($r.Accion -eq 'renombrar') {
+        $nuevaBase = ConvertTo-HdzNombreArchivo $nombreTracker
+        if ($nuevaBase -and $nuevaBase -cne $baseActual) {
+            $dir = Split-Path -Parent $ruta
+            $destino = Join-Path $dir "$nuevaBase.iso"
+            if ((Test-Path -LiteralPath $destino) -and ($nuevaBase -ne $baseActual)) { throw "Ya existe un archivo con ese nombre: $nuevaBase.iso" }
+            $imagen = Get-DiskImage -ImagePath $ruta -ErrorAction SilentlyContinue
+            if ($imagen -and $imagen.Attached) { throw 'El ISO está montado (abierto en el Explorador). Expúlsalo y vuelve a intentarlo.' }
+            [IO.File]::Move($ruta, $destino)
+            # El BDInfo con el nombre del ISO se renombra con él para que sigan emparejados.
+            if ($bd -and ([System.IO.Path]::GetFileNameWithoutExtension($bd.Ruta)) -like "$baseActual*") {
+                $restoBd = ([System.IO.Path]::GetFileName($bd.Ruta)).Substring($baseActual.Length)
+                $destinoBd = Join-Path (Split-Path -Parent $bd.Ruta) "$nuevaBase$restoBd"
+                if (-not (Test-Path -LiteralPath $destinoBd)) { try { [IO.File]::Move($bd.Ruta, $destinoBd); $bd.Ruta = $destinoBd } catch {} }
+            }
+            try { Log-Sec 'DISCO · renombrado'; Log-Linea "$hoja -> $nuevaBase.iso" } catch {}
+            $ruta = $destino
+        }
+    }
+    return [pscustomobject]@{ Ruta = $ruta; NombreTracker = $nombreTracker; Datos = $datos; Bdinfo = $bd; Tmdb = $tmdb }
 }
 
 # --- Estado de hosts (galería imgbox + miniatura/página por URL original) ---
@@ -5858,7 +6062,7 @@ function Construir-Capturas($rutas,$estados=$null) {
 # de PACK como «Friends (1994) S02 … H.265-HDZ» (sin extensión real) conserva el «.265-HDZ» en
 # lugar de quedarse en «… H». Era la causa de que el título llegara cortado al tracker.
 function Quitar-ExtConocida([string]$n) {
-    return ("$n" -replace '(?i)\.(torrent|mkv|mp4|m4v|avi|mov|ts|m2ts|wmv|mpg|mpeg)$', '')
+    return ("$n" -replace '(?i)\.(torrent|mkv|mp4|m4v|avi|mov|ts|m2ts|wmv|mpg|mpeg|iso)$', '')
 }
 
 # --- MEMORIA de torrents pendientes ------------------------------------------------------------
@@ -5958,6 +6162,16 @@ function Cargar-TorrentParaSubir($rutaTorrent, $videoHint = $null, $origenHint =
             $ui.lblTorrentInfo.Text = "Torrent cargado, pero no encontré el vídeo junto al .torrent. El MediaInfo y las specs habrá que ponerlos a mano."
             $ui.lblTorrentInfo.Visibility = "Visible"
         }
+    } elseif (-not $conservarPanel -and (Test-HdzEsDisco $video)) {
+        # Disco completo: en vez de MediaInfo va su informe de BDInfo (si está junto al ISO).
+        Set-Estado "Leyendo el disco $(Split-Path $video -Leaf)…"
+        $bdJunto = Get-HdzBdinfoJunto $video
+        $ui.upMediainfo.Text = if ($bdJunto) { $bdJunto.Texto } else { '' }
+        Aplicar-DatosDiscoSubida (Get-DatosDiscoGui $video $(if ($bdJunto) { $bdJunto.Texto } else { '' }))
+        if (-not $bdJunto) {
+            $ui.lblTorrentInfo.Text = "Es un disco completo y no encontré su BDInfo junto al ISO. Pega el informe de BDInfo en la ficha o pulsa «Cargar BDInfo…»."
+            $ui.lblTorrentInfo.Visibility = "Visible"
+        }
     } elseif (-not $conservarPanel) {
         # En $conservarPanel el MediaInfo y las specs ya se extrajeron al crear el torrent.
         Set-Estado "Extrayendo MediaInfo y specs de $(Split-Path $video -Leaf)…"
@@ -5968,6 +6182,7 @@ function Cargar-TorrentParaSubir($rutaTorrent, $videoHint = $null, $origenHint =
         $ui.upHDR10P.IsChecked = $specs.HDR10P
         $ui.upHDR10.IsChecked = $specs.HDR10
     }
+    Set-ModoDiscoSubida (Test-HdzEsDisco "$video")
 
     # Categoría/Tipo/temporada por el nombre. $esSerie/$esPackTorrent se calculan SIEMPRE (el pack los
     # necesita abajo); las combos solo se tocan si NO conservamos el panel (ya se pusieron al crear).
@@ -5976,7 +6191,10 @@ function Cargar-TorrentParaSubir($rutaTorrent, $videoHint = $null, $origenHint =
     if ($esSerie -and $nombre -match "(?i)\bS(\d{1,3})(?:E(\d{1,4}))?") { $esPackTorrent = -not $Matches[2] }
     if (-not $conservarPanel) {
         Set-ComboValor $ui.upCategoria $(if ($esSerie) { 2 } else { 1 })
-        if ($nombre -match "(?i)WEB-?DL")      { Set-ComboValor $ui.upTipo 6 }
+        if ($nombre -match "(?i)\bUHD ?Full\b|\bFull ?UHD\b") { Set-ComboValor $ui.upTipo 3 }
+        elseif ($nombre -match "(?i)\bBD ?Full\b|\bFull ?Blu-?Ray\b") { Set-ComboValor $ui.upTipo 1 }
+        elseif (Test-HdzEsDisco $nombre) { }   # disco completo: el tipo ya salió de sus datos técnicos
+        elseif ($nombre -match "(?i)WEB-?DL")      { Set-ComboValor $ui.upTipo 6 }
         elseif ($nombre -match "(?i)WEB-?Rip") { Set-ComboValor $ui.upTipo 6 }
         elseif ($nombre -match "(?i)Remux")    { Set-ComboValor $ui.upTipo $(if ($nombre -match "(?i)UHD|2160") {5} else {2}) }
         elseif ($nombre -match "(?i)BDRip|BRRip") { Set-ComboValor $ui.upTipo 7 }
@@ -6146,6 +6364,7 @@ function Restore-Subida($s) {
     if ($ui.btnAbrirTorrent) { $ui.btnAbrirTorrent.Visibility = if ($script:rutaTorrentTracker -and (Test-Path -LiteralPath $script:rutaTorrentTracker)) { "Visible" } else { "Collapsed" } }
     # volver a modo Escribir en la descripción al cambiar de pestaña
     if ($ui.tabEscribir) { $ui.tabEscribir.IsChecked=$true }
+    Set-ModoDiscoSubida (Test-SubidaEsDisco)
 }
 function Construir-TabBar {
     if (-not $ui.panTabsSubida) { return }
@@ -6366,6 +6585,15 @@ $script:torTimer = $null; $script:torSync = $null; $script:torPS = $null; $scrip
 $script:torPreparando = $false
 function Start-CrearTorrentAsync($tipo, $ruta) {
     if ($script:torPreparando -or ($script:torAsync -and -not $script:torAsync.IsCompleted)) { throw 'Ya se está creando un torrent. Espera a que termine.' }
+    # Disco completo (ISO): antes de hashear se revisa el nombre (y se renombra si se acepta),
+    # porque el nombre del archivo es el nombre interno del torrent.
+    $discoPrep = $null
+    if ($tipo -eq 'archivo' -and (Test-HdzEsDisco $ruta)) {
+        try { $discoPrep = Preparar-DiscoParaTorrent $ruta }
+        catch { Set-Estado "No se pudo preparar el disco: $($_.Exception.Message)" 'error'; return }
+        if (-not $discoPrep) { Set-Estado 'Creación del torrent cancelada.'; return }
+        $ruta = $discoPrep.Ruta
+    }
     $announce = "$($ui.txtAnnounce.Text)".Trim()
     $carpeta  = "$($ui.txtSalidaTorrent.Text)".Trim()
     # Si no hay carpeta de salida en la sesión, usamos la carpeta por defecto de .torrent (Ajustes).
@@ -6397,7 +6625,12 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
     Construir-Capturas @()
     Reset-Descripcion
     Construir-Logos @()
-    if ($primerVideo -and (Test-Path -LiteralPath $primerVideo)) {
+    Set-ModoDiscoSubida ([bool]$discoPrep)
+    if ($discoPrep) {
+        # Specs y BDInfo ya leídos al preparar el disco.
+        try { Aplicar-DatosDiscoSubida $discoPrep.Datos } catch {}
+        $ui.upMediainfo.Text = if ($discoPrep.Bdinfo) { "$($discoPrep.Bdinfo.Texto)" } else { '' }
+    } elseif ($primerVideo -and (Test-Path -LiteralPath $primerVideo)) {
         try {
             $specs0 = Get-SpecsVideo $primerVideo
             if ($specs0.Resolucion) { Set-ComboValor $ui.upResolucion $specs0.Resolucion }
@@ -6414,10 +6647,12 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
     try {
         $nombreFuente = if ($tipo -eq "pack") { Split-Path $ruta -Leaf } else { [System.IO.Path]::GetFileNameWithoutExtension($ruta) }
         $baseTit = Quitar-ExtConocida $nombreFuente
-        $ui.upTitulo.Text = $baseTit
+        # En un disco, el título del tracker es el que se aceptó (puede llevar «:»).
+        $ui.upTitulo.Text = if ($discoPrep) { "$($discoPrep.NombreTracker)" } else { $baseTit }
         $esSerieF = ($nombreFuente -match "(?i)\bS\d{1,3}(E\d{1,4})?\b")
         Set-ComboValor $ui.upCategoria $(if ($esSerieF) { 2 } else { 1 })
-        if ($nombreFuente -match "(?i)WEB-?DL|WEB-?Rip") { Set-ComboValor $ui.upTipo 6 }
+        if ($discoPrep) { }   # el tipo (Full UHD / Full BluRay) ya salió de los datos del disco
+        elseif ($nombreFuente -match "(?i)WEB-?DL|WEB-?Rip") { Set-ComboValor $ui.upTipo 6 }
         elseif ($nombreFuente -match "(?i)Remux")        { Set-ComboValor $ui.upTipo $(if ($nombreFuente -match "(?i)UHD|2160") {5} else {2}) }
         elseif ($nombreFuente -match "(?i)BDRip|BRRip")  { Set-ComboValor $ui.upTipo 7 }
         Actualizar-TipoCategoria
@@ -6425,7 +6660,9 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
             $ui.upTemporada.Text = [int]$Matches[1]
             $ui.upEpisodio.Text = if ($Matches[2]) { "$([int]$Matches[2])" } else { "0" }
         }
-        if (-not [string]::IsNullOrWhiteSpace($ui.cfgTmdbKey.Text)) {
+        if ($discoPrep -and $discoPrep.Tmdb) {
+            Aplicar-ResultadoTmdb $discoPrep.Tmdb
+        } elseif (-not [string]::IsNullOrWhiteSpace($ui.cfgTmdbKey.Text)) {
             $taF = Get-TituloAnioLimpio $baseTit
             $resF = Search-Tmdb $taF.Titulo $taF.Anio $script:tmdbTipo
             if ($resF -and @($resF).Count -gt 0) { Aplicar-ResultadoTmdb $resF[0] }
@@ -6433,7 +6670,7 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
     } catch {}
     $sync = [hashtable]::Synchronized(@{ Pct = 0; Resultado = $null; Error = $null; Fin = $false })
     $script:torSync = $sync
-    foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo)) { $b.IsEnabled = $false }
+    foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnCrearTorrentDisco, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo)) { $b.IsEnabled = $false }
     $ui.lblTorrentInfo.Visibility = "Collapsed"
     $ui.panTorrentProgreso.Visibility = "Visible"
     $ui.barTorrentProgreso.Value = 0; $ui.lblTorrentProgresoPct.Text = "0%"
@@ -6459,7 +6696,7 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
                 try { $script:torPS.Dispose() } catch {}
                 $script:torPS = $null; $script:torAsync = $null; $script:torPreparando = $false
                 $ui.panTorrentProgreso.Visibility = "Collapsed"
-                foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo)) { $b.IsEnabled = $true }
+                foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnCrearTorrentDisco, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo)) { $b.IsEnabled = $true }
                 $res = $s.Resultado; $err = $s.Error; $script:torSync = $null
                 Actualizar-PanelTareasAux
                 if ($err) {
@@ -6489,9 +6726,31 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
 }
 $ui.btnCrearTorrentArchivo.Add_Click({
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Filter = "Vídeos (*.mkv;*.mp4)|*.mkv;*.mp4|Todos|*.*"
+    $dlg.Filter = "Vídeos e imágenes de disco (*.mkv;*.mp4;*.iso)|*.mkv;*.mp4;*.iso|Todos|*.*"
     if ($ui.txtCarpeta.Text -and (Test-Path -LiteralPath $ui.txtCarpeta.Text)) { $dlg.InitialDirectory = $ui.txtCarpeta.Text }
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Start-CrearTorrentAsync "archivo" $dlg.FileName }
+})
+$ui.btnCrearTorrentDisco.Add_Click({
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Filter = "Imagen de disco (*.iso)|*.iso"
+    $dlg.Title = "Elige el ISO del disco (Blu-ray, UHD o DVD) ya ripeado"
+    if ($ui.txtCarpeta.Text -and (Test-Path -LiteralPath $ui.txtCarpeta.Text)) { $dlg.InitialDirectory = $ui.txtCarpeta.Text }
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Start-CrearTorrentAsync "archivo" $dlg.FileName }
+})
+$ui.btnBdinfoCargar.Add_Click({
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Filter = "Informe de BDInfo (*.txt)|*.txt|Todos|*.*"
+    $dlg.Title = "Elige el informe que guardó BDInfo"
+    if ($script:videoSubir -and (Test-Path -LiteralPath $script:videoSubir)) { $dlg.InitialDirectory = Split-Path $script:videoSubir -Parent }
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $texto = ''
+    try { $texto = ([IO.File]::ReadAllText($dlg.FileName)).TrimEnd() } catch { Set-Estado "No se pudo leer el informe: $($_.Exception.Message)" 'error'; return }
+    $datosBd = ConvertFrom-HdzBdinfo $texto
+    if (-not ($datosBd.Resolucion -or $datosBd.Codec)) { Set-Estado 'Ese archivo no parece un informe de BDInfo (no tiene la sección de vídeo).' 'error'; return }
+    $ui.upMediainfo.Text = $texto
+    Aplicar-DatosDiscoSubida $datosBd
+    $ui.lblTorrentInfo.Visibility = "Collapsed"
+    Set-Estado "✓  BDInfo cargado: $(Split-Path $dlg.FileName -Leaf)" 'ok'
 })
 $ui.btnCrearTorrentCarpeta.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -6904,7 +7163,11 @@ function Invoke-SubidaTracker {
         Set-SubidaEstado "Falta la URL del tracker o el token de API (pestaña Ajustes / claves)." "error"; return
     }
     if ([string]::IsNullOrWhiteSpace($ui.upTitulo.Text)) { Set-SubidaEstado "El título no puede estar vacío." "error"; return }
-    if ([string]::IsNullOrWhiteSpace($ui.upMediainfo.Text)) { Set-SubidaEstado "El MediaInfo está vacío." "error"; return }
+    # Disco completo (ISO): la ficha lleva BDInfo en lugar de MediaInfo.
+    $esDiscoSubida = (Test-SubidaEsDisco) -or (Test-HdzEsDisco "$(Get-NombreTorrent $rutaTorrent)")
+    if ([string]::IsNullOrWhiteSpace($ui.upMediainfo.Text)) {
+        Set-SubidaEstado $(if ($esDiscoSubida) { "El BDInfo está vacío: pégalo o pulsa «Cargar BDInfo…»." } else { "El MediaInfo está vacío." }) "error"; return
+    }
     # Última barrera: si se escribió un TMDB manual y todavía no se validó (por ejemplo, desde
     # el móvil justo antes de pulsar Subir), no permitimos enviar una categoría de la ficha antigua.
     $tmdbActual = "$($ui.upTmdb.Text)".Trim()
@@ -7019,6 +7282,9 @@ function Invoke-SubidaTracker {
             is_proper        = $(if ($ui.upProper.IsChecked) { "1" } else { "0" })
             torrent          = Get-Item -LiteralPath $torrentUpload
         }
+        $infoTecnica = Get-CamposInfoTecnica "$($ui.upMediainfo.Text)" $esDiscoSubida
+        $form.mediainfo = $infoTecnica.mediainfo
+        if ($infoTecnica.bdinfo) { $form.bdinfo = $infoTecnica.bdinfo }
         # SALVAGUARDA anti-cruce: el 'name' debe corresponder al .torrent que se sube. Si el título del
         # panel es de OTRA película (p.ej. por reutilizar/mezclar pestañas de subida), el tracker lo
         # rechazaría como duplicado o subiría con nombre equivocado. Comparamos con el nombre INTERNO
@@ -7030,8 +7296,10 @@ function Invoke-SubidaTracker {
                 $nameTorrent = Quitar-ExtConocida $nombreTorrentInterno
                 $bA = Get-TituloAnioLimpio "$($form.name)"
                 $bT = Get-TituloAnioLimpio $nameTorrent
-                $claveA = ("$($bA.Titulo) $($bA.Anio)").Trim().ToLower()
-                $claveT = ("$($bT.Titulo) $($bT.Anio)").Trim().ToLower()
+                # Solo letras y números: «Avatar: Fuego» (tracker) y «Avatar - Fuego» (archivo, Windows
+                # no admite «:») son la misma película.
+                $claveA = (("$($bA.Titulo) $($bA.Anio)") -replace '[^\p{L}\p{N}]+', ' ').Trim().ToLower()
+                $claveT = (("$($bT.Titulo) $($bT.Anio)") -replace '[^\p{L}\p{N}]+', ' ').Trim().ToLower()
                 if ($claveA -ne $claveT -and $nameTorrent.Trim()) {
                     Set-SubidaEstado "⚠  El título no coincidía con el torrent; se corrige a «$nameTorrent»." "warn"
                     try { Log-Linea "AVISO anti-cruce: name del panel='$($form.name)' NO corresponde al torrent; se usa el nombre real del torrent='$nameTorrent'." } catch {}
@@ -8194,6 +8462,7 @@ function Reset-Todo {
     $ui.upTmdb.Text = ""; $ui.upImdb.Text = ""; $ui.upTvdb.Text = ""; $ui.upMal.Text = ""
     $ui.upTemporada.Text = ""; $ui.upEpisodio.Text = ""
     $ui.upMediainfo.Text = ""; $ui.upNfo.Text = ""
+    Set-ModoDiscoSubida $false
     $script:tmdbTipo = "movie"; $script:ultimoTmdbAplicado = ""; $ui.panTV.Visibility = "Collapsed"
     if ($ui.upCategoria.Items.Count -gt 0) { $ui.upCategoria.SelectedIndex = 0 }
     if ($ui.upTipo.Items.Count -gt 0) { $ui.upTipo.SelectedIndex = 0 }
@@ -8229,7 +8498,7 @@ function Reset-Todo {
     $ui.lblTorrentProgreso.Text = ""; $ui.lblTorrentProgresoPct.Text = "0%"
     $ui.panSubProgreso.Visibility = "Collapsed"; $ui.barSubProgreso.Value = 0
     $ui.lblSubProgreso.Text = ""; $ui.lblSubProgresoPct.Text = "0%"
-    foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo, $ui.btnCapGenerar, $ui.btnCapInsertar, $ui.btnCapAnadir)) { if ($b) { $b.IsEnabled = $true } }
+    foreach ($b in @($ui.btnCrearTorrentArchivo, $ui.btnCrearTorrentCarpeta, $ui.btnCrearTorrentDisco, $ui.btnTorrentExaminar, $ui.btnTorrentUltimo, $ui.btnCapGenerar, $ui.btnCapInsertar, $ui.btnCapAnadir)) { if ($b) { $b.IsEnabled = $true } }
     Actualizar-PanelTareasAux
 
     # Si no hay montaje en curso, ocultar la barra de progreso

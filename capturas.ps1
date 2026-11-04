@@ -17,7 +17,7 @@ if (-not (Test-Path -LiteralPath $CarpetaVideos -PathType Container)) {
 }
 
 $videos = @(Get-ChildItem -LiteralPath $CarpetaVideos -File | Where-Object {
-    $_.Extension -match '(?i)^\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm|wmv|flv)$'
+    $_.Extension -match '(?i)^\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm|wmv|flv|iso)$'
 })
 if ($videos.Count -eq 0) {
     Write-Host 'No se encontraron vídeos en la ruta.' -ForegroundColor Yellow

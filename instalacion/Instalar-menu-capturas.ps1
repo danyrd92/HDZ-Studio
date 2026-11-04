@@ -35,7 +35,10 @@ $registrationManifest = Join-Path $appRoot 'AppxManifest.xml'
 $contextInstallKey = 'HKLM:\SOFTWARE\HDZEROStudio\ContextMenu'
 $contextInstallKeyUser = 'HKCU:\Software\HDZEROStudio\ContextMenu'
 $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
-$extensions = @('.mkv', '.mp4', '.avi', '.mov', '.m4v', '.ts', '.m2ts', '.webm', '.wmv', '.flv')
+# .iso: disco completo (Blu-ray, UHD o DVD); se capturan las imágenes de su película principal.
+# Solo en el menú clásico («Mostrar más opciones»): el paquete moderno de Windows 11 lleva su
+# lista de tipos firmada dentro del .msix.
+$extensions = @('.mkv', '.mp4', '.avi', '.mov', '.m4v', '.ts', '.m2ts', '.webm', '.wmv', '.flv', '.iso')
 $verbName = 'HDZStudioCapturas'
 $label = 'Hacer capturas de pantalla'
 
@@ -83,7 +86,7 @@ foreach ($key in @($contextInstallKey, $contextInstallKeyUser)) {
 }
 
 Write-Host "Instalado: $label" -ForegroundColor Green
-Write-Host 'Afecta a: MKV, MP4, AVI, MOV, M4V, TS, M2TS, WEBM, WMV y FLV.' -ForegroundColor Gray
+Write-Host 'Afecta a: MKV, MP4, AVI, MOV, M4V, TS, M2TS, WEBM, WMV, FLV e ISO (discos completos).' -ForegroundColor Gray
 
 # Windows 11 solo muestra en el primer menú los comandos registrados como una
 # extensión moderna IExplorerCommand dentro de un paquete (sparse MSIX). El

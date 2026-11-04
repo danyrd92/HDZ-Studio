@@ -88,6 +88,21 @@ MediaInfo y recoge las capturas que haya al lado. Busca el título en TMDB para 
 IDs y el logo, elige qué capturas subir, añade tu firma y revisa la vista previa de la
 descripción. Con **+ Nueva** puedes preparar varias subidas en pestañas y publicarlas una a una.
 
+**Discos completos (ISO).** Para subir un Blu-ray, UHD o DVD entero, ripéalo antes a `.iso`
+con tu programa habitual: HDZ Studio no ripea discos. Después pulsa **💿 De un disco (ISO)…**:
+
+1. El programa lee el disco y el informe de BDInfo, si lo has guardado como `.txt` junto al
+   ISO. Con eso, y con el título y el año de TMDB, propone un nombre como
+   `Avatar: Fuego y ceniza (2025) UHDFull 2160p DV HDR10 HEVC DTS 5.1`.
+2. Revisas el nombre y, si lo aceptas, renombra el ISO y su BDInfo. Windows no admite «:» en
+   un archivo, así que el archivo queda como `Avatar - Fuego y ceniza (…).iso`, mientras que
+   el título en el tracker conserva los dos puntos.
+3. Crea el torrent y rellena la ficha. El tipo es Full UHD o Full BluRay, las specs DV y HDR
+   se marcan solas, y la tarjeta *MediaInfo* pasa a ser *BDInfo*: si no se cargó sola, pega
+   el informe o usa **Cargar BDInfo…**.
+4. **Generar capturas** las saca de la película principal del disco. Si puede, lee el ISO
+   directamente; si no, lo monta un momento y lo vuelve a desmontar.
+
 ### Ajustes
 
 <img src="docs/capturas/ajustes.png" alt="Ajustes: credenciales, TMDB, servidores de imágenes y carpetas" width="900">
@@ -103,7 +118,8 @@ Se configura una vez: el token y la URL de anuncio de tu cuenta del tracker, la 
 
 **Capturas desde el Explorador.** Si lo activas al instalar, aparece la opción de hacer
 capturas al pulsar con el botón derecho sobre un vídeo, sin abrir el programa. Desde ahí
-mismo puedes subirlas y copiar el BBCode.
+mismo puedes subirlas y copiar el BBCode. También funciona con un `.iso`, desde
+«Mostrar más opciones» en Windows 11.
 
 **Control desde el móvil.** En **Ajustes › Control remoto** puedes dejar que otro
 dispositivo de tu red controle HDZ Studio:

@@ -11,7 +11,13 @@
 #   - aplica tonemapping a HDR y conserva los colores directos en SDR;
 #   - escribe PNG sin pérdida a la resolución original y comprueba que no esté vacío;
 #   - reintenta el reparto si la duración declarada está inflada.
+#
+# Un .iso (disco completo) se abre con HDZ-Disco.ps1 y se captura su película
+# principal con el mismo algoritmo.
 # =========================================================================
+
+$rutaModuloDisco = Join-Path $PSScriptRoot 'HDZ-Disco.ps1'
+if (Test-Path -LiteralPath $rutaModuloDisco -PathType Leaf) { . $rutaModuloDisco }
 
 function Get-HdzVideoTrackFromMediaInfo {
     [CmdletBinding()]
@@ -31,6 +37,17 @@ function Get-HdzVideoTrackFromMediaInfo {
 function Test-HdzVideoHdr {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$RutaVideo)
+
+    # Disco completo: MediaInfo no sirve con un ISO; se lee su película principal con ffprobe.
+    if ((Get-Command Test-HdzEsDisco -ErrorAction SilentlyContinue) -and (Test-HdzEsDisco $RutaVideo)) {
+        $disco = $null
+        try {
+            $disco = Open-HdzDisco $RutaVideo
+            $datos = Get-HdzDiscoDatos $disco
+            return [bool]($datos.HDR10 -or $datos.HDR10P -or $datos.HLG -or $datos.DV)
+        } catch { return $false }
+        finally { Close-HdzDisco $disco }
+    }
 
     # Es la misma detección que Get-DatosTecnicosMkv en HDZnew.ps1: primero se
     # consulta HDR_Format y, si falta, se usa BT.2020 + PQ + al menos 10 bits.
@@ -109,6 +126,21 @@ function New-HdzCapturas {
     }
     if ($NumCapturas -le 0) { return [pscustomobject]$resultado }
 
+    # Entrada de FFmpeg: el propio archivo o, en un ISO, la película principal del disco
+    # (leída directamente o con el ISO montado; se desmonta al terminar, pase lo que pase).
+    $disco = $null
+    $entrada = $ArchivoVideo
+    $argsEntrada = @()
+    $filtroPrevio = ''
+    if ((Get-Command Test-HdzEsDisco -ErrorAction SilentlyContinue) -and (Test-HdzEsDisco $ArchivoVideo)) {
+        $disco = Open-HdzDisco $ArchivoVideo
+        $entrada = "$($disco.Entrada)"
+        $argsEntrada = @($disco.ArgsEntrada)
+        $filtroPrevio = "$($disco.Filtro)"
+        if ($OnDiagnostic) { [void](& $OnDiagnostic "Capturas: disco $($disco.Tipo) ($($disco.Metodo)) -> $entrada") }
+    }
+    try {
+
     $tipoCaptura = if ($EsHdr) { 'tonemapped (HDR)' } else { 'directas (SDR)' }
     Write-Host "`n[>>] Generando $NumCapturas capturas $tipoCaptura..." -ForegroundColor Cyan
     if ($OnDiagnostic) { [void](& $OnDiagnostic "Capturas: INICIO ($NumCapturas, $tipoCaptura)") }
@@ -126,7 +158,7 @@ function New-HdzCapturas {
     }.GetNewClosure()
 
     # "$(...)" protege contra ffprobe devolviendo $null o varias líneas.
-    $rawDur = "$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$ArchivoVideo" 2>$null)".Trim()
+    $rawDur = "$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 @argsEntrada "$entrada" 2>$null)".Trim()
     $dur = 0.0
     $durValida = (-not [string]::IsNullOrWhiteSpace($rawDur)) -and
                  [double]::TryParse($rawDur.Replace(',', '.'), [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$dur) -and
@@ -165,12 +197,13 @@ function New-HdzCapturas {
         $ffmpegExe = if ($ffmpegCmd.CommandType -eq 'Application') { $ffmpegCmd.Source } else { $null }
         $maxParalelo = if ($ffmpegExe) { [Math]::Max(1, [Math]::Min(4, [int][Math]::Floor([Environment]::ProcessorCount / 2))) } else { 1 }
         $filtro = if ($EsHdr) { 'zscale=t=linear:npl=250,tonemap=tonemap=reinhard:desat=2,zscale=p=709:t=709:m=709,format=rgb24' } else { 'format=rgb24' }
+        if ($filtroPrevio) { $filtro = "$filtroPrevio,$filtro" }
 
         $iniciarCaptura = {
             param($t)
             $rc = Join-Path $dirCap (".hdz_cap_" + [guid]::NewGuid().ToString('N') + '.png')
             # -nostdin: con varios FFmpeg a la vez ninguno debe leer la consola.
-            $argumentos = @('-nostdin','-noaccurate_seek','-ss',"$t",'-i',"$ArchivoVideo",'-frames:v','1','-vf',$filtro,'-compression_level','6',"$rc",'-y','-loglevel','fatal')
+            $argumentos = @('-nostdin','-noaccurate_seek','-ss',"$t") + @($argsEntrada) + @('-i',"$entrada",'-frames:v','1','-vf',$filtro,'-compression_level','6',"$rc",'-y','-loglevel','fatal')
             if (-not $ffmpegExe) {
                 & ffmpeg @argumentos 2>$null | Out-Null
                 return [pscustomobject]@{ T = $t; Rc = $rc; Proc = $null; Exit = $LASTEXITCODE }
@@ -293,4 +326,7 @@ function New-HdzCapturas {
     & $setProgress 100 "Capturas terminadas ($($resultado.Capturas.Count)/$NumCapturas)"
     if ($OnDiagnostic) { [void](& $OnDiagnostic "Capturas: FIN ($($resultado.Capturas.Count)/$NumCapturas)") }
     return [pscustomobject]$resultado
+    } finally {
+        Close-HdzDisco $disco
+    }
 }
