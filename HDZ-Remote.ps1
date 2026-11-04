@@ -115,6 +115,12 @@ $script:remoteServerWorker = {
                 if ($method -eq 'GET' -and $path -in @('/', '/index.html')) {
                     Send-Response $stream 200 'text/html; charset=utf-8' ([IO.File]::ReadAllBytes($sync.WebPath)); continue
                 }
+                # La cabecera de la web pide logo.png; es público (también se ve antes de emparejar).
+                if ($method -eq 'GET' -and $path -eq '/logo.png') {
+                    if ($sync.LogoPath -and [IO.File]::Exists($sync.LogoPath)) { Send-Response $stream 200 'image/png' ([IO.File]::ReadAllBytes($sync.LogoPath)) }
+                    else { Send-Response $stream 404 '' ([byte[]]@()) }
+                    continue
+                }
                 if ($path -eq '/favicon.ico') { Send-Response $stream 204 '' ([byte[]]@()); continue }
                 if ($method -eq 'POST' -and $path -eq '/api/pair') {
                     if (-not (Test-Rate $ip)) { Send-Json $stream 429 @{ok=$false;error='Demasiados intentos. Espera un minuto.'}; continue }
@@ -226,6 +232,7 @@ function Start-HdzRemoteServer {
         Port = $script:remoto.Port; Tokens = @($script:remoto.Tokens); TokensChanged = $false
         PairCode = (New-HdzPairingCode); PairFailures = 0
         WebPath = (Join-Path $PSScriptRoot 'web\index.html')
+        LogoPath = (@((Join-Path $PSScriptRoot 'HDZero New logo.png'), (Join-Path $PSScriptRoot 'hdz_logo_r.png')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)
     })
     $runspace = [powershell]::Create()
     [void]$runspace.AddScript($script:remoteServerWorker.ToString()).AddArgument($script:agSync)

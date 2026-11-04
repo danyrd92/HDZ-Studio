@@ -20,6 +20,8 @@ try {
     Assert $script:agSync.Listening "El servidor no escucha: $($script:agSync.Error)"
     $page = Call '/'
     Assert ($page.StatusCode -eq 200 -and "$($page.Content)".Contains('Emparejar con HDZ Studio')) 'No sirve la web con el emparejamiento'
+    $logo = Call '/logo.png'
+    Assert ($logo.StatusCode -eq 200 -and "$($logo.Headers['Content-Type'])" -eq 'image/png' -and $logo.RawContentLength -gt 1000) 'No sirve el logo de la cabecera'
     Assert ((Call '/api/state').StatusCode -eq 401) 'El estado es accesible sin emparejar'
     Assert ((Call '/api/state' -Token ('0' * 64)).StatusCode -eq 401) 'Aceptó un token desconocido'
     Assert ((Call '/api/pair' 'POST' @{code='WRONG123'}).StatusCode -eq 401) 'Aceptó un código incorrecto'
@@ -52,7 +54,7 @@ try {
     Assert ((Call "/api/torrent?id=$($published.id)").StatusCode -eq 401) 'El torrent se descarga sin emparejar'
     foreach ($attempt in 1..6) { $last = Call '/api/pair' 'POST' @{code='WRONG123'} }
     Assert ($last.StatusCode -eq 429) 'No limita los intentos de emparejamiento'
-    Write-Host 'REMOTE_SERVER_OK: emparejamiento, token, sesión, órdenes idempotentes, confirmaciones, torrents y límite de intentos.'
+    Write-Host 'REMOTE_SERVER_OK: logo, emparejamiento, token, sesión, órdenes idempotentes, confirmaciones, torrents y límite de intentos.'
 } finally {
     Stop-HdzRemoteServer
     Remove-Item -LiteralPath $torrent -Force -ErrorAction SilentlyContinue
