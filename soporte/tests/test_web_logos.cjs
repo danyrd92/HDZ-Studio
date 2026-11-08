@@ -6,7 +6,7 @@ const render=html.slice(html.indexOf('function renderLogos('),html.indexOf('/* =
 const commands=html.slice(html.indexOf('function cmd(c)'),html.indexOf('async function getState()'));
 const elements={cardLogos:{style:{}},logosBox:{innerHTML:''},logoPersonalizado:{value:'',disabled:false,title:''},btnUsarLogoPersonalizado:{disabled:false,title:''},btnActualizarLogos:{disabled:false,title:''},estadoTxt:{textContent:''}};
 const sent=[];
-const context={document:{getElementById:id=>elements[id]},esc:s=>String(s),crypto:{randomUUID:()=> 'logos-test'},
+const context={document:{getElementById:id=>elements[id]},esc:s=>String(s),crypto:{getRandomValues:a=>a.fill(171)}/* sin randomUUID: en http://IP-del-PC no existe */,
  remoteData:{session:'test-session',tabSubidaActual:2,busy:false,customLogo:true},remoteResponsive:true,
  commandPending:0,commandChain:Promise.resolve(),API:'https://test.invalid/api',AbortSignal,
  lock:{},subLock:0,getState:async()=>({}),render:()=>{},toast:msg=>{throw Error(msg)},
@@ -24,6 +24,7 @@ vm.createContext(context);vm.runInContext('let lastLogos="";'+render+commands,co
  await context.cmd({type:'click',name:'btnActualizarLogos'});
  await context.cmd({type:'set_custom_logo',url:'https://image.tmdb.org/t/p/original/logo.png'});
  assert.equal(sent.length,2);assert.equal(sent[0].name,'btnActualizarLogos');
+ assert.match(sent[0].requestId,/^[A-Za-z0-9_-]{16,80}$/);
  assert.equal(sent[0].session,'test-session');assert.equal(sent[0].subidaTab,2);
  assert.equal(sent[1].type,'set_custom_logo');assert.equal(sent[1].subidaTab,2);
  assert.equal(context.commandPending,0);

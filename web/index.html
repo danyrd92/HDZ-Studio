@@ -741,7 +741,9 @@ function openTrackerPage(event){
   return true;
 }
 function cmd(c){
-  const payload={...c,requestId:crypto.randomUUID().replaceAll('-',''),session:remoteData.session};
+  // La web se sirve por http://IP-del-PC: crypto.randomUUID solo existe en HTTPS o localhost.
+  const requestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+  const payload={...c,requestId,session:remoteData.session};
   const isUpload=['subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
   if(isUpload)payload.subidaTab=remoteData.tabSubidaActual;
   else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_lang','set_sub_tipo','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
