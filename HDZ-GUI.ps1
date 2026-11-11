@@ -5081,7 +5081,7 @@ function Preparar-DiscoParaTorrent([string]$RutaIso) {
     if (-not $datos) { $datos = [pscustomobject](New-HdzDiscoDatos) }
 
     $ta = Get-HdzDiscoTituloDesdeArchivo $hoja
-    $titulo = $ta.Titulo; $anio = $ta.Anio; $tmdb = $null
+    $titulo = $ta.Titulo; $anio = $ta.Anio; $tmdb = $null; $tmdbErr = $null
     if (-not [string]::IsNullOrWhiteSpace($ui.cfgTmdbKey.Text)) {
         $busquedas = @($ta.Titulo)
         if ($datos.Etiqueta) { $busquedas += ("$($datos.Etiqueta)" -replace '[_.]', ' ' -replace '(?i)\b(UHD|BD|DISC ?\d?|4K)\b', '').Trim() }
@@ -5089,7 +5089,7 @@ function Preparar-DiscoParaTorrent([string]$RutaIso) {
             try {
                 $res = @(Search-Tmdb $q $ta.Anio 'movie')
                 if ($res.Count -gt 0) { $tmdb = $res[0]; break }
-            } catch {}
+            } catch { if (Test-TmdbErrorCredencial $_) { $tmdbErr = $_.Exception.Message; break } }
         }
         if ($tmdb) {
             $titulo = "$($tmdb.Titulo)"
@@ -5099,7 +5099,7 @@ function Preparar-DiscoParaTorrent([string]$RutaIso) {
     $propuesto = Get-HdzDiscoNombre -Titulo $titulo -Anio $anio -Datos $datos
     $fuente = switch ("$($datos.Fuente)") { 'bdinfo' { "el BDInfo ($(Split-Path $bd.Ruta -Leaf))" } 'ffprobe' { 'el propio disco' } default { 'el nombre del archivo' } }
     $detalle = "Datos técnicos leídos de $fuente." +
-        $(if ($tmdb) { " Título y año de TMDB: $($tmdb.Titulo) ($($tmdb.Fecha))." } elseif ($ui.cfgTmdbKey.Text) { ' TMDB no encontró el título: corrígelo a mano.' } else { ' Sin clave de TMDB: revisa el título y el año.' }) +
+        $(if ($tmdb) { " Título y año de TMDB: $($tmdb.Titulo) ($($tmdb.Fecha))." } elseif ($tmdbErr) { " $tmdbErr." } elseif ($ui.cfgTmdbKey.Text) { ' TMDB no encontró el título: corrígelo a mano.' } else { ' Sin clave de TMDB: revisa el título y el año.' }) +
         $(if (-not $bd) { ' No hay BDInfo junto al ISO; podrás pegarlo en la ficha antes de subir.' } else { '' })
     $r = Show-DialogoNombreDisco $propuesto $baseActual $detalle
     if (-not $r -or $r.Accion -eq 'cancelar') { return $null }
@@ -5393,7 +5393,9 @@ function Start-CapturasAsync {
             $ui.barSubProgreso.Value = if ($tot -gt 0) { [int](100 * $done / $tot) } else { 0 }
             $ui.lblSubProgresoPct.Text = "$done/$tot"
             Actualizar-PanelTareasAux
-            if ($s.Fin) {
+            # Con otra operación en curso (p. ej. cargando miniaturas) esperamos al siguiente tick:
+            # rehacer la rejilla ahora se mezclaría con la que se está construyendo.
+            if ($s.Fin -and -not $script:networkBusy) {
                 $script:capTimer.Stop()
                 try { $script:capPS.EndInvoke($script:capAsync) } catch {}
                 try { $script:capPS.Dispose() } catch {}
@@ -5419,6 +5421,7 @@ function Start-CapturasAsync {
                     Set-Estado "✓  $($nuevas.Count) captura(s) creada(s) para «$($snap.Titulo)» (en su pestaña)." "ok"
                     return
                 }
+                Olvidar-PrevisualizacionesCaptura $nuevas
                 # Une las que ya había con las nuevas (sin duplicar) y refresca la rejilla.
                 $previas = @($script:capRows | ForEach-Object { $_.Ruta })
                 $todas = @($previas + $nuevas | Select-Object -Unique)
@@ -5441,8 +5444,16 @@ function Start-CapturasAsync {
 #     - "Clave de la API" (v3, 32 hex)         -> va como ?api_key=
 #     - "Token de acceso de lectura" (v4, JWT) -> va como header Authorization: Bearer
 #     Se detecta por el formato ("eyJ..." = JWT). Así funciona pegue el usuario la que pegue. ---
+# Limpia lo que el usuario pega: "Bearer ", "api_key=", comillas, espacios/saltos de línea
+# intermedios y caracteres invisibles (NBSP, zero-width) que vienen al copiar de la web.
+function Get-TmdbCredencial {
+    $cred = "$($ui.cfgTmdbKey.Text)" -replace '[\s ​-‍⁠﻿]', ''
+    $cred = $cred -replace '^(?i)(authorization:)?bearer', '' -replace '^(?i)(\?|&)?api_key=', ''
+    return $cred.Trim('"', "'", '«', '»', '“', '”')
+}
+
 function Invoke-Tmdb($ruta, $params = @{}, [switch]$Fresh) {
-    $cred = "$($ui.cfgTmdbKey.Text)".Trim()
+    $cred = Get-TmdbCredencial
     if ([string]::IsNullOrWhiteSpace($cred)) { throw "falta la clave/token de TMDB (pestaña Ajustes)" }
     $esJwt = ($cred -match '^eyJ' -or $cred.Length -gt 60)
     $qs = @()
@@ -5452,8 +5463,21 @@ function Invoke-Tmdb($ruta, $params = @{}, [switch]$Fresh) {
     $headers = @{ Accept = "application/json" }
     if ($Fresh) { $headers['Cache-Control']='no-cache'; $headers['Pragma']='no-cache' }
     if ($esJwt) { $headers["Authorization"] = "Bearer $cred" }
-    return Invoke-HdzRestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 60
+    try { return Invoke-HdzRestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 60 }
+    catch {
+        # 401 = credencial rechazada. Se distingue de "no hay resultados" para que el usuario
+        # no crea que TMDB no tiene la película cuando el problema es la clave.
+        $txt = "$($_.ErrorDetails.Message) $($_.Exception.Message)"
+        $code = 0; try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+        if ($code -eq 401 -or $txt -match '"status_code"\s*:\s*(7|3)\b|Invalid API key|\b401\b') {
+            $tipoCred = if ($esJwt) { 'token de acceso de lectura (largo)' } else { 'clave de la API (corta)' }
+            throw "TMDB rechazó la credencial ($tipoCred). Cópiala de nuevo desde themoviedb.org → Ajustes → API, completa y sin espacios"
+        }
+        throw
+    }
 }
+
+function Test-TmdbErrorCredencial($err) { return ("$($err.Exception.Message)" -like 'TMDB rechazó la credencial*') }
 
 # --- Búsqueda TMDB (movie|tv) tolerante con el año, como UNIT3D ---
 # El año NUNCA excluye resultados: se busca sin año (base amplia) y, si se indicó,
@@ -5484,10 +5508,10 @@ function Search-Tmdb($titulo, $anio, $tipo) {
     }
     # 1) con año (los resultados más precisos, si el año es correcto)
     if ($anio) {
-        try { & $agregar (Invoke-Tmdb "search/$tipo" @{ language="es-ES"; query=$titulo; $campoAnio=$anio }).results $true } catch {}
+        try { & $agregar (Invoke-Tmdb "search/$tipo" @{ language="es-ES"; query=$titulo; $campoAnio=$anio }).results $true } catch { if (Test-TmdbErrorCredencial $_) { throw } }
     }
     # 2) sin año SIEMPRE: aunque el año del nombre esté mal, el título sigue encontrando
-    try { & $agregar (Invoke-Tmdb "search/$tipo" @{ language="es-ES"; query=$titulo }).results $false } catch {}
+    try { & $agregar (Invoke-Tmdb "search/$tipo" @{ language="es-ES"; query=$titulo }).results $false } catch { if (Test-TmdbErrorCredencial $_) { throw } }
 
     # Orden: coincidencia exacta de año > cercanía al año pedido > popularidad
     $aPedido = if ($anio) { [int]$anio } else { 0 }
@@ -5888,7 +5912,7 @@ function Get-ResultadoTmdbPorId($id, $tipoPreferido) {
                 Lang     = "$($x.original_language)"
                 TipoTmdb = $tipo
             }
-        } catch { $ultimoError = $_.Exception }
+        } catch { if (Test-TmdbErrorCredencial $_) { throw }; $ultimoError = $_.Exception }
     }
     if ($ultimoError) { throw "TMDB no encontró el ID $idTxt como película ni como serie" }
     throw "TMDB no encontró el ID $idTxt"
@@ -5966,8 +5990,25 @@ function Invoke-AplicarTmdbManual($id = $null, [bool]$forzar = $false) {
 # manda lo que va en la descripción); la miniatura se resalta si está marcada y se atenúa si no. Para
 # VERLA EN GRANDE, botón 🔍 en la esquina (y también la casilla de texto de debajo). Así el clic normal
 # es la acción frecuente (marcar) y ver a tamaño completo es un gesto aparte, visible e intuitivo.
-$script:capPreviewCache=@{}
+$script:capPreviewCache=[ordered]@{}
 $script:capPreviewSync=$null
+$script:capPreviewMax=60   # ~1,3 MB por miniatura decodificada: ~80 MB como mucho
+# Añade miniaturas a la caché compartida y recorta las más antiguas (nunca las de $enUso).
+function Agregar-CachePrevisualizaciones($nuevas, $enUso = @()) {
+    if ($script:capPreviewCache -isnot [System.Collections.Specialized.OrderedDictionary]) {
+        $o=[ordered]@{}; foreach($k in @($script:capPreviewCache.Keys)){$o[$k]=$script:capPreviewCache[$k]}; $script:capPreviewCache=$o
+    }
+    if ($nuevas) { foreach ($k in @($nuevas.Keys)) { if ($script:capPreviewCache.Contains($k)) { $script:capPreviewCache.Remove($k) }; $script:capPreviewCache[$k]=$nuevas[$k] } }
+    $uso=@{}; foreach($r in @($enUso)){ $uso["$r"]=$true }
+    foreach ($k in @($script:capPreviewCache.Keys)) {
+        if ($script:capPreviewCache.Count -le $script:capPreviewMax) { break }
+        if (-not $uso.ContainsKey("$k")) { $script:capPreviewCache.Remove($k) }
+    }
+}
+# Capturas regeneradas con el MISMO nombre (los segundos de la captura no cambian): olvidar su miniatura.
+function Olvidar-PrevisualizacionesCaptura($rutas) {
+    foreach ($r in @($rutas)) { if ($r -and $script:capPreviewCache.Contains("$r")) { $script:capPreviewCache.Remove("$r") } }
+}
 function Construir-Capturas($rutas,$estados=$null) {
     # Reconstruir miniaturas no debe perder URLs ni la selección ya realizada.
     if($null -eq $estados){$estados=@($script:capRows | ForEach-Object {@{Ruta=$_.Ruta;Marcada=[bool]$_.Check.IsChecked;Subida=$_.Subida}})}
@@ -5976,20 +6017,25 @@ function Construir-Capturas($rutas,$estados=$null) {
     $ui.panCapturas.Children.Clear()
     $script:capRows = @()
     $rutas=@($rutas | Where-Object {$_})
-    if($rutas.Count){
-        $script:capPreviewSync=[hashtable]::Synchronized(@{Done=0;Total=$rutas.Count})
+    # La caché de miniaturas es COMPARTIDA entre pestañas (antes se sustituía por las de la rejilla
+    # actual y cada cambio de pestaña volvía a leer y decodificar los PNG desde la unidad de red:
+    # 2-4 s). Solo se cargan en segundo plano las que faltan; si están todas, el cambio es inmediato.
+    $faltan=@($rutas | Where-Object { -not $script:capPreviewCache.Contains("$_") -or $script:capPreviewCache["$_"].Error } | Select-Object -Unique)
+    if($faltan.Count){
+        $script:capPreviewSync=[hashtable]::Synchronized(@{Done=0;Total=$faltan.Count})
         $previewTimer=[Windows.Threading.DispatcherTimer]::new()
         $previewTimer.Interval=[TimeSpan]::FromMilliseconds(250)
         $previewTimer.Add_Tick({Actualizar-PanelTareasAux})
         try {
             $previewTimer.Start()
-            $script:capPreviewCache=Invoke-HdzBackground {
+            $nuevasPrev=Invoke-HdzBackground {
                 param($a)
                 . $a.Module
-                Get-HdzCapturePreviews -Paths $a.Paths -Cache $a.Cache -Sync $a.Sync
-            } @{Module=(Join-Path $PSScriptRoot 'HDZ-Async.ps1');Paths=$rutas;Cache=$script:capPreviewCache;Sync=$script:capPreviewSync}
+                Get-HdzCapturePreviews -Paths $a.Paths -Sync $a.Sync
+            } @{Module=(Join-Path $PSScriptRoot 'HDZ-Async.ps1');Paths=$faltan;Sync=$script:capPreviewSync}
+            Agregar-CachePrevisualizaciones $nuevasPrev $rutas
         } finally {$previewTimer.Stop();$script:capPreviewSync=$null;Actualizar-PanelTareasAux}
-    } else {$script:capPreviewCache=@{}}
+    }
     foreach ($rc in $rutas) {
         $cont = New-Object System.Windows.Controls.StackPanel
         $cont.Width = 380
@@ -6424,9 +6470,18 @@ function Update-FlechasTabs {
     $ui.btnTabIzq.Visibility = $vis
     $ui.btnTabDer.Visibility = $vis
 }
+# Mientras una operación en segundo plano (miniaturas, TMDB, subida…) espera, la ventana sigue
+# procesando clics (Invoke-HdzBackground hace PushFrame). Cambiar de pestaña EN ESE MOMENTO dejaba el
+# panel a medias: la rejilla de una pestaña acababa en otra (cruce de capturas E05/E06). Por eso las
+# operaciones de pestañas esperan a que termine.
+function Test-PestanasOcupadas {
+    if ($script:networkBusy) { Set-Estado "Espera un momento: hay una operación en curso. Cambia de pestaña cuando termine." "error"; return $true }
+    return $false
+}
 function Cambiar-Tab($idx) {
-    $script:tmdbSearchResults = @()
     if ($idx -eq $script:tabActual -or $idx -lt 0 -or $idx -ge @($script:tabs).Count) { return }
+    if (Test-PestanasOcupadas) { return }
+    $script:tmdbSearchResults = @()
     Log-DiagSubida "CAMBIAR-TAB de [$($script:tabActual)] a [$idx] | antes: $(Ctx-SubidaActiva)"
     if ($script:tabActual -ge 0 -and $script:tabActual -lt @($script:tabs).Count) { $script:tabs[$script:tabActual] = Snapshot-Subida }
     $script:tabActual = $idx
@@ -6435,6 +6490,7 @@ function Cambiar-Tab($idx) {
     Log-DiagSubida "CAMBIAR-TAB hecho | ahora: $(Ctx-SubidaActiva)"
 }
 function Nueva-Tab {
+    if (Test-PestanasOcupadas) { return }
     if ($script:tabActual -ge 0 -and $script:tabActual -lt @($script:tabs).Count) { $script:tabs[$script:tabActual] = Snapshot-Subida }
     $script:tabs += (Nuevo-EstadoSubida)
     $script:tabActual = @($script:tabs).Count - 1
@@ -6444,6 +6500,7 @@ function Nueva-Tab {
     Set-Estado "Nueva subida añadida. Carga o crea su torrent."
 }
 function Cerrar-Tab($idx) {
+    if (Test-PestanasOcupadas) { return }
     if (@($script:tabs).Count -le 1) { Set-Estado "Debe quedar al menos una subida."; return }
     if ($idx -ne $script:tabActual -and $script:tabActual -ge 0) { $script:tabs[$script:tabActual] = Snapshot-Subida }
     $nueva=@(); for ($i=0;$i -lt @($script:tabs).Count;$i++){ if ($i -ne $idx){ $nueva += $script:tabs[$i] } }
@@ -6468,6 +6525,7 @@ function Init-Tabs {
 #          que mirabas «se transformaba» en la recién añadida).
 function Anadir-SubidaAuto($torrent, $video, $origen = "", $capturas = @(), $traerAlFrente = $true) {
     $torNorm = "$torrent".Trim()
+    if (Test-PestanasOcupadas) { return }
     $volverA = $script:tabActual   # pestaña del usuario, para no robarle la vista en el auto-añadido
     Log-DiagSubida "ANADIR-SUBIDA torrent='$(Split-Path $torrent -Leaf)' traerAlFrente=$traerAlFrente | $(Ctx-SubidaActiva)"
     # Guardamos el estado de la pestaña activa para que la búsqueda vea su torrent actual.
@@ -6583,6 +6641,31 @@ $script:torTimer = $null; $script:torSync = $null; $script:torPS = $null; $scrip
 # Incluye el tramo previo al hasheo (MediaInfo/TMDB). Sin esta bandera parecía que no ocurría nada
 # mientras se preparaba el torrent, sobre todo si se lanzaba desde el móvil.
 $script:torPreparando = $false
+$script:torTabInicio = $null
+# Torrent recién creado cuya pestaña de origen NO es la activa: se apunta en el estado guardado de esa
+# pestaña (torrent + memoria con SUS capturas), sin tocar el panel que estás viendo.
+function Aplicar-TorrentCreadoEnPestana($tabId, $res, $video, $videosPack = @()) {
+    $idx = -1
+    for ($i = 0; $i -lt @($script:tabs).Count; $i++) { if ($script:tabs[$i].Id -eq $tabId) { $idx = $i; break } }
+    $vid = if ($video -and (Test-Path -LiteralPath "$video")) { "$video" } else { "" }
+    $origen = if ($vid) { Split-Path $vid -Parent } else { "" }
+    if ($idx -lt 0) {
+        Guardar-MemoriaTorrent $res $vid @() $origen
+        Set-Estado "Torrent creado: $(Split-Path $res -Leaf). Su pestaña se cerró; ábrelo con «Examinar»." "error"
+        return
+    }
+    $snap = $script:tabs[$idx]
+    $snap.TorrentRuta = "$res"
+    if ($vid) { $snap.Video = $vid }
+    if (@($videosPack).Count -ge 2) { $snap.VideosPack = @($videosPack) }
+    $snap.UrlWeb = ""; $snap.TorrentTrackerRuta = ""; $snap.TorrentRemotoId = ""; $snap.TorrentRemotoNombre = ""
+    $script:tabs[$idx] = $snap
+    $caps = @(@($snap.Caps) | ForEach-Object { $_.Ruta } | Where-Object { $_ -and (Test-Path -LiteralPath "$_") })
+    Guardar-MemoriaTorrent $res $vid $caps $origen
+    Construir-TabBar
+    Set-Estado "✓  Torrent creado para «$($snap.Titulo)» (en su pestaña)." "ok"
+    Log-DiagSubida "TORRENT-EN-SU-PESTANA [$idx] torrent='$(Split-Path $res -Leaf)' | activa: $(Ctx-SubidaActiva)"
+}
 function Start-CrearTorrentAsync($tipo, $ruta) {
     if ($script:torPreparando -or ($script:torAsync -and -not $script:torAsync.IsCompleted)) { throw 'Ya se está creando un torrent. Espera a que termine.' }
     # Disco completo (ISO): antes de hashear se revisa el nombre (y se renombra si se acepta),
@@ -6599,6 +6682,8 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
     # Si no hay carpeta de salida en la sesión, usamos la carpeta por defecto de .torrent (Ajustes).
     if ([string]::IsNullOrWhiteSpace($carpeta)) { $carpeta = "$($ui.cfgCarpetaTorrent.Text)".Trim() }
     $script:torPreparando = $true
+    # Pestaña que LANZA el torrent: al terminar, el resultado va a ella aunque estés en otra.
+    $script:torTabInicio = $script:subidaTabId
     $ui.panTorrentProgreso.Visibility = "Visible"
     $ui.barTorrentProgreso.Value = 0; $ui.lblTorrentProgresoPct.Text = "0%"
     $ui.lblTorrentProgreso.Text = "Preparando torrent de $(Split-Path $ruta -Leaf)…"
@@ -6690,7 +6775,7 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
             if (-not $s) { $script:torTimer.Stop(); return }
             $ui.barTorrentProgreso.Value = [int]$s.Pct; $ui.lblTorrentProgresoPct.Text = "$([int]$s.Pct)%"
             Actualizar-PanelTareasAux
-            if ($s.Fin) {
+            if ($s.Fin -and -not $script:networkBusy) {
                 $script:torTimer.Stop()
                 try { $script:torPS.EndInvoke($script:torAsync) } catch {}
                 try { $script:torPS.Dispose() } catch {}
@@ -6717,7 +6802,14 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
                     $capsYa = @($script:capRows | ForEach-Object { $_.Ruta } | Where-Object { $_ -and (Test-Path -LiteralPath "$_") })
                     # $conservarPanel = $true: NO resetea la descripción ni la selección/subida de
                     # capturas que hiciste mientras se hasheaba.
-                    Cargar-TorrentParaSubir $res $script:torVideoHint "" @($capsYa) @($script:torVideosPack) $true
+                    if ($script:torTabInicio -and $script:torTabInicio -ne $script:subidaTabId) {
+                        # Cambiaste de pestaña mientras se hasheaba: NO se carga en la que ves ahora
+                        # (antes el torrent de E05 acababa en la pestaña de E07 con sus capturas).
+                        Aplicar-TorrentCreadoEnPestana $script:torTabInicio $res $script:torVideoHint @($script:torVideosPack)
+                    } else {
+                        Cargar-TorrentParaSubir $res $script:torVideoHint "" @($capsYa) @($script:torVideosPack) $true
+                    }
+                    $script:torTabInicio = $null
                 }
             }
         })
@@ -8201,7 +8293,7 @@ function Iniciar-SondeoProgreso {
         }
         # Resultados nuevos (torrents creados) → crear una pestaña de subida por cada uno.
         # Procesamos UNO por tick para no bloquear la UI (cada carga hace MediaInfo + TMDB).
-        if ($script:rutaResultados -and (Test-Path -LiteralPath $script:rutaResultados)) {
+        if (-not $script:networkBusy -and $script:rutaResultados -and (Test-Path -LiteralPath $script:rutaResultados)) {
             try {
                 $lineas = @(Get-Content -LiteralPath $script:rutaResultados -Encoding UTF8 -ErrorAction Stop)
                 if ($lineas.Count -gt $script:resultadosLeidos) {
@@ -8215,7 +8307,7 @@ function Iniciar-SondeoProgreso {
             } catch {}
         }
         # ¿Terminó el proceso de consola?
-        if ($script:procMontaje -and $script:procMontaje.HasExited) {
+        if ($script:procMontaje -and $script:procMontaje.HasExited -and -not $script:networkBusy) {
             $script:timerProgreso.Stop()
             # Al parar el timer no habrá más ticks: drenamos los resultados que pudieran quedar sin leer
             # (torrents creados en los últimos instantes) para no perder ninguna pestaña de subida.
@@ -8392,7 +8484,7 @@ function Reset-Todo {
     try { $script:torTimer.Stop() } catch {}
     try { if ($script:torPS -and $script:torAsync -and -not $script:torAsync.IsCompleted) { $script:torPS.Stop() } } catch {}
     try { if ($script:torPS) { $script:torPS.Dispose() } } catch {}
-    $script:torPS = $null; $script:torAsync = $null; $script:torSync = $null; $script:torVideoHint = $null; $script:torPreparando = $false
+    $script:torPS = $null; $script:torAsync = $null; $script:torSync = $null; $script:torVideoHint = $null; $script:torTabInicio = $null; $script:torPreparando = $false
 
     # General / carpeta / análisis
     $script:carpetasTemporadas = @()
@@ -8481,7 +8573,7 @@ function Reset-Todo {
     if (Get-Command Init-Tabs -ErrorAction SilentlyContinue) { Init-Tabs }   # una sola subida en blanco
     if (Get-Command Construir-TabBarProy -ErrorAction SilentlyContinue) { Construir-TabBarProy }
     $script:agBrowse = $null; $script:agCapThumbs = @{}
-    $script:capPreviewCache=@{};$script:capPreviewSync=$null
+    $script:capPreviewCache=[ordered]@{};$script:capPreviewSync=$null
     $script:tmdbSearchResults = @()
     # Lo que aún no había arrancado deja de ser una intención del usuario tras un reinicio total.
     $script:colaMontaje = @()
@@ -9209,7 +9301,7 @@ function _agMapInput {
 function Get-CapturaThumbB64($ruta) {
     # Las capturas visibles ya se prepararon fuera del hilo UI. No volver a leer
     # sus PNG de varios MB en cada publicación del estado remoto.
-    if($script:capPreviewCache -and $script:capPreviewCache.ContainsKey($ruta)){return "$($script:capPreviewCache[$ruta].Thumb)"}
+    if($script:capPreviewCache -and $script:capPreviewCache.Contains($ruta)){return "$($script:capPreviewCache[$ruta].Thumb)"}
     # Miniatura JPEG pequeña en base64 para enviar al panel web (las capturas son ficheros locales
     # que el movil no puede leer). Se CACHEA, pero la clave incluye la FECHA DE MODIFICACION: si un
     # fichero se sobrescribe con el mismo nombre (p.ej. reprocesar), la clave cambia y se recodifica —

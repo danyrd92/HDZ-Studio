@@ -17,7 +17,7 @@ if(-not $env:HDZ_PLAYWRIGHT){
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioBitrateNames.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló el bitrate en nombres de audio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SinglePass.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló la lectura única de pistas (DTS/PGS)'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-UpdatePrivileges.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló la actualización con permisos e instalación personal'}
-foreach($test in @('Test-Media.ps1','Test-Hybrid.ps1','Test-CaptureHidden.ps1','Test-CapturePreviews.ps1','Test-CaptureTabs.ps1','Test-ImageHosts.ps1','Test-ScreenshotBbcode.ps1','Test-RefreshLogos.ps1','Test-LatestTorrent.ps1','Test-Gui.ps1','Test-VideoSelection.ps1','Test-TorrentLoad.ps1','Test-Disco.ps1','Test-Updater.ps1','Test-UpdateNetwork.ps1','Test-UpdateButtons.ps1')) {
+foreach($test in @('Test-Media.ps1','Test-Hybrid.ps1','Test-CaptureHidden.ps1','Test-CapturePreviews.ps1','Test-CaptureTabs.ps1','Test-TabCrossing.ps1','Test-ImageHosts.ps1','Test-ScreenshotBbcode.ps1','Test-RefreshLogos.ps1','Test-LatestTorrent.ps1','Test-Gui.ps1','Test-VideoSelection.ps1','Test-TorrentLoad.ps1','Test-Disco.ps1','Test-Updater.ps1','Test-UpdateNetwork.ps1','Test-UpdateButtons.ps1')) {
     & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot $test)
     if($LASTEXITCODE -ne 0){throw "Falló $test"}
 }
