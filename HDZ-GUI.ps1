@@ -1395,15 +1395,24 @@ $xaml = @'
                 <Button x:Name="btnTabProyADer" Style="{StaticResource GhostMini}" Grid.Column="2" Content="▶" Margin="3,0,0,0" VerticalAlignment="Bottom" Visibility="Collapsed"/>
               </Grid>
             </StackPanel>
-            <Border x:Name="cardFiltroAudio" Style="{StaticResource Card}" Visibility="Collapsed">
+            <!-- Una sola tarjeta para decidir QUÉ audio sale: filtro rápido por idioma + lista de pistas. -->
+            <Border x:Name="cardAudioTracks" Style="{StaticResource Card}" Visibility="Collapsed">
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="Idiomas de audio a mantener"/>
-                  <TextBlock x:Name="bdgFiltroAudio" Style="{StaticResource Bdg}" Grid.Column="1"/>
+                  <TextBlock Style="{StaticResource H}" Text="Pistas de audio"/>
+                  <TextBlock x:Name="bdgAudioTracks" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Todos están seleccionados de forma predeterminada. Desmarca los idiomas que no quieras conservar; se eliminarán todas sus pistas de audio."/>
-                <WrapPanel x:Name="wrapIdiomasAudio" Margin="0,11,0,-8"/>
+                <TextBlock Style="{StaticResource D}" Text="Desmarca las pistas que no quieras en el resultado (tampoco se convierten). Quitar un idioma elimina todas sus pistas."/>
+                <Grid x:Name="cardFiltroAudio" Visibility="Collapsed" Margin="0,12,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <TextBlock Style="{StaticResource Lbl}" Text="Idiomas" Margin="0,7,0,0"/>
+                  <WrapPanel x:Name="wrapIdiomasAudio" Grid.Column="1" Margin="0,0,0,-8"/>
+                  <TextBlock x:Name="bdgFiltroAudio" Style="{StaticResource Bdg}" Grid.Column="2" VerticalAlignment="Top" Margin="12,8,0,0"/>
+                </Grid>
+                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,6,0,0">
+                  <StackPanel x:Name="panAudioTracks"/>
+                </Border>
               </StackPanel>
             </Border>
             <Border x:Name="cardConvAudio" Style="{StaticResource Card}">
@@ -1413,7 +1422,7 @@ $xaml = @'
                   <TextBlock Style="{StaticResource H}" Text="Convertir audio"/>
                   <TextBlock x:Name="bdgConvAudio" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Elige una pista y conviértela al formato que quieras (DD+, DD, AAC). Las opciones se adaptan a los canales de la pista (2.0, 5.1, 7.1). Puedes añadir varias conversiones; con «Mantener original» decides si la pista de origen se conserva o se sustituye. El delay (sincronía) se preserva."/>
+                <TextBlock Style="{StaticResource D}" Text="Convierte una pista a DD+, DD o AAC; las opciones se adaptan a sus canales. Con «Mantener original» decides si la pista de origen se conserva o se sustituye. La sincronía se preserva."/>
                 <StackPanel x:Name="panConvFilas" Margin="0,12,0,0"/>
                 <Button x:Name="btnConvAdd" Style="{StaticResource Ghost}" Content="+ Añadir conversión" HorizontalAlignment="Left" Margin="0,4,0,0"/>
               </StackPanel>
@@ -1489,19 +1498,28 @@ $xaml = @'
                 </StackPanel>
               </StackPanel>
             </Border>
-            <Border x:Name="cardFiltro" Style="{StaticResource Card}">
+            <!-- Una sola tarjeta para decidir QUÉ subtítulos salen: filtros rápidos (idioma, tipo) + lista de pistas. -->
+            <Border x:Name="cardSubTracks" Style="{StaticResource Card}" Visibility="Collapsed">
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <TextBlock Style="{StaticResource H}" Text="Idiomas de subtítulos a mantener"/>
-                  <TextBlock x:Name="bdgFiltro" Style="{StaticResource Bdg}" Grid.Column="1"/>
+                  <TextBlock Style="{StaticResource H}" Text="Pistas de subtítulos"/>
+                  <TextBlock x:Name="bdgSubTracks" Style="{StaticResource Bdg}" Grid.Column="1"/>
                 </Grid>
-                <TextBlock Style="{StaticResource D}" Text="Quitar un idioma elimina todos sus subtítulos (forzados y completos). Los audios no se tocan."/>
-                <WrapPanel x:Name="chFiltro" Margin="0,11,0,0"/>
-                <WrapPanel x:Name="wrapIdiomas" Margin="0,6,0,-8" Visibility="Collapsed"/>
-                <TextBlock Style="{StaticResource H}" Text="Tipos de subtítulos a mantener" Margin="0,18,0,0"/>
-                <TextBlock Style="{StaticResource D}" Text="Desmarca un tipo para quitarlo. Si hay varios del mismo tipo, idioma y formato, se conserva el primero."/>
-                <WrapPanel x:Name="wrapTiposSub" Margin="0,11,0,-8"/>
+                <TextBlock Style="{StaticResource D}" Text="Desmarca los subtítulos que no quieras en el resultado. Los filtros de idioma y tipo se aplican además; si quedan dos iguales (idioma, tipo y formato), se conserva el primero."/>
+                <Grid x:Name="cardFiltro" Margin="0,12,0,0">
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <TextBlock Style="{StaticResource Lbl}" Text="Idiomas" Margin="0,7,0,0"/>
+                  <WrapPanel x:Name="chFiltro" Grid.Column="1"/>
+                  <TextBlock x:Name="bdgFiltro" Style="{StaticResource Bdg}" Grid.Column="2" VerticalAlignment="Top" Margin="12,8,0,0"/>
+                  <WrapPanel x:Name="wrapIdiomas" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Visibility="Collapsed"/>
+                  <TextBlock Style="{StaticResource Lbl}" Grid.Row="2" Text="Tipos" Margin="0,7,0,0"/>
+                  <WrapPanel x:Name="wrapTiposSub" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,-8"/>
+                </Grid>
+                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,6,0,0">
+                  <StackPanel x:Name="panSubTracks"/>
+                </Border>
               </StackPanel>
             </Border>
             <Border x:Name="cardSubsUnicos" Style="{StaticResource Card}">
@@ -1730,6 +1748,7 @@ $xaml = @'
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <TextBlock x:Name="lblMediainfoTitulo" Style="{StaticResource H}" Text="MediaInfo"/>
                   <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="btnBdinfoGenerar" Style="{StaticResource GhostMini}" Content="Generar BDInfo" Visibility="Collapsed" ToolTip="Lee el ISO con BDInfo y guarda el informe junto a él (tarda unos minutos: recorre el disco entero)"/>
                     <Button x:Name="btnBdinfoCargar" Style="{StaticResource GhostMini}" Content="Cargar BDInfo…" Visibility="Collapsed"/>
                     <Button x:Name="btnMediaRefrescar" Style="{StaticResource GhostMini}" Content="Regenerar"/>
                   </StackPanel>
@@ -1990,6 +2009,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "bdgFiltro","bdgSubsUnicos","bdgPGS","lblSugerencia",
           "cardModoLote","cardFiltroAudio","wrapIdiomasAudio","cardConvAudio","panConvFilas","btnConvAdd","cardDefAudio","cardUndAudio","cardUndSub",
           "cardFiltro","cardSubsUnicos","cardPGS","phAudio","phSubs","panUndAudio","panUndSub",
+          "cardAudioTracks","panAudioTracks","bdgAudioTracks","cardSubTracks","panSubTracks","bdgSubTracks",
           "hdrUndAudio","chevUndAudio","bodyUndAudio","hdrUndSub","chevUndSub","bodyUndSub",
           "swProyecto","panProyectoDatos","txtTitulo","txtAno","swSerie",
           "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer",
@@ -2006,7 +2026,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panTareasAux",
           "navSubida","navAjustes","panSubida","panAjustes",
           "txtTorrentSubir","btnTorrentExaminar","btnTorrentUltimo","lblTorrentInfo",
-          "btnCrearTorrentArchivo","btnCrearTorrentCarpeta","btnCrearTorrentDisco","lblMediainfoTitulo","lblMediainfoDesc","btnBdinfoCargar","panTorrentProgreso","barTorrentProgreso","lblTorrentProgreso","lblTorrentProgresoPct",
+          "btnCrearTorrentArchivo","btnCrearTorrentCarpeta","btnCrearTorrentDisco","lblMediainfoTitulo","lblMediainfoDesc","btnBdinfoCargar","btnBdinfoGenerar","panTorrentProgreso","barTorrentProgreso","lblTorrentProgreso","lblTorrentProgresoPct",
           "btnNuevaSubida","panTabsSubida","scrTabs","btnTabIzq","btnTabDer",
           "upTitulo","upCategoria","upTipo","upResolucion","panTV","upTemporada","upEpisodio","upKeywords",
           "btnBuscarTmdb","panResultadosTmdb","upTmdb","upImdb","upTvdb","upMal",
@@ -2516,7 +2536,8 @@ function Sugerir-Proyecto($nombres) {
 # concretas), así que arrancan ocultas.
 function Reset-Adaptacion {
     if($ui.cardAudioTracks){$ui.cardAudioTracks.Visibility='Collapsed';$ui.panAudioTracks.Children.Clear();$script:audioTrackRows=@()}
-    foreach ($b in @("bdgModoLote","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub","bdgFiltro","bdgSubsUnicos","bdgPGS")) {
+    if($ui.cardSubTracks){$ui.cardSubTracks.Visibility='Collapsed';$ui.panSubTracks.Children.Clear();$script:subTrackRows=@()}
+    foreach ($b in @("bdgAudioTracks","bdgSubTracks","bdgModoLote","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub","bdgFiltro","bdgSubsUnicos","bdgPGS")) {
         Set-Badge $b ""
     }
     # Las tarjetas condicionales empiezan ocultas mientras llega el nuevo análisis. Así no se
@@ -2834,32 +2855,102 @@ function Reconstruir-FilasConv($estados = @()) {
 # Construye el conversor para un ámbito (homogéneo = selección; heterogéneo = archivos de la peli).
 # Toma el PRIMER archivo con audio como representante: en homogéneo todos comparten estructura, y la
 # conversión se aplica por índice de pista a cada archivo procesado.
+# --- Selección manual de pistas (audio y subtítulos) ---------------------------------------------
+# Cada pista es una fila marcable. Las desmarcadas se guardan por «archivo|Id de mkvmerge» en un
+# mapa global (sobrevive al cambiar de pestaña) y viajan al motor como PistasAudioExcluidas /
+# PistasSubsExcluidas. Los filtros de idioma/tipo siguen aplicándose además de esta selección.
 function Initialize-HdzAudioTracks {
     $script:audioTracksExcluded=@{};$script:audioTrackRows=@()
-    $card=[Windows.Controls.Border]::new();$card.Style=$win.Resources['Card'];$card.Visibility='Collapsed'
-    $body=[Windows.Controls.StackPanel]::new();$title=[Windows.Controls.TextBlock]::new();$title.Style=$win.Resources['H'];$title.Text='Pistas de audio a mantener';[void]$body.Children.Add($title)
-    $help=[Windows.Controls.TextBlock]::new();$help.Style=$win.Resources['D'];$help.Text='Marca cada pista que quieras incluir. También se aplica el filtro de idiomas. Las pistas desmarcadas no se convierten.';$help.TextWrapping='Wrap';[void]$body.Children.Add($help)
-    $list=[Windows.Controls.StackPanel]::new();$list.Margin='0,12,0,0';[void]$body.Children.Add($list);$card.Child=$body
-    $ui.cardAudioTracks=$card;$ui.panAudioTracks=$list;$ui.panAudio.Children.Insert(1,$card)
+    $script:subTracksExcluded=@{};$script:subTrackRows=@()
+}
+function Get-HdzTrackState($tipo) {
+    if($tipo -eq 'Sub'){@{Map=$script:subTracksExcluded;Rows=@($script:subTrackRows);Panel=$ui.panSubTracks;Card=$ui.cardSubTracks;Badge='bdgSubTracks';Nombre='subtítulos'}}
+    else{@{Map=$script:audioTracksExcluded;Rows=@($script:audioTrackRows);Panel=$ui.panAudioTracks;Card=$ui.cardAudioTracks;Badge='bdgAudioTracks';Nombre='pistas'}}
+}
+function Update-HdzTrackBadge($tipo) {
+    $st=Get-HdzTrackState $tipo;$total=$st.Rows.Count
+    if(-not $total){Set-Badge $st.Badge '';return}
+    $on=@($st.Rows|Where-Object {$_.Choice.IsChecked}).Count;$files=@($st.Rows|ForEach-Object Archivo|Select-Object -Unique).Count
+    Set-Badge $st.Badge "$on de $total $($st.Nombre)$(if($files -gt 1){" · $files archivos"})" $(if($on -lt $total){'warn'}else{'muted'})
+}
+# Punto único para marcar/desmarcar (clic, orden de la web y restauración de pestaña).
+function Set-HdzTrackSelected($tipo,$row,[bool]$on) {
+    $st=Get-HdzTrackState $tipo
+    $row.Choice.IsChecked=$on;$row.Choice.Opacity=if($on){1}else{.5}   # atenuada = no sale en el resultado
+    if($on){$st.Map.Remove($row.Key)}else{$st.Map[$row.Key]=@{Archivo=$row.Archivo;Id=$row.Id;Index=$row.Index}}
+    Update-HdzTrackBadge $tipo
+}
+function Get-HdzFormatoSubGui($codec) {
+    switch -Regex ("$codec") { 'pgs' {'PGS'} '^(subrip|srt)$' {'SRT'} '^ass$' {'ASS'} '^ssa$' {'SSA'} 'dvd_?sub' {'VobSub'} 'webvtt' {'WebVTT'} 'mov_text' {'TX3G'} default {"$codec".ToUpper()} }
+}
+# Fila compacta en columnas: Id · idioma · formato · título (la etiqueta completa va en el tooltip).
+function New-HdzTrackRow($tipo,$key,$source,$id,$index,$cols,$etiqueta) {
+    $st=Get-HdzTrackState $tipo
+    $choice=[Windows.Controls.CheckBox]::new();$choice.Foreground=$win.Resources['TextBrush'];$choice.Margin='0,1,0,1';$choice.MinHeight=30
+    $choice.VerticalContentAlignment='Center';$choice.HorizontalContentAlignment='Stretch';$choice.Cursor='Hand';$choice.ToolTip=$etiqueta
+    $grid=[Windows.Controls.Grid]::new();$grid.Margin='6,0,0,0'
+    foreach($w in @(48,120,150)){$cd=[Windows.Controls.ColumnDefinition]::new();$cd.Width=[Windows.GridLength]::new($w);[void]$grid.ColumnDefinitions.Add($cd)}
+    $cd=[Windows.Controls.ColumnDefinition]::new();$cd.Width=[Windows.GridLength]::new(1,[Windows.GridUnitType]::Star);[void]$grid.ColumnDefinitions.Add($cd)
+    for($i=0;$i -lt 4;$i++){
+        $t=[Windows.Controls.TextBlock]::new();$t.Text="$($cols[$i])";$t.VerticalAlignment='Center';$t.TextTrimming='CharacterEllipsis'
+        $t.Foreground=$win.Resources[$(if($i -eq 0 -or $i -eq 3){'MutedBrush'}else{'TextBrush'})];if($i -eq 1){$t.FontWeight='SemiBold'}
+        [Windows.Controls.Grid]::SetColumn($t,$i);[void]$grid.Children.Add($t)
+    }
+    $choice.Content=$grid
+    $row=[pscustomobject]@{Key=$key;Archivo=$source;Id=$id;Index=$index;Etiqueta=$etiqueta;Choice=$choice;Tipo=$tipo}
+    $choice.Tag=$row;$choice.IsChecked=-not $st.Map.ContainsKey($key);$choice.Opacity=if($choice.IsChecked){1}else{.5}
+    $choice.Add_Click({param($sender) Set-HdzTrackSelected $sender.Tag.Tipo $sender.Tag ([bool]$sender.IsChecked)})
+    return $row
+}
+# Pinta las filas; con varios archivos (remezcla, lote) agrupa bajo el nombre de cada uno.
+function Add-HdzTrackRows($tipo,$rows) {
+    $st=Get-HdzTrackState $tipo
+    $st.Panel.Children.Clear()
+    $files=@($rows|ForEach-Object Archivo|Select-Object -Unique);$last=$null
+    foreach($row in @($rows)){
+        if($files.Count -gt 1 -and $row.Archivo -ne $last){
+            $hdr=[Windows.Controls.TextBlock]::new();$hdr.Text=Split-Path $row.Archivo -Leaf;$hdr.Foreground=$win.Resources['SubBrush'];$hdr.FontSize=11.5;$hdr.FontWeight='SemiBold'
+            $hdr.Margin=$(if($null -eq $last){'0,4,0,2'}else{'0,10,0,2'});$hdr.TextTrimming='CharacterEllipsis';$hdr.ToolTip=$row.Archivo;[void]$st.Panel.Children.Add($hdr)
+            $last=$row.Archivo
+        }
+        [void]$st.Panel.Children.Add($row.Choice)
+    }
 }
 function Build-HdzAudioTracks($scope) {
     if(-not $ui.panAudioTracks){return}
-    $ui.panAudioTracks.Children.Clear();$script:audioTrackRows=@();$seen=@{}
+    $script:audioTrackRows=@();$seen=@{};$rows=@()
     foreach($file in @($scope)) {foreach($audio in @($file.Audios)) {
         $source=if($audio.HdzSource){"$($audio.HdzSource)"}else{"$($file.Ruta)"}
         $id=if($null -ne $audio.TrackId){[int]$audio.TrackId}else{[int]$audio.Index};$key="$source|$id"
         if($seen.ContainsKey($key)){continue};$seen[$key]=$true
-        $language=Get-IdiomaPistaGui $audio 'Audio';$label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $(Get-CodecComercial $audio.Codec $audio.Profile) $(Get-NombreLayout $audio.Channels)"
+        $language=Get-IdiomaPistaGui $audio 'Audio';$formato="$(Get-CodecComercial $audio.Codec $audio.Profile) $(Get-NombreLayout $audio.Channels)"
+        $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
         if($audio.Title){$label+=" · $($audio.Title)"}
-        $choice=[Windows.Controls.CheckBox]::new();$choice.Foreground=$win.Resources['TextBrush'];$choice.Margin='0,4,0,8';$choice.MinHeight=32
-        $text=[Windows.Controls.TextBlock]::new();$text.Text=$label;$text.TextWrapping='Wrap';$choice.Content=$text
-        $row=[pscustomobject]@{Key=$key;Archivo=$source;Id=$id;Index=[int]$audio.Index;Etiqueta=$label;Choice=$choice};$choice.Tag=$row;$choice.IsChecked=-not $script:audioTracksExcluded.ContainsKey($key)
-        $choice.Add_Click({param($sender) $r=$sender.Tag;if($sender.IsChecked){$script:audioTracksExcluded.Remove($r.Key)}else{$script:audioTracksExcluded[$r.Key]=@{Archivo=$r.Archivo;Id=$r.Id;Index=$r.Index}}})
-        [void]$ui.panAudioTracks.Children.Add($choice);$script:audioTrackRows+=$row
+        $rows+=New-HdzTrackRow 'Audio' $key $source $id ([int]$audio.Index) @("#$id",(NombreIdioma $language),$formato,"$($audio.Title)") $label
     }}
-    $ui.cardAudioTracks.Visibility=if($script:audioTrackRows.Count){'Visible'}else{'Collapsed'}
+    $script:audioTrackRows=$rows;Add-HdzTrackRows 'Audio' $rows
+    $ui.cardAudioTracks.Visibility=if($rows.Count -or $ui.cardFiltroAudio.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
+    Update-HdzTrackBadge 'Audio'
+}
+function Build-HdzSubTracks($scope) {
+    if(-not $ui.panSubTracks){return}
+    $script:subTrackRows=@();$seen=@{};$rows=@()
+    foreach($file in @($scope)) {foreach($sub in @($file.Subs)) {
+        $source=if($sub.Ruta){"$($sub.Ruta)"}else{"$($file.Ruta)"}
+        $id=if($null -ne $sub.TrackId){[int]$sub.TrackId}else{[int]$sub.Index};$key="$source|$id"
+        if($seen.ContainsKey($key)){continue};$seen[$key]=$true
+        $language=Get-IdiomaPistaGui $sub 'Sub';$formato=Get-HdzFormatoSubGui $sub.Codec
+        if($sub.Forced -or "$($sub.Title)" -match '(?i)forced|forzad'){$formato+=' · Forzado'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){$formato+=' · SDH'}
+        $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
+        if($sub.Title){$label+=" · $($sub.Title)"}
+        $rows+=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @("#$id",(NombreIdioma $language),$formato,"$($sub.Title)") $label
+    }}
+    $script:subTrackRows=$rows;Add-HdzTrackRows 'Sub' $rows
+    $ui.cardSubTracks.Visibility=if($rows.Count -or $ui.cardFiltro.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
+    Update-HdzTrackBadge 'Sub'
 }
 function Get-HdzExcludedAudioTracks { @($script:audioTracksExcluded.Values) }
+function Get-HdzExcludedSubTracks { @($script:subTracksExcluded.Values) }
 function Construir-Conversor($scope) {
     Build-HdzAudioTracks $scope
     $rep = @($scope | Where-Object { @($_.Audios).Count -gt 0 } | Select-Object -First 1)
@@ -3585,6 +3676,7 @@ function Aplicar-Analisis($filas) {
         $ui.cardFiltro.Visibility = "Collapsed"
         Reconstruir-ChipsIdiomas
     }
+    Build-HdzSubTracks $sel
     # Subs únicos ambiguos: una sección por sub (Construir-FilasSubsUnicos crea una fila por cada uno)
     if (@($script:subsAmbiguos).Count -gt 0) {
         $ui.cardSubsUnicos.Visibility = "Visible"
@@ -4013,6 +4105,7 @@ function Construir-Adaptacion($selScope) {
         $nota = if ($idiomasSubs.Keys.Count -gt 3) { " — más de 3: revisa el filtro" } else { "" }
         Set-Badge "bdgFiltro" "$($idiomasSubs.Keys.Count) idioma(s): $(@($idiomasSubs.Keys | ForEach-Object { NombreIdioma $_ }) -join ', ')$nota" $(if ($idiomasSubs.Keys.Count -gt 3) { "warn" } else { "ok" })
     } else { $ui.cardFiltro.Visibility = "Collapsed"; Reconstruir-ChipsIdiomas }
+    Build-HdzSubTracks $selScope
     if (@($script:subsAmbiguos).Count -gt 0) {
         $ui.cardSubsUnicos.Visibility = "Visible"; Set-Badge "bdgSubsUnicos" "$(@($script:subsAmbiguos).Count) sin definir" "warn"
         Construir-FilasSubsUnicos $script:subsAmbiguos
@@ -4039,6 +4132,7 @@ function Snapshot-DecisionesTab {
         AudioLangs = @($script:chipsIdiomasAudio | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
         AudioLangsTodos = @($script:chipsIdiomasAudio | ForEach-Object { "$($_.Tag)" })
         AudioTracksExcluded = @($script:audioTrackRows | Where-Object {-not $_.Choice.IsChecked} | ForEach-Object {@{Archivo=$_.Archivo;Id=$_.Id;Index=$_.Index}})
+        SubTracksExcluded = @($script:subTrackRows | Where-Object {-not $_.Choice.IsChecked} | ForEach-Object {@{Archivo=$_.Archivo;Id=$_.Id;Index=$_.Index}})
         FiltroLangs = @($script:chipsIdiomas | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
         ExtraerPGS = (Get-ChipValor "extraerPGS"); ConservarPGS = (Get-ChipValor "conservarPGS")
         Und = $und; SubsUnicos = $su
@@ -4047,9 +4141,11 @@ function Snapshot-DecisionesTab {
 # Aplica las decisiones guardadas sobre las tarjetas YA reconstruidas (Construir-Adaptacion antes).
 function Restore-DecisionesTab($d) {
     if (-not $d) { return }
-    if($d.ContainsKey('AudioTracksExcluded')){
-        foreach($row in @($script:audioTrackRows)){$script:audioTracksExcluded.Remove($row.Key);$row.Choice.IsChecked=$true}
-        foreach($item in @($d.AudioTracksExcluded)){$key="$($item.Archivo)|$($item.Id)";$script:audioTracksExcluded[$key]=$item;foreach($row in @($script:audioTrackRows)){if($row.Key -eq $key){$row.Choice.IsChecked=$false}}}
+    foreach($par in @(@('Audio','AudioTracksExcluded'),@('Sub','SubTracksExcluded'))){
+        if(-not $d.ContainsKey($par[1])){continue}
+        $st=Get-HdzTrackState $par[0];$fuera=@{}
+        foreach($item in @($d[$par[1]])){if($item){$k="$($item.Archivo)|$($item.Id)";$fuera[$k]=$true;$st.Map[$k]=$item}}
+        foreach($row in $st.Rows){Set-HdzTrackSelected $par[0] $row (-not $fuera.ContainsKey($row.Key))}
     }
     if ($null -ne $d.Conv) { Reconstruir-FilasConv @($d.Conv) }
     if ($d.DefAudio)     { Set-ChipValor "defAudio" $d.DefAudio }
@@ -4942,12 +5038,13 @@ function Set-ModoDiscoSubida([bool]$EsDisco) {
     if ($ui.lblMediainfoTitulo) { $ui.lblMediainfoTitulo.Text = if ($EsDisco) { 'BDInfo' } else { 'MediaInfo' } }
     if ($ui.lblMediainfoDesc) {
         $ui.lblMediainfoDesc.Text = if ($EsDisco) {
-            'Disco completo: pega aquí el informe de BDInfo o cárgalo desde el .txt que guarda BDInfo (si está junto al ISO, se carga solo). Se envía en el campo BDInfo.'
+            'Disco completo: el informe de BDInfo se genera solo al cargar el ISO (si ya hay uno junto al ISO, se usa ese). También puedes pegarlo o cargar un .txt. Se envía en el campo BDInfo.'
         } else {
             'Texto completo del archivo (del primer episodio si es una serie/pack). Se envía en el campo MediaInfo.'
         }
     }
     if ($ui.btnBdinfoCargar) { $ui.btnBdinfoCargar.Visibility = if ($EsDisco) { 'Visible' } else { 'Collapsed' } }
+    if ($ui.btnBdinfoGenerar) { $ui.btnBdinfoGenerar.Visibility = if ($EsDisco) { 'Visible' } else { 'Collapsed' } }
     if ($ui.btnMediaRefrescar) { $ui.btnMediaRefrescar.Visibility = if ($EsDisco) { 'Collapsed' } else { 'Visible' } }
 }
 
@@ -5100,7 +5197,7 @@ function Preparar-DiscoParaTorrent([string]$RutaIso) {
     $fuente = switch ("$($datos.Fuente)") { 'bdinfo' { "el BDInfo ($(Split-Path $bd.Ruta -Leaf))" } 'ffprobe' { 'el propio disco' } default { 'el nombre del archivo' } }
     $detalle = "Datos técnicos leídos de $fuente." +
         $(if ($tmdb) { " Título y año de TMDB: $($tmdb.Titulo) ($($tmdb.Fecha))." } elseif ($tmdbErr) { " $tmdbErr." } elseif ($ui.cfgTmdbKey.Text) { ' TMDB no encontró el título: corrígelo a mano.' } else { ' Sin clave de TMDB: revisa el título y el año.' }) +
-        $(if (-not $bd) { ' No hay BDInfo junto al ISO; podrás pegarlo en la ficha antes de subir.' } else { '' })
+        $(if (-not $bd) { $(if (Get-HdzBdinfoExe $rutaBin) { ' No hay BDInfo junto al ISO: se generará al terminar el torrent.' } else { ' No hay BDInfo junto al ISO; podrás pegarlo en la ficha antes de subir.' }) } else { '' })
     $r = Show-DialogoNombreDisco $propuesto $baseActual $detalle
     if (-not $r -or $r.Accion -eq 'cancelar') { return $null }
 
@@ -6214,7 +6311,7 @@ function Cargar-TorrentParaSubir($rutaTorrent, $videoHint = $null, $origenHint =
         $bdJunto = Get-HdzBdinfoJunto $video
         $ui.upMediainfo.Text = if ($bdJunto) { $bdJunto.Texto } else { '' }
         Aplicar-DatosDiscoSubida (Get-DatosDiscoGui $video $(if ($bdJunto) { $bdJunto.Texto } else { '' }))
-        if (-not $bdJunto) {
+        if (-not $bdJunto -and -not (Iniciar-BdinfoAsync $video $script:subidaTabId)) {
             $ui.lblTorrentInfo.Text = "Es un disco completo y no encontré su BDInfo junto al ISO. Pega el informe de BDInfo en la ficha o pulsa «Cargar BDInfo…»."
             $ui.lblTorrentInfo.Visibility = "Visible"
         }
@@ -6641,6 +6738,108 @@ $script:torTimer = $null; $script:torSync = $null; $script:torPS = $null; $scrip
 # Incluye el tramo previo al hasheo (MediaInfo/TMDB). Sin esta bandera parecía que no ocurría nada
 # mientras se preparaba el torrent, sobre todo si se lanzaba desde el móvil.
 $script:torPreparando = $false
+# --- BDInfo en segundo plano ---------------------------------------------------------------------
+# bin\BDInfo.exe recorre el ISO entero (varios minutos). Corre aparte, como la creación del torrent:
+# la ventana sigue usable y el informe va a la pestaña que lo pidió aunque estés en otra.
+$script:bdiSync = $null; $script:bdiPS = $null; $script:bdiAsync = $null; $script:bdiTimer = $null
+function Test-BdinfoEnCurso { return [bool]($script:bdiSync -and -not [bool]$script:bdiSync.Fin) }
+function Get-TextoProgresoBdinfo($s) {
+    $pct = [Math]::Floor([double]$s.Pct)
+    "Generando el BDInfo del disco… $pct %$(if ("$($s.Restante)" -and $pct -gt 0) { " · quedan $($s.Restante)" }). Lee el ISO entero; la ficha se rellenará sola al terminar."
+}
+function Mostrar-ProgresoBdinfo {
+    $s = $script:bdiSync
+    if (-not $s -or $s.Fin -or $s.TabId -ne $script:subidaTabId) { return }
+    $ui.lblTorrentInfo.Text = Get-TextoProgresoBdinfo $s
+    $ui.lblTorrentInfo.Visibility = "Visible"
+}
+function Detener-Bdinfo {
+    $s = $script:bdiSync
+    if (-not $s) { return }
+    $s.Cancelar = $true
+    if ($s.Pid) { try { Stop-Process -Id ([int]$s.Pid) -Force -ErrorAction Stop } catch {} }
+    if ($script:bdiTimer) { $script:bdiTimer.Stop() }
+    try { if ($script:bdiPS) { $script:bdiPS.Dispose() } } catch {}
+    $script:bdiPS = $null; $script:bdiAsync = $null; $script:bdiSync = $null
+}
+# Devuelve $true si el BDInfo de ese ISO se está generando (ya estaba o se acaba de lanzar).
+function Iniciar-BdinfoAsync([string]$RutaIso, [string]$TabId, [bool]$Reemplazar = $false) {
+    if (-not (Test-HdzEsDisco $RutaIso) -or -not (Test-Path -LiteralPath $RutaIso -PathType Leaf)) { return $false }
+    $exe = Get-HdzBdinfoExe $rutaBin
+    if (-not $exe) { return $false }
+    if (Test-BdinfoEnCurso) {
+        if ("$($script:bdiSync.Iso)" -eq $RutaIso) { return $true }
+        Set-Estado "Ya se está generando el BDInfo de otro disco. Cuando termine, pulsa «Generar BDInfo» en este." "error"
+        return $false
+    }
+    $sync = [hashtable]::Synchronized(@{ Pct = 0.0; Restante = ''; Cancelar = $false; Pid = 0; Fin = $false; Resultado = $null; Error = $null; Iso = $RutaIso; TabId = $TabId; Reemplazar = $Reemplazar })
+    $script:bdiSync = $sync
+    $ps = [powershell]::Create()
+    [void]$ps.AddScript({
+        param($modulo, $iso, $exe, $s)
+        try { . $modulo; $s.Resultado = Invoke-HdzBdinfo -RutaIso $iso -Exe $exe -Sync $s }
+        catch { $s.Error = $_.Exception.Message }
+        finally { $s.Fin = $true }
+    }.ToString()).AddArgument((Join-Path $PSScriptRoot 'HDZ-Disco.ps1')).AddArgument($RutaIso).AddArgument($exe).AddArgument($sync)
+    $script:bdiPS = $ps
+    $script:bdiAsync = $ps.BeginInvoke()
+    if (-not $script:bdiTimer) {
+        $script:bdiTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:bdiTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+        $script:bdiTimer.Add_Tick({
+            $s = $script:bdiSync
+            if (-not $s) { $script:bdiTimer.Stop(); return }
+            Mostrar-ProgresoBdinfo
+            Actualizar-PanelTareasAux
+            if ($s.Fin -and -not $script:networkBusy) {
+                $script:bdiTimer.Stop()
+                try { $script:bdiPS.EndInvoke($script:bdiAsync) } catch {}
+                try { $script:bdiPS.Dispose() } catch {}
+                $script:bdiPS = $null; $script:bdiAsync = $null; $script:bdiSync = $null
+                Actualizar-PanelTareasAux
+                Completar-Bdinfo $s
+            }
+        })
+    }
+    $script:bdiTimer.Start()
+    Mostrar-ProgresoBdinfo
+    Set-Estado "Generando el BDInfo de $(Split-Path $RutaIso -Leaf)… (tarda unos minutos: lee el disco entero)"
+    try { Log-Sec "BDINFO · generando"; Log-Linea "ISO: $RutaIso" } catch {}
+    return $true
+}
+function Completar-Bdinfo($s) {
+    $esActiva = ($s.TabId -eq $script:subidaTabId)
+    if ($s.Error) {
+        if ($esActiva) {
+            $ui.lblTorrentInfo.Text = "No se pudo generar el BDInfo: $($s.Error) Pégalo en la ficha o pulsa «Cargar BDInfo…»."
+            $ui.lblTorrentInfo.Visibility = "Visible"
+        }
+        Set-Estado "No se pudo generar el BDInfo: $($s.Error)" "error"
+        try { Log-Sec "BDINFO · error"; Log-Linea "$($s.Error)" } catch {}
+        return
+    }
+    $texto = ''
+    try { $texto = ([IO.File]::ReadAllText("$($s.Resultado)")).TrimEnd() } catch { Set-Estado "BDInfo generado, pero no se pudo leer el informe: $($_.Exception.Message)" "error"; return }
+    try { Log-Sec "BDINFO · generado"; Log-Linea "Informe: $($s.Resultado)" } catch {}
+    $hoja = Split-Path "$($s.Resultado)" -Leaf
+    if ($esActiva) {
+        if ($s.Reemplazar -or [string]::IsNullOrWhiteSpace($ui.upMediainfo.Text)) {
+            $ui.upMediainfo.Text = $texto
+            Aplicar-DatosDiscoSubida (ConvertFrom-HdzBdinfo $texto)
+        }
+        $ui.lblTorrentInfo.Visibility = "Collapsed"
+        Set-Estado "✓  BDInfo generado y puesto en la ficha ($hoja, junto al ISO)." "ok"
+        return
+    }
+    for ($i = 0; $i -lt @($script:tabs).Count; $i++) {
+        if ($script:tabs[$i].Id -ne $s.TabId) { continue }
+        $snap = $script:tabs[$i]
+        if ($s.Reemplazar -or [string]::IsNullOrWhiteSpace("$($snap.Mediainfo)")) { $snap.Mediainfo = $texto; $script:tabs[$i] = $snap }
+        Set-Estado "✓  BDInfo generado para «$($snap.Titulo)» (en su pestaña)." "ok"
+        return
+    }
+    Set-Estado "BDInfo guardado junto al ISO ($hoja); su pestaña se cerró." "ok"
+}
 $script:torTabInicio = $null
 # Torrent recién creado cuya pestaña de origen NO es la activa: se apunta en el estado guardado de esa
 # pestaña (torrent + memoria con SUS capturas), sin tocar el panel que estás viendo.
@@ -6660,6 +6859,7 @@ function Aplicar-TorrentCreadoEnPestana($tabId, $res, $video, $videosPack = @())
     if (@($videosPack).Count -ge 2) { $snap.VideosPack = @($videosPack) }
     $snap.UrlWeb = ""; $snap.TorrentTrackerRuta = ""; $snap.TorrentRemotoId = ""; $snap.TorrentRemotoNombre = ""
     $script:tabs[$idx] = $snap
+    if ($vid -and (Test-HdzEsDisco $vid) -and [string]::IsNullOrWhiteSpace("$($snap.Mediainfo)")) { [void](Iniciar-BdinfoAsync $vid $tabId) }
     $caps = @(@($snap.Caps) | ForEach-Object { $_.Ruta } | Where-Object { $_ -and (Test-Path -LiteralPath "$_") })
     Guardar-MemoriaTorrent $res $vid $caps $origen
     Construir-TabBar
@@ -6808,6 +7008,8 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
                         Aplicar-TorrentCreadoEnPestana $script:torTabInicio $res $script:torVideoHint @($script:torVideosPack)
                     } else {
                         Cargar-TorrentParaSubir $res $script:torVideoHint "" @($capsYa) @($script:torVideosPack) $true
+                        # Disco sin BDInfo: se genera ahora (después del hasheo, para no leer el disco dos veces a la vez).
+                        if ((Test-HdzEsDisco "$($script:torVideoHint)") -and [string]::IsNullOrWhiteSpace($ui.upMediainfo.Text)) { [void](Iniciar-BdinfoAsync "$($script:torVideoHint)" $script:subidaTabId) }
                     }
                     $script:torTabInicio = $null
                 }
@@ -6828,6 +7030,13 @@ $ui.btnCrearTorrentDisco.Add_Click({
     $dlg.Title = "Elige el ISO del disco (Blu-ray, UHD o DVD) ya ripeado"
     if ($ui.txtCarpeta.Text -and (Test-Path -LiteralPath $ui.txtCarpeta.Text)) { $dlg.InitialDirectory = $ui.txtCarpeta.Text }
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Start-CrearTorrentAsync "archivo" $dlg.FileName }
+})
+$ui.btnBdinfoGenerar.Add_Click({
+    $iso = "$($script:videoSubir)"
+    if (-not (Test-HdzEsDisco $iso) -or -not (Test-Path -LiteralPath $iso -PathType Leaf)) { Set-Estado "Carga primero el torrent del disco (necesito encontrar su ISO)." "error"; return }
+    if (-not (Get-HdzBdinfoExe $rutaBin)) { Set-Estado "Falta la herramienta BDInfo (bin\BDInfo.exe). Actualiza HDZ Studio." "error"; return }
+    if ((Test-BdinfoEnCurso) -and "$($script:bdiSync.Iso)" -eq $iso) { Set-Estado (Get-TextoProgresoBdinfo $script:bdiSync); return }
+    [void](Iniciar-BdinfoAsync $iso $script:subidaTabId $true)
 })
 $ui.btnBdinfoCargar.Add_Click({
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
@@ -7258,7 +7467,7 @@ function Invoke-SubidaTracker {
     # Disco completo (ISO): la ficha lleva BDInfo en lugar de MediaInfo.
     $esDiscoSubida = (Test-SubidaEsDisco) -or (Test-HdzEsDisco "$(Get-NombreTorrent $rutaTorrent)")
     if ([string]::IsNullOrWhiteSpace($ui.upMediainfo.Text)) {
-        Set-SubidaEstado $(if ($esDiscoSubida) { "El BDInfo está vacío: pégalo o pulsa «Cargar BDInfo…»." } else { "El MediaInfo está vacío." }) "error"; return
+        Set-SubidaEstado $(if ($esDiscoSubida -and (Test-BdinfoEnCurso) -and $script:bdiSync.TabId -eq $script:subidaTabId) { "Espera: el BDInfo se está generando ($([Math]::Floor([double]$script:bdiSync.Pct)) %)." } elseif ($esDiscoSubida) { "El BDInfo está vacío: pégalo o pulsa «Cargar BDInfo…»." } else { "El MediaInfo está vacío." }) "error"; return
     }
     # Última barrera: si se escribió un TMDB manual y todavía no se validó (por ejemplo, desde
     # el móvil justo antes de pulsar Subir), no permitimos enviar una categoría de la ficha antigua.
@@ -7824,6 +8033,8 @@ function Iniciar-Montaje($scope) {
     $cfg = [ordered]@{}
     $excluded=@(Get-HdzExcludedAudioTracks)
     if($excluded.Count){$cfg.PistasAudioExcluidas=$excluded}
+    $excludedSubs=@(Get-HdzExcludedSubTracks)
+    if($excludedSubs.Count){$cfg.PistasSubsExcluidas=$excludedSubs}
     # Si se ha deseleccionado algún archivo, el script procesará SOLO los marcados
     if (-not $remezclaOn -and $todosNombresScan.Count -gt 0 -and ($marcadosSel.Count -lt $todosNombresScan.Count -or @($script:videosElegidos).Count -gt 0)) {
         $cfg.ArchivosSeleccionados = @($marcadosSel)
@@ -8441,6 +8652,7 @@ $script:expHistorial.Add_Expanded({ Actualizar-HistorialVisible })
 function Reset-Todo {
     if ($script:networkBusy) { throw 'Espera a que termine la petición de red antes de reiniciar; no se duplica ni interrumpe una subida incierta.' }
     $script:timerIdiomasManuales.Stop()
+    try { Detener-Bdinfo } catch {}
     $script:idiomasManuales = @{}
     $script:remixPresentationKey = $null
     $script:remixPresentation = @()
@@ -8493,6 +8705,7 @@ function Reset-Todo {
     Actualizar-DescripcionCarpetas
     $script:ultimoScan = @()
     $script:audioTracksExcluded=@{};$script:audioTrackRows=@();if($ui.panAudioTracks){$ui.panAudioTracks.Children.Clear();$ui.cardAudioTracks.Visibility='Collapsed'}
+    $script:subTracksExcluded=@{};$script:subTrackRows=@();if($ui.panSubTracks){$ui.panSubTracks.Children.Clear();$ui.cardSubTracks.Visibility='Collapsed'}
     $script:seleccion = @{}
     $script:carpetaScan = $null
     $script:restringirSeleccion = $null
@@ -9243,6 +9456,7 @@ $win.Add_Closing({ param($sender, $eventArgs)
         return
     }
     Guardar-Ajustes
+    try { Detener-Bdinfo } catch {}
     try { Detener-Agente } catch {}
     foreach($timer in @($script:updPollTimer,$script:updTimer,$script:updRequestTimer)){if($timer){$timer.Stop()}}
     try {
@@ -9344,6 +9558,10 @@ function Get-TareasAuxiliares {
     if($script:capPreviewSync){
         $done=[int]$script:capPreviewSync.Done;$total=[int]$script:capPreviewSync.Total
         $tareas+=@{tipo='miniaturas';titulo='Cargando capturas';fase="Preparando miniaturas $done/$total";pct=$(if($total){[int](100*$done/$total)}else{0});detalle="$done/$total"}
+    }
+    if (Test-BdinfoEnCurso) {
+        $pctB = [int][Math]::Floor([double]$script:bdiSync.Pct)
+        $tareas += [PSCustomObject]@{ tipo = "bdinfo"; titulo = "Generando BDInfo"; pct = $pctB; fase = (Get-TextoProgresoBdinfo $script:bdiSync); detalle = "$pctB%" }
     }
     $torActiva = [bool]$script:torPreparando -or [bool]($script:torSync -and -not [bool]$script:torSync.Fin)
     if ($torActiva) {
@@ -9504,6 +9722,8 @@ function Componer-EstadoAgente {
         audioIdiomasVisible = ("$($ui.cardFiltroAudio.Visibility)" -eq "Visible")
         audioTracksSupported = $true
         audioTracks = @($script:audioTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
+        subTracksSupported = $true
+        subTracks = @($script:subTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
         conversionesAudioVisible = ("$($ui.cardConvAudio.Visibility)" -eq "Visible")
         defAudioVisible = ("$($ui.cardDefAudio.Visibility)" -eq "Visible")
         undAudioVisible = ("$($ui.cardUndAudio.Visibility)" -eq "Visible")
@@ -9715,7 +9935,10 @@ function Aplicar-ComandoAgente($c) {
             }
             "set_chip"    { if ($c.grupo) { Set-ChipValor "$($c.grupo)" $c.value } }
             "set_audio_track" {
-                foreach($row in @($script:audioTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){$row.Choice.IsChecked=[bool]$c.value;if($row.Choice.IsChecked){$script:audioTracksExcluded.Remove($row.Key)}else{$script:audioTracksExcluded[$row.Key]=@{Archivo=$row.Archivo;Id=$row.Id;Index=$row.Index}};break}}
+                foreach($row in @($script:audioTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTrackSelected 'Audio' $row ([bool]$c.value);break}}
+            }
+            "set_sub_track" {
+                foreach($row in @($script:subTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTrackSelected 'Sub' $row ([bool]$c.value);break}}
             }
             "set_audio_lang" {
                 $cod = "$($c.code)"

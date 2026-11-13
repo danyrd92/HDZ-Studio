@@ -14,6 +14,7 @@ foreach ($name in @('Invoke-ConversionDTSMultiidioma', 'Invoke-ExtraccionPGS', '
 function Write-DiagPaso($t) {}
 function Write-DiagLinea($t) {}
 function Test-HdzAudioTrackKept { $true }
+function Test-HdzSubTrackKept { $true }
 function Get-MediainfoJson($r) { $null }
 function Get-MkvmergeTrackIdMap($r) { @{} }
 $global:undPistasGui = @{}

@@ -32,3 +32,6 @@ microsoft.system.package.metadata/
 HDR10plus-a-HDR10
 __pycache__/
 node_modules/
+
+# Compilación de la app Android
+android/build/

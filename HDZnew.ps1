@@ -396,7 +396,14 @@ function Add-Incidencia($archivo, $mensaje) {
     $global:incidencias.Add($linea)
 }
 function Test-HdzAudioTrackKept($archivo,$id,[switch]$FfprobeIndex) {
-    foreach($item in @(Get-CfgGui 'PistasAudioExcluidas')) {
+    return (Test-HdzPistaNoExcluida 'PistasAudioExcluidas' $archivo $id -FfprobeIndex:$FfprobeIndex)
+}
+# Subtítulos desmarcados a mano en la GUI (misma forma que las de audio: Archivo + Id de mkvmerge + Index de ffprobe).
+function Test-HdzSubTrackKept($archivo,$id,[switch]$FfprobeIndex) {
+    return (Test-HdzPistaNoExcluida 'PistasSubsExcluidas' $archivo $id -FfprobeIndex:$FfprobeIndex)
+}
+function Test-HdzPistaNoExcluida($claveCfg,$archivo,$id,[switch]$FfprobeIndex) {
+    foreach($item in @(Get-CfgGui $claveCfg)) {
         if(-not $item -or -not $item.Archivo){continue}
         if([string]::Equals([IO.Path]::GetFullPath("$archivo"),[IO.Path]::GetFullPath("$($item.Archivo)"),[StringComparison]::OrdinalIgnoreCase)){
             $excludedId=if($FfprobeIndex){$item.Index}else{$item.Id}
@@ -1222,6 +1229,7 @@ function Get-SubsUnicosArchivo($rutasArchivosMkv, $incluirExternos = $false, $pr
             $contTextL++
             $claveMap = "Text+$contTextL"
             $idReal = if ($idMapL.ContainsKey($claveMap)) { $idMapL[$claveMap] } else { $pista.ID - 1 }
+            if (-not (Test-HdzSubTrackKept $ruta $idReal)) { continue }   # desmarcado a mano: no cuenta
             $langCode = "$($pista.Language)"
             if ([string]::IsNullOrWhiteSpace($langCode)) { $langCode = "und" }
             $tituloPista = "$($pista.Title)"
@@ -3038,6 +3046,8 @@ function Invoke-ExtraccionPGS($origenPistas, $idiomasSubsMantener = $null, $pref
             $ordinal++
             if ("$($_.codec_name)" -notmatch "(?i)pgs") { return }
             $id = if ($idMap.ContainsKey("Text+$ordinal")) { $idMap["Text+$ordinal"] } else { $_.index }
+            # Subtítulo desmarcado a mano en la GUI: no se extrae (tampoco irá al montaje).
+            if (-not (Test-HdzSubTrackKept $origenPistas $id)) { return }
             $lang = if ($_.tags -and $_.tags.language) { "$($_.tags.language)" } else { '' }
             if ($global:undPistasGui.ContainsKey("$origenPistas|$id|Sub")) { $lang = $global:undPistasGui["$origenPistas|$id|Sub"] }
             [PSCustomObject]@{
@@ -3142,6 +3152,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                 $claveMap = "$tipoClave+$($contIdx[$tipoClave])"
                 $idMkvmerge = if ($idMap.ContainsKey($claveMap)) { $idMap[$claveMap] } else { $pista.ID - 1 }
                 if($tipoClave -eq 'Audio' -and -not (Test-HdzAudioTrackKept $rutaArchivo $idMkvmerge)){continue}
+                if($tipoClave -eq 'Text' -and -not (Test-HdzSubTrackKept $rutaArchivo $idMkvmerge)){continue}
 
                 # REMEZCLA: filtra qué archivo aporta audio/subs. El vídeo (primer archivo) NO aporta
                 # audio/subs salvo que su carpeta tenga ese rol; los demás archivos, según su rol. El

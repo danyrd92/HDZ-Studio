@@ -746,7 +746,7 @@ function cmd(c){
   const payload={...c,requestId,session:remoteData.session};
   const isUpload=['subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
   if(isUpload)payload.subidaTab=remoteData.tabSubidaActual;
-  else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_lang','set_sub_tipo','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
+  else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_track','set_sub_lang','set_sub_tipo','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
   commandPending++;
   const run=async()=>{
     try{
@@ -886,14 +886,23 @@ function setCardVisible(id,visible){const el=document.getElementById(id);if(el)e
 let audioLangLock=0,lastAudioLangs='';
 function toggleAudioLang(el){const on=!el.classList.contains('on');el.classList.toggle('on',on);audioLangLock=Date.now()+2600;updateAudioLangCount();cmd({type:'set_audio_lang',code:el.dataset.v,value:on});}
 function updateAudioLangCount(){const box=document.getElementById('audioLangs'),n=box.querySelectorAll('.chip.on').length,t=box.querySelectorAll('.chip').length;document.getElementById('audioLangCount').textContent=t?(n+' / '+t):'';}
-let audioTracksKey='',audioTracksLock=0;
+let audioTracksKey='',audioTracksLock=0,subTracksKey='',subTracksLock=0;
+// Lista de pistas marcables (audio o subtítulos): misma forma de estado y de orden en los dos casos.
+function fillTrackRows(box,rows,d,kind,onToggle){
+ box.replaceChildren();
+ for(const row of rows){const label=document.createElement('label');label.className='row mt';label.style.cssText='align-items:flex-start;min-height:44px;cursor:pointer';const choice=document.createElement('input');choice.type='checkbox';choice.checked=!!row.sel;choice.style.cssText='width:20px;height:20px;flex-shrink:0;accent-color:#EF4444';choice.disabled=!remoteResponsive||!!d.busy;choice.dataset[kind]=String(row.id);
+ const text=document.createElement('span');text.style.cssText='overflow-wrap:anywhere;min-width:0;font-size:13px';text.textContent=row.etiqueta;label.append(choice,text);box.append(label);
+ choice.onchange=()=>onToggle(row,choice.checked);}
+}
 function renderAudioTracks(d){
  const card=document.getElementById('cardAudioTracksWeb');if(!card)return;const rows=d.audioTracks||[];card.style.display=d.audioTracksSupported&&rows.length?'':'none';
  if(Date.now()<audioTracksLock)return;const key=JSON.stringify([d.session,rows]);if(key===audioTracksKey)return;audioTracksKey=key;
- const box=document.getElementById('audioTrackRows');box.replaceChildren();
- for(const row of rows){const label=document.createElement('label');label.className='row mt';label.style.cssText='align-items:flex-start;min-height:44px;cursor:pointer';const choice=document.createElement('input');choice.type='checkbox';choice.checked=!!row.sel;choice.style.cssText='width:20px;height:20px;flex-shrink:0;accent-color:#EF4444';choice.disabled=!remoteResponsive||!!d.busy;choice.dataset.audioTrack=String(row.id);
- const text=document.createElement('span');text.style.cssText='overflow-wrap:anywhere;min-width:0;font-size:13px';text.textContent=row.etiqueta;label.append(choice,text);box.append(label);
- choice.onchange=()=>{audioTracksLock=Date.now()+2600;cmd({type:'set_audio_track',archivo:row.archivo,id:row.id,value:choice.checked})};}
+ fillTrackRows(document.getElementById('audioTrackRows'),rows,d,'audioTrack',(row,on)=>{audioTracksLock=Date.now()+2600;cmd({type:'set_audio_track',archivo:row.archivo,id:row.id,value:on})});
+}
+function renderSubTracks(d){
+ const card=document.getElementById('cardSubTracksWeb');if(!card)return;const rows=d.subTracks||[];card.style.display=d.subTracksSupported&&rows.length?'':'none';
+ if(Date.now()<subTracksLock)return;const key=JSON.stringify([d.session,rows]);if(key===subTracksKey)return;subTracksKey=key;
+ fillTrackRows(document.getElementById('subTrackRows'),rows,d,'subTrack',(row,on)=>{subTracksLock=Date.now()+2600;cmd({type:'set_sub_track',archivo:row.archivo,id:row.id,value:on})});
 }
 function renderAudioLangs(items,visible){
   const card=document.getElementById('cardAudioLangs'),box=document.getElementById('audioLangs');items=items||[];
@@ -1000,7 +1009,7 @@ function render(s){
   const cm=d.combos_sel||{};for(const n in cm)setCmb(n,cm[n]);
   const inp=d.inputs||{};for(const n in inp)setInp(n,inp[n]);
   renderAudioLangs(d.audioIdiomas,d.audioIdiomasVisible);
-  renderAudioTracks(d);
+  renderAudioTracks(d);renderSubTracks(d);
   renderConv(d.pistasConversionAudio,d.conversionesAudio,d.conversionesAudioVisible);
   setCardVisible('cardDefAudioWeb',!!d.defAudioVisible);
   renderUnd(d.undAudioSubs,'Audio','cardUndAudioWeb','undAudioRows',!!d.undAudioVisible);
@@ -1364,6 +1373,8 @@ const compactStyle=document.createElement('style');compactStyle.id='hdzCompact';
 function initHdzWorkspace(){
  const audioCard=document.createElement('div');audioCard.className='card workspace-wide';audioCard.id='cardAudioTracksWeb';audioCard.style.display='none';audioCard.innerHTML='<h3>Pistas de audio a mantener</h3><p class="d">Marca cada pista que quieras incluir. También se aplica el filtro de idiomas. Las pistas desmarcadas no se convierten.</p><div id="audioTrackRows"></div>';
  document.getElementById('cardAudioLangs').before(audioCard);
+ const subCard=document.createElement('div');subCard.className='card workspace-wide';subCard.id='cardSubTracksWeb';subCard.style.display='none';subCard.innerHTML='<h3>Pistas de subtítulos</h3><p class="d">Desmarca los subtítulos que no quieras en el resultado. Los filtros de idioma y tipo se aplican además.</p><div id="subTrackRows"></div>';
+ document.getElementById('cardSubsTiposWeb').after(subCard);
  const style=document.createElement('style');style.id='hdzWorkspace';style.textContent=`
  :root{--bg:#101318;--card:#181D24;--cardBorder:#303844;--chip:#222A34;--chipBorder:#36404D;--sub:#ABB7C6;--radius:12px;--radiusSm:8px;--accentSoft:rgba(239,68,68,.11)}
  body{background:var(--bg)}main{max-width:none!important;padding-top:24px}.pageintro{display:flex;align-items:center;margin:0 0 22px}.pageintro h1{font-size:26px!important;letter-spacing:-.6px;font-weight:650}.pageintro .eyebrow,.pageintro p,.pagebadge,.workoverview{display:none}

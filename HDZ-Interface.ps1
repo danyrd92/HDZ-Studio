@@ -124,7 +124,7 @@ function Initialize-HdzInterface {
     $script:outputSummary=[Windows.Controls.TextBlock]::new();$script:outputSummary.TextWrapping='Wrap';$script:outputSummary.Foreground=$win.Resources['SubBrush'];$script:outputSummary.Margin='12,8,12,8'
     [void]$output.Content.Children.Add($script:outputSummary)
     $output.Add_Expanded({ $paths=(Get-HdzInterfaceState).salidas; $script:outputSummary.Text="MKV: $($paths.mkv)`nTorrent: $($paths.torrent)" })
-    foreach ($pair in @(@($ui.panAudio,@('cardUndAudio','cardFiltroAudio','cardConvAudio','cardDefAudio')),@($ui.panSubs,@('cardUndSub','cardFiltro','cardSubsUnicos','cardPGS')))) {
+    foreach ($pair in @(@($ui.panAudio,@('panProyTabsA','cardAudioTracks','cardConvAudio','cardDefAudio','cardUndAudio')),@($ui.panSubs,@('panProyTabsS','cardSubTracks','cardSubsUnicos','cardPGS','cardUndSub')))) {
         $index=0
         foreach($name in $pair[1]) { $control=$ui[$name]; if($control){[void]$pair[0].Children.Remove($control);$pair[0].Children.Insert($index++,$control)} }
     }

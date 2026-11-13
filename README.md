@@ -98,8 +98,11 @@ con tu programa habitual: HDZ Studio no ripea discos. Después pulsa **💿 De u
    un archivo, así que el archivo queda como `Avatar - Fuego y ceniza (…).iso`, mientras que
    el título en el tracker conserva los dos puntos.
 3. Crea el torrent y rellena la ficha. El tipo es Full UHD o Full BluRay, las specs DV y HDR
-   se marcan solas, y la tarjeta *MediaInfo* pasa a ser *BDInfo*: si no se cargó sola, pega
-   el informe o usa **Cargar BDInfo…**.
+   se marcan solas, y la tarjeta *MediaInfo* pasa a ser *BDInfo*.
+   Si no había informe junto al ISO, al terminar el torrent **genera el BDInfo** él solo y lo
+   guarda junto al ISO (`<nombre>.bdinfo.txt`). Recorre el disco entero, así que tarda varios
+   minutos (unos 15 para un Blu-ray de 40 GB en disco duro); mientras, puedes seguir trabajando.
+   También puedes pulsar **Generar BDInfo**, pegar el informe o usar **Cargar BDInfo…**.
 4. **Generar capturas** las saca de la película principal del disco. Si puede, lee el ISO
    directamente; si no, lo monta un momento y lo vuelve a desmontar.
 
@@ -140,8 +143,10 @@ a encontrar un MKV o un torrent de hace semanas sin buscar a mano.
 2. Ejecútalo. Se instala en tu carpeta de usuario y no necesita permisos de administrador.
    Si te falta PowerShell 7, el instalador lo instala por ti desde el MSI que trae dentro.
 
-No hace falta instalar nada más: ffmpeg, MKVToolNix, MediaInfo y dovi_tool van incluidos y se
-comprueban con SHA256. Se publican aparte, en la versión
+No hace falta instalar nada más: ffmpeg, MKVToolNix, MediaInfo, dovi_tool y BDInfo van incluidos
+y se comprueban con SHA256. BDInfo es la versión de línea de comandos de
+[dotnetcorecorner/BDInfo](https://github.com/dotnetcorecorner/BDInfo) (licencia LGPL 2.1; su código
+fuente está en ese repositorio). Se publican aparte, en la versión
 [`herramientas`](../../releases/tag/herramientas).
 
 La primera vez que abras el programa te pedirá tus credenciales. Puedes saltártelo y

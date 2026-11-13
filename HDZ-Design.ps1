@@ -179,25 +179,39 @@ function Set-HdzWorkspaceStage($name) {
 }
 function New-HdzWorkspaceColumns($owner,$wideCards=@()) {
  $wrap=[Windows.Controls.WrapPanel]::new();$wrap.HorizontalAlignment='Stretch'
- $wrap.Tag=@{Width=-1;WideCards=(@($wideCards)+@((Get-HdzCard $ui.panListado),(Get-HdzCard $ui.panRemezcla),$ui.cardAudioTracks,$ui.cardConvAudio,$ui.cardUndAudio,$ui.cardUndSub))}
+ $wrap.Tag=@{Width=-1;WideCards=(@($wideCards)+@((Get-HdzCard $ui.panListado),(Get-HdzCard $ui.panRemezcla),$ui.cardAudioTracks,$ui.cardSubTracks,$ui.cardConvAudio,$ui.cardUndAudio,$ui.cardUndSub))}
  $children=@($owner.Children);$owner.Children.Clear()
- foreach($child in $children){$child.VerticalAlignment='Top';[void]$wrap.Children.Add($child)}
+ $visibilityWatch=[ComponentModel.DependencyPropertyDescriptor]::FromProperty([Windows.UIElement]::VisibilityProperty,[Windows.UIElement])
+ foreach($child in $children){
+  $child.VerticalAlignment='Top';[void]$wrap.Children.Add($child)
+  # Una tarjeta que aparece o desaparece cambia las parejas de la rejilla: se recoloca todo.
+  $visibilityWatch.AddValueChanged($child,{param($sender,$eventArgs) $parent=[Windows.LogicalTreeHelper]::GetParent($sender);if($parent -is [Windows.Controls.WrapPanel] -and $parent.Tag -is [hashtable]){Update-HdzWorkspaceColumns $parent}})
+ }
  [void]$owner.Children.Add($wrap)
  $wrap.Add_SizeChanged({param($sender,$eventArgs)
   if(-not $eventArgs.WidthChanged){return}
   $available=$sender.ActualWidth;if($available -le 0){return}
   if([Math]::Abs($sender.Tag.Width-$available) -lt .5){return};$sender.Tag.Width=$available
-  $columns=if($available -ge 1050){2}else{1};$half=[Math]::Floor(($available-20)/2)
-  $index=0
-  foreach($child in $sender.Children){
-   $wide=$columns -eq 1 -or $child -isnot [Windows.Controls.Border] -or $sender.Tag.WideCards -contains $child
-   $width=if($wide){$available}else{$half};if($child.Width -ne $width){$child.Width=$width}
-   $margin=if(-not $wide -and $index%2 -eq 0){[Windows.Thickness]::new(0,0,16,16)}else{[Windows.Thickness]::new(0,0,0,16)}
-   if($child.Margin -ne $margin){$child.Margin=$margin}
-   if($wide){$index=0}else{$index++}
-  }
+  Update-HdzWorkspaceColumns $sender
  })
  return $wrap
+}
+# Dos columnas a partir de 1050 px. Solo cuentan las tarjetas visibles (antes una oculta descuadraba
+# las parejas y dejaba huecos) y una tarjeta de media anchura sin pareja ocupa la fila entera.
+function Update-HdzWorkspaceColumns($wrap) {
+ $available=$wrap.Tag.Width;if($available -le 0){return}
+ $columns=if($available -ge 1050){2}else{1};$half=[Math]::Floor(($available-20)/2)
+ $visible=@($wrap.Children|Where-Object {$_.Visibility -ne 'Collapsed'})
+ $isHalf={param($c) $columns -eq 2 -and $c -is [Windows.Controls.Border] -and -not ($wrap.Tag.WideCards -contains $c)}
+ for($i=0;$i -lt $visible.Count;$i++){
+  $child=$visible[$i];$pair=$false
+  if((& $isHalf $child) -and $i+1 -lt $visible.Count -and (& $isHalf $visible[$i+1])){$pair=$true}
+  if($pair){
+   foreach($k in 0,1){$c=$visible[$i+$k];if($c.Width -ne $half){$c.Width=$half};$m=if($k -eq 0){[Windows.Thickness]::new(0,0,16,16)}else{[Windows.Thickness]::new(0,0,0,16)};if($c.Margin -ne $m){$c.Margin=$m}}
+   $i++;continue
+  }
+  if($child.Width -ne $available){$child.Width=$available};$m=[Windows.Thickness]::new(0,0,0,16);if($child.Margin -ne $m){$child.Margin=$m}
+ }
 }
 function Initialize-HdzWorkspace {
  $stageStyle=[Windows.Markup.XamlReader]::Parse(@'

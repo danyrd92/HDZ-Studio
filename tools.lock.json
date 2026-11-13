@@ -37,6 +37,16 @@
       "bytes": 3283968
     },
     {
+      "name": "BDInfo.exe",
+      "sha256": "fd4663ca10fc0b1fd6ff25d31fa31a0cf412929c854202fc3183130367a80dee",
+      "bytes": 72992470
+    },
+    {
+      "name": "lzfse.dll",
+      "sha256": "8ddd1a5c8d973e04476fb6e6043fc076b6ef6dbd87e4ab801109a5ce0b6569d0",
+      "bytes": 41472
+    },
+    {
       "name": "PowerShell-7.6.3-win-x64.msi",
       "sha256": "4f574fddb567f4d0756094424a1e4e2b2bbdde21de9f0965c0f988d24dc658e4",
       "bytes": 115384320

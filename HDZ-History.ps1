@@ -1,7 +1,19 @@
 # Historial local: nunca almacena credenciales ni reconstruye torrents.
 function Get-HdzHistoryDirectory {
     $directory = if ($script:hdzHistoryTestDirectory) { $script:hdzHistoryTestDirectory } else { Join-Path $env:APPDATA 'HDZ-Studio\Historial' }
-    if ($env:HDZ_HISTORY_TEST_DIR -and [IO.Path]::GetFullPath($env:HDZ_HISTORY_TEST_DIR).StartsWith([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\hdz_test_', [StringComparison]::OrdinalIgnoreCase)) { $directory=$env:HDZ_HISTORY_TEST_DIR }
+    # Pruebas: el historial va a una carpeta de %TEMP% (nunca a una ruta arbitraria). Antes solo se
+    # aceptaba %TEMP%\hdz_test_*, y los tests con otras carpetas (hdz_bitrate_*, hdz_subtypes_*…)
+    # acababan escribiendo en el historial REAL del usuario sin avisar.
+    $temp = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+    $enPrueba = ($env:HDZ_GUI_TEST -eq '1')
+    if ($env:HDZ_HISTORY_TEST_DIR) {
+        $pedido = [IO.Path]::GetFullPath($env:HDZ_HISTORY_TEST_DIR)
+        if ($pedido.StartsWith($temp, [StringComparison]::OrdinalIgnoreCase)) { $directory = $pedido }
+        elseif ($enPrueba) { $directory = Join-Path $temp 'hdz_test_historial' }
+    } elseif ($enPrueba -and -not $script:hdzHistoryTestDirectory) {
+        # Red de seguridad: en modo prueba jamás se toca el historial real.
+        $directory = Join-Path $temp 'hdz_test_historial'
+    }
     [void][IO.Directory]::CreateDirectory($directory)
     return $directory
 }

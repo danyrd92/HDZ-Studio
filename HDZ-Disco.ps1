@@ -332,6 +332,102 @@ function Get-HdzBdinfoJunto([string]$RutaIso) {
     return $null
 }
 
+# --- Generar el BDInfo (herramienta BDInfo de línea de comandos) -------------
+# bin\BDInfo.exe (BDInfo 2.x de línea de comandos, LGPL 2.1) lee el ISO directamente, sin montarlo.
+# Recorre el disco entero para medir los bitrates, así que tarda varios minutos (lee todo el ISO).
+function Get-HdzBdinfoExe([string]$Bin = '') {
+    if (-not $Bin) { $Bin = Join-Path $PSScriptRoot 'bin' }
+    $exe = Join-Path $Bin 'BDInfo.exe'
+    if (Test-Path -LiteralPath $exe -PathType Leaf) { return $exe }
+    return $null
+}
+
+# Dónde se guarda el informe: junto al ISO y con su nombre, para que Get-HdzBdinfoJunto lo encuentre
+# (y el renombrado del ISO lo arrastre consigo).
+function Get-HdzBdinfoDestino([string]$RutaIso) {
+    $dir = Split-Path -Parent $RutaIso
+    return (Join-Path $dir ([System.IO.Path]::GetFileNameWithoutExtension($RutaIso) + '.bdinfo.txt'))
+}
+
+# «Scanning 00185.M2TS | Progress:  12,64% | Elapsed: 00:01:05 | Remaining: 00:14:08»
+function Read-HdzBdinfoProgreso([string]$Linea) {
+    $m = [regex]::Match("$Linea", '(?i)Progress:\s*([\d.,]+)\s*%.*?Remaining:\s*([\d:]+)')
+    if (-not $m.Success) { return $null }
+    $pct = 0.0
+    [void][double]::TryParse(($m.Groups[1].Value -replace ',', '.'), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$pct)
+    return [pscustomobject]@{ Pct = [Math]::Max(0.0, [Math]::Min(100.0, $pct)); Restante = $m.Groups[2].Value }
+}
+
+# BDInfo informa de TODAS las playlists del disco (menús, extras, playlists trampa: 500 KB o más).
+# Para la ficha solo vale la de la película: la de MAYOR TAMAÑO. La más larga no sirve: hay discos con
+# playlists de ofuscación más largas que la película. Devuelve la cabecera del disco + esa playlist
+# (informe completo, pegado para foros y resumen rápido). Un informe de una sola playlist queda igual.
+function Select-HdzBdinfoPrincipal([string]$Texto) {
+    $partes = [regex]::Split("$Texto", '(?m)^\*{5,}[ 	]*?
+(?=PLAYLIST: )')
+    if ($partes.Count -lt 3) { return "$Texto".TrimEnd() }
+    $mejor = $null; $mayor = [long]-1
+    foreach ($sec in @($partes | Select-Object -Skip 1)) {
+        $m = [regex]::Match($sec, '(?m)^Size:\s+([\d,.]+)\s*bytes')
+        $bytes = [long]0
+        if ($m.Success) { [void][long]::TryParse(($m.Groups[1].Value -replace '[,.]', ''), [ref]$bytes) }
+        if ($bytes -gt $mayor) { $mayor = $bytes; $mejor = $sec }
+    }
+    $sep = '*' * 20
+    return ($partes[0].TrimEnd() + [Environment]::NewLine + [Environment]::NewLine + $sep + [Environment]::NewLine + $mejor.TrimEnd())
+}
+
+# Ejecuta BDInfo sobre el ISO y deja el informe en Get-HdzBdinfoDestino. Devuelve la ruta del informe.
+# $Sync (opcional, sincronizado): Pct, Restante y Cancelar (si se pone a $true, se detiene BDInfo).
+# Escribe primero en un temporal: un escaneo cortado nunca deja un informe a medias junto al ISO.
+function Invoke-HdzBdinfo {
+    param([Parameter(Mandatory)][string]$RutaIso, [string]$Exe = '', $Sync = $null, [string]$Destino = '')
+    if (-not $Exe) { $Exe = Get-HdzBdinfoExe }
+    if (-not $Exe -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw 'Falta la herramienta BDInfo (bin\BDInfo.exe). Actualiza HDZ Studio.' }
+    if (-not (Test-Path -LiteralPath $RutaIso -PathType Leaf)) { throw "No existe el ISO: $RutaIso" }
+    $RutaIso = (Resolve-Path -LiteralPath $RutaIso).Path
+    if (-not $Destino) { $Destino = Get-HdzBdinfoDestino $RutaIso }
+    $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ('hdz_bdinfo_' + [guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($tmpDir)
+    $tmpInforme = Join-Path $tmpDir 'informe.txt'
+    $psi = [Diagnostics.ProcessStartInfo]::new($Exe)
+    foreach ($a in @('-p', $RutaIso, '-o', $tmpInforme)) { $psi.ArgumentList.Add($a) }
+    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.WorkingDirectory = $tmpDir
+    $proc = $null
+    try {
+        $proc = [Diagnostics.Process]::Start($psi)
+        if ($Sync) { $Sync.Pid = $proc.Id }
+        $errTask = $proc.StandardError.ReadToEndAsync()
+        $ultimas = [Collections.Generic.List[string]]::new()
+        while ($null -ne ($linea = $proc.StandardOutput.ReadLine())) {
+            foreach ($parte in ($linea -split "`r")) {
+                if (-not $parte.Trim()) { continue }
+                $p = Read-HdzBdinfoProgreso $parte
+                if ($p -and $Sync) { $Sync.Pct = $p.Pct; $Sync.Restante = $p.Restante }
+                elseif (-not $p) { $ultimas.Add($parte.Trim()); if ($ultimas.Count -gt 20) { $ultimas.RemoveAt(0) } }
+            }
+            if ($Sync -and $Sync.Cancelar) { try { $proc.Kill($true) } catch {}; throw 'Generación del BDInfo cancelada.' }
+        }
+        $proc.WaitForExit()
+        $err = "$($errTask.Result)".Trim()
+        $texto = if (Test-Path -LiteralPath $tmpInforme) { [IO.File]::ReadAllText($tmpInforme) } else { '' }
+        if ($proc.ExitCode -ne 0 -or $texto -notmatch '(?im)^\s*(DISC INFO:|Disc (Title|Label):|PLAYLIST REPORT:)') {
+            $motivo = @($err, ($ultimas -join ' | ')) | Where-Object { $_ } | Select-Object -First 1
+            throw "BDInfo no pudo leer el disco (código $($proc.ExitCode))$(if ($motivo) { ": $motivo" })."
+        }
+        $texto = Select-HdzBdinfoPrincipal $texto
+        [IO.File]::WriteAllText($Destino, $texto.TrimEnd() + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+        if ($Sync) { $Sync.Pct = 100; $Sync.Restante = '00:00:00' }
+        return $Destino
+    } finally {
+        if ($proc -and -not $proc.HasExited) { try { $proc.Kill($true) } catch {} }
+        if ($proc) { $proc.Dispose() }
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # --- Nombre de la release ------------------------------------------------
 
 # Marca del tipo de disco para el nombre: UHDFull (2160p), BDFull (Blu-ray) o DVDFull.

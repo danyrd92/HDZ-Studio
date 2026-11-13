@@ -7,6 +7,11 @@ $optionalHdrItem=Get-Item -LiteralPath $optionalHdrTools -Force -ErrorAction Sil
 if($optionalHdrItem -and (-not $optionalHdrItem.Target -or (Test-Path -LiteralPath $optionalHdrItem.Target -PathType Container))){$parseFiles+=@(Get-ChildItem -LiteralPath $optionalHdrTools -File -Filter '*.ps1')}
 foreach($file in $parseFiles){$tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors);if($errors.Count){throw "Sintaxis incorrecta: $($file.Name): $errors"}}
 Write-Host "POWERSHELL_SYNTAX_OK ($($parseFiles.Count) scripts)"
+# Los tests no pueden tocar el historial real: se apuntan sus entradas actuales y al final se
+# comprueba que no ha aparecido ninguna que apunte a carpetas de prueba de %TEMP%.
+$realHistory=Join-Path $env:APPDATA 'HDZ-Studio\Historial'
+$historyBefore=@{};if(Test-Path -LiteralPath $realHistory){Get-ChildItem -LiteralPath $realHistory -File -Filter '*.json'|ForEach-Object{$historyBefore[$_.Name]=$true}}
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-HistoryIsolation.ps1'); if($LASTEXITCODE -ne 0){throw 'El historial de las pruebas no está aislado'}
 & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-PublicSafety.ps1'); if($LASTEXITCODE -ne 0){throw 'Hay datos privados en los archivos publicables'}
 # Las pruebas web usan Playwright: HDZ_PLAYWRIGHT, el runtime local de Codex si existe, o el paquete global.
 if(-not $env:HDZ_PLAYWRIGHT){
@@ -17,7 +22,7 @@ if(-not $env:HDZ_PLAYWRIGHT){
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioBitrateNames.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló el bitrate en nombres de audio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SinglePass.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló la lectura única de pistas (DTS/PGS)'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-UpdatePrivileges.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló la actualización con permisos e instalación personal'}
-foreach($test in @('Test-Media.ps1','Test-Hybrid.ps1','Test-CaptureHidden.ps1','Test-CapturePreviews.ps1','Test-CaptureTabs.ps1','Test-TabCrossing.ps1','Test-ImageHosts.ps1','Test-ScreenshotBbcode.ps1','Test-RefreshLogos.ps1','Test-LatestTorrent.ps1','Test-Gui.ps1','Test-VideoSelection.ps1','Test-TorrentLoad.ps1','Test-Disco.ps1','Test-Updater.ps1','Test-UpdateNetwork.ps1','Test-UpdateButtons.ps1')) {
+foreach($test in @('Test-Media.ps1','Test-Hybrid.ps1','Test-CaptureHidden.ps1','Test-CapturePreviews.ps1','Test-CaptureTabs.ps1','Test-TabCrossing.ps1','Test-ImageHosts.ps1','Test-ScreenshotBbcode.ps1','Test-RefreshLogos.ps1','Test-LatestTorrent.ps1','Test-Gui.ps1','Test-VideoSelection.ps1','Test-TorrentLoad.ps1','Test-Disco.ps1','Test-BdinfoGenerar.ps1','Test-Updater.ps1','Test-UpdateNetwork.ps1','Test-UpdateButtons.ps1')) {
     & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot $test)
     if($LASTEXITCODE -ne 0){throw "Falló $test"}
 }
@@ -35,10 +40,19 @@ if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoP
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioTracks.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista de audio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioTracks.ps1') -Remix;if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista en remezcla'}
 & node (Join-Path $PSScriptRoot 'test_web_audio_tracks.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista web'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SubTracks.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista de subtítulos'}
+& node (Join-Path $PSScriptRoot 'test_web_sub_tracks.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la selección de subtítulos web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Interface.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la nueva distribución WPF'}
 & node (Join-Path $PSScriptRoot 'test_web_interface.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la nueva distribución web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Design.ps1');if($LASTEXITCODE -ne 0){throw 'Falló el diseño compartido WPF'}
 & node (Join-Path $PSScriptRoot 'test_workspace_visual.cjs');if($LASTEXITCODE -ne 0){throw 'Falló el espacio de trabajo visual'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Responsiveness.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la fluidez del escritorio'}
 & node (Join-Path $PSScriptRoot 'test_responsiveness.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la estabilidad de los controles web'}
+$tempHdz=[IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')+'\hdz_'
+$historyLeaks=@(if(Test-Path -LiteralPath $realHistory){Get-ChildItem -LiteralPath $realHistory -File -Filter '*.json'|Where-Object{-not $historyBefore.ContainsKey($_.Name)}|Where-Object{
+    $e=Get-Content -LiteralPath $_.FullName -Raw|ConvertFrom-Json
+    @(@($e.video,$e.torrent)+@($e.sources))|Where-Object{"$_".StartsWith($tempHdz,[StringComparison]::OrdinalIgnoreCase)}
+}})
+if($historyLeaks.Count){throw "Las pruebas escribieron $($historyLeaks.Count) entrada(s) en el historial real: $(($historyLeaks|Select-Object -First 3).Name -join ', ')"}
+Write-Host 'REAL_HISTORY_UNTOUCHED_OK'
 Write-Host 'ALL_LOCAL_TESTS_OK'

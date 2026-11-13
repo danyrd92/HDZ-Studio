@@ -66,7 +66,7 @@ Must-Throw { Assert-HdzMux $twoVideos 2 0 $source } 'Aceptó dos vídeos reales'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'HDZnew.ps1'), [ref]$tokens, [ref]$errors)
 Assert ($errors.Count -eq 0) 'El motor contiene errores de sintaxis'
-foreach ($name in @('Invoke-ConversionAudioManual','Get-LanguageCode','Get-LanguageName','Get-PesoIdioma','Get-CfgGui','Test-HdzAudioTrackKept')) {
+foreach ($name in @('Invoke-ConversionAudioManual','Get-LanguageCode','Get-LanguageName','Get-PesoIdioma','Get-CfgGui','Test-HdzAudioTrackKept','Test-HdzSubTrackKept','Test-HdzPistaNoExcluida')) {
     $node = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
     . ([scriptblock]::Create($node.Extent.Text))
 }

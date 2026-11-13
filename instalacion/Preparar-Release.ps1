@@ -19,7 +19,7 @@ $scripts = @(
     'modern-menu/HDZStudioModernMenu.comhost.dll','modern-menu/HDZStudioModernMenu.deps.json',
     'modern-menu/HDZStudioModernMenu.dll','modern-menu/HDZStudioModernMenu.runtimeconfig.json','modern-menu/HDZStudioModernMenu.X.manifest'
 )
-$toolNames = @('ffmpeg.exe','ffprobe.exe','mkvmerge.exe','mkvextract.exe','mkvpropedit.exe','MediaInfo.exe','dovi_tool.exe','PowerShell-7.6.3-win-x64.msi')
+$toolNames = @('ffmpeg.exe','ffprobe.exe','mkvmerge.exe','mkvextract.exe','mkvpropedit.exe','MediaInfo.exe','dovi_tool.exe','BDInfo.exe','lzfse.dll','PowerShell-7.6.3-win-x64.msi')
 $toolFiles = @($toolNames | ForEach-Object { $file=Join-Path $root ('bin/' + $_); @{name=$_;sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant();bytes=(Get-Item -LiteralPath $file).Length} })
 foreach ($name in $scripts) { if (-not (Test-Path -LiteralPath (Join-Path $root $name) -PathType Leaf)) { throw "Falta $name" } }
 # La clave privada no entra en el workspace: DPAPI para el usuario publicador.
