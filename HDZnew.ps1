@@ -2169,6 +2169,8 @@ function Resolve-IdiomasSubs($origenesPistas, $archivoPrincipal, $memoria, $idio
                 $contTextL++
                 $claveMap = "Text+$contTextL"
                 $idReal = if ($idMapL.ContainsKey($claveMap)) { $idMapL[$claveMap] } else { $pista.ID - 1 }
+                # Desmarcado a mano en la GUI: no llega al archivo final, su idioma da igual.
+                if (-not (Test-HdzSubTrackKept $rutaArchivo $idReal)) { continue }
                 $langCode = $pista.Language
                 if ([string]::IsNullOrWhiteSpace($langCode) -or $langCode -eq "und") {
                     # D4: clave de memoria incluye path del archivo para evitar colisiones
@@ -2284,6 +2286,8 @@ function Resolve-IdiomasAudios($origenesPistas, $archivoPrincipal, $memoria, $id
                 $contAudL++
                 $claveMap = "Audio+$contAudL"
                 $idReal = if ($idMapL.ContainsKey($claveMap)) { $idMapL[$claveMap] } else { $pista.ID - 1 }
+                # Desmarcado a mano en la GUI: no llega al archivo final, su idioma da igual.
+                if (-not (Test-HdzAudioTrackKept $rutaArchivo $idReal)) { continue }
                 $langCode = $pista.Language
                 if ([string]::IsNullOrWhiteSpace($langCode) -or $langCode -eq "und") {
                     $audiosDesconocidos += [PSCustomObject]@{
