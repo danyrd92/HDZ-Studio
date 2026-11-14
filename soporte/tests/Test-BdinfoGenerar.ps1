@@ -118,6 +118,8 @@ if($real){
     $error3=$null;try{[void](Invoke-HdzBdinfo -RutaIso $iso -Exe $real)}catch{$error3=$_.Exception.Message}
     Assert ($error3 -match 'BDInfo no pudo leer el disco') "BDInfo real con un ISO inválido: $error3"
     Assert (-not (Test-Path -LiteralPath $ruta)) 'BDInfo real dejó un informe a medias'
+    $logBdi=Join-Path (Split-Path -Parent $real) ('error_' + (Split-Path -Leaf $iso) + '.log')
+    Assert (-not (Test-Path -LiteralPath $logBdi)) "BDInfo real dejó su log de error en bin: $logBdi"
 } else { Write-Host 'AVISO: bin\BDInfo.exe no está; se omite la pasada real.' }
 
 # --- 5. Interfaz: en segundo plano, a su pestaña ---

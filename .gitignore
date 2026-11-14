@@ -1,6 +1,9 @@
 # Herramientas de terceros: se publican en la release «herramientas», no en git.
 bin/*.exe
 bin/*.msi
+bin/*.dll
+# Log que BDInfo.exe escribe junto a sí mismo cuando no puede leer un disco.
+bin/error_*.log
 
 # Paquetes, respaldos y salidas generadas
 distribucion/

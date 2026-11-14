@@ -425,6 +425,10 @@ function Invoke-HdzBdinfo {
         if ($proc -and -not $proc.HasExited) { try { $proc.Kill($true) } catch {} }
         if ($proc) { $proc.Dispose() }
         Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        # Cuando no puede leer el disco, BDInfo añade la traza a «error_<nombre del ISO>.log» junto a
+        # su exe (en bin\). El motivo ya va en el aviso de arriba: no dejamos ese log acumulándose.
+        $logBdi = Join-Path (Split-Path -Parent $Exe) ('error_' + [IO.Path]::GetFileName($RutaIso) + '.log')
+        Remove-Item -LiteralPath $logBdi -Force -ErrorAction SilentlyContinue
     }
 }
 
