@@ -2298,6 +2298,7 @@ function Reconstruir-ChipsIdiomas($detectados = $null) {
         $tb.Content = if ($idi.Count) { "$($idi.Nom)  ·  $($idi.Count)" } else { "$($idi.Nom)" }
         $tb.Tag = $idi.Cod
         if ($marcadosPrev -contains "$($idi.Cod)") { $tb.IsChecked = $true }
+        $tb.Add_Click({ param($s) Sync-HdzFilasConFiltro 'Sub' "$($s.Tag)" })
         [void]$ui.wrapIdiomas.Children.Add($tb)
         $script:chipsIdiomas += $tb
     }
@@ -2315,6 +2316,7 @@ function Reconstruir-ChipsTiposSub {
         $tb.Content = $t.T
         $tb.Tag = $t.V
         $tb.IsChecked = $true
+        $tb.Add_Click({ param($s) Sync-HdzFilasConFiltro 'Sub' $null "$($s.Tag)" })
         [void]$ui.wrapTiposSub.Children.Add($tb)
         $script:chipsTiposSub += $tb
     }
@@ -2341,7 +2343,7 @@ function Reconstruir-ChipsIdiomasAudio($detectados = $null) {
         if ("$($idi.Cod)" -eq 'und') { $tb.ToolTip = 'Pistas de audio sin idioma. Desmárcalo para quitarlas del archivo final.' }
         $tb.Tag = "$($idi.Cod)"
         $tb.IsChecked = if ($teniaSeleccion) { $marcadosPrev -contains "$($idi.Cod)" } else { $true }
-        $tb.Add_Click({ $script:idiomasAudioSeleccionUsuario = $true })
+        $tb.Add_Click({ param($s) $script:idiomasAudioSeleccionUsuario = $true; Sync-HdzFilasConFiltro 'Audio' "$($s.Tag)" })
         [void]$ui.wrapIdiomasAudio.Children.Add($tb)
         $script:chipsIdiomasAudio += $tb
     }
@@ -2384,6 +2386,16 @@ Add-ChipGroup $ui.chFiltro "filtro" @(
     @{T="Solo castellano e inglés"; V="CAST_ENG"},
     @{T="Personalizada"; V="PERSONALIZADA"}
 ) 0 { Actualizar-Filtro }
+# Cambiar de modo (Mantener todos / Solo cast. e inglés / Personalizada) recalcula las filas de
+# subtítulos. Con Click y no con Checked: restaurar una pestaña no debe pisar su selección guardada.
+$script:filtroSubPrevio = Get-ChipValor 'filtro'
+function Cambiar-ModoFiltroSub {
+    $v = Get-ChipValor 'filtro'
+    if ("$v" -eq "$($script:filtroSubPrevio)") { return }
+    $script:filtroSubPrevio = $v
+    Sync-HdzFilasConFiltro 'Sub'
+}
+foreach ($e in @($script:gruposChips['filtro'])) { $e.Radio.Add_Click({ Cambiar-ModoFiltroSub }) }
 Add-ChipGroup $ui.chExtraerPGS "extraerPGS" @(
     @{T="No extraer"; V=$false},
     @{T="Sí, extraer y pausar"; V=$true}
@@ -2929,7 +2941,8 @@ function Build-HdzAudioTracks($scope) {
         $language=Get-IdiomaPistaGui $audio 'Audio';$formato="$(Get-CodecComercial $audio.Codec $audio.Profile) $(Get-NombreLayout $audio.Channels)"
         $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
         if($audio.Title){$label+=" · $($audio.Title)"}
-        $rows+=New-HdzTrackRow 'Audio' $key $source $id ([int]$audio.Index) @("#$id",(NombreIdioma $language),$formato,"$($audio.Title)") $label
+        $row=New-HdzTrackRow 'Audio' $key $source $id ([int]$audio.Index) @("#$id",(NombreIdioma $language),$formato,"$($audio.Title)") $label
+        $row|Add-Member Pista $audio;$rows+=$row
     }}
     $script:audioTrackRows=$rows;Add-HdzTrackRows 'Audio' $rows
     $ui.cardAudioTracks.Visibility=if($rows.Count -or $ui.cardFiltroAudio.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
@@ -2943,14 +2956,43 @@ function Build-HdzSubTracks($scope) {
         $id=if($null -ne $sub.TrackId){[int]$sub.TrackId}else{[int]$sub.Index};$key="$source|$id"
         if($seen.ContainsKey($key)){continue};$seen[$key]=$true
         $language=Get-IdiomaPistaGui $sub 'Sub';$formato=Get-HdzFormatoSubGui $sub.Codec
-        if($sub.Forced -or "$($sub.Title)" -match '(?i)forced|forzad'){$formato+=' · Forzado'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){$formato+=' · SDH'}
+        $tipoSub=if($sub.Forced -or "$($sub.Title)" -match '(?i)forced|forzad'){'Forzados'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){'SDH'}else{'Completos'}
+        if($tipoSub -eq 'Forzados'){$formato+=' · Forzado'}elseif($tipoSub -eq 'SDH'){$formato+=' · SDH'}
         $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
         if($sub.Title){$label+=" · $($sub.Title)"}
-        $rows+=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @("#$id",(NombreIdioma $language),$formato,"$($sub.Title)") $label
+        $row=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @("#$id",(NombreIdioma $language),$formato,"$($sub.Title)") $label
+        $row|Add-Member Pista $sub;$row|Add-Member TipoSub $tipoSub;$rows+=$row
     }}
     $script:subTrackRows=$rows;Add-HdzTrackRows 'Sub' $rows
     $ui.cardSubTracks.Visibility=if($rows.Count -or $ui.cardFiltro.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
     Update-HdzTrackBadge 'Sub'
+}
+# Filtros → filas: al marcar/desmarcar un idioma o un tipo, las pistas a las que afecta se marcan o
+# desmarcan con él. Solo se tocan las filas de ese idioma/tipo (no se pisan otras decisiones a mano);
+# sin idioma ni tipo (cambio de modo del filtro de subtítulos) se recalculan todas.
+# Solo se llama desde clics y órdenes de la web, nunca al reconstruir ni al restaurar una pestaña.
+function Test-HdzIdiomaSubPasa($cod) {
+    switch ("$(Get-ChipValor 'filtro')") {
+        'CAST_ENG'      { return ($cod -in @('es','eng')) }
+        'PERSONALIZADA' { return (@($script:chipsIdiomas | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" }) -contains $cod) }
+        default         { return $true }
+    }
+}
+function Sync-HdzFilasConFiltro($tipo, $idioma = $null, $tipoSub = $null) {
+    foreach ($row in @((Get-HdzTrackState $tipo).Rows)) {
+        if (-not $row.Pista) { continue }
+        $cod = Get-IdiomaPistaGui $row.Pista $tipo
+        if ($idioma -and $cod -ne $idioma) { continue }
+        if ($tipo -eq 'Sub') {
+            if ($tipoSub -and $row.TipoSub -ne $tipoSub) { continue }
+            $chipTipo = @($script:chipsTiposSub | Where-Object { "$($_.Tag)" -eq $row.TipoSub })[0]
+            $on = (Test-HdzIdiomaSubPasa $cod) -and (-not $chipTipo -or [bool]$chipTipo.IsChecked)
+        } else {
+            $chip = @($script:chipsIdiomasAudio | Where-Object { "$($_.Tag)" -eq $cod })[0]
+            $on = (-not $chip -or [bool]$chip.IsChecked)
+        }
+        if ([bool]$row.Choice.IsChecked -ne $on) { Set-HdzTrackSelected $tipo $row $on }
+    }
 }
 function Get-HdzExcludedAudioTracks { @($script:audioTracksExcluded.Values) }
 function Get-HdzExcludedSubTracks { @($script:subTracksExcluded.Values) }
@@ -4155,7 +4197,7 @@ function Restore-DecisionesTab($d) {
     }
     if ($d.ExtraerPGS)   { Set-ChipValor "extraerPGS" $d.ExtraerPGS }
     if ($d.ConservarPGS) { Set-ChipValor "conservarPGS" $d.ConservarPGS }
-    if ($d.Filtro)       { Set-ChipValor "filtro" $d.Filtro; Actualizar-Filtro }
+    if ($d.Filtro)       { Set-ChipValor "filtro" $d.Filtro; Actualizar-Filtro; $script:filtroSubPrevio = Get-ChipValor "filtro" }
     if ($d.Filtro -eq "PERSONALIZADA" -and $d.FiltroLangs) {
         foreach ($tb in $script:chipsIdiomas) { $tb.IsChecked = (@($d.FiltroLangs) -contains "$($tb.Tag)") }
     }
@@ -9934,7 +9976,7 @@ function Aplicar-ComandoAgente($c) {
                 $onDone={param($urls) Complete-HdzDescriptionImages $ownerId @($urls)}.GetNewClosure()
                 Start-SubidaAsync @("$($c.path)") $onDone @($ui.btnDescSubir)
             }
-            "set_chip"    { if ($c.grupo) { Set-ChipValor "$($c.grupo)" $c.value } }
+            "set_chip"    { if ($c.grupo) { Set-ChipValor "$($c.grupo)" $c.value; if ("$($c.grupo)" -eq 'filtro') { Cambiar-ModoFiltroSub } } }
             "set_audio_track" {
                 foreach($row in @($script:audioTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTrackSelected 'Audio' $row ([bool]$c.value);break}}
             }
@@ -9947,6 +9989,7 @@ function Aplicar-ComandoAgente($c) {
                     if ("$($tbAud.Tag)" -eq $cod) {
                         $script:idiomasAudioSeleccionUsuario = $true
                         $tbAud.IsChecked = [bool]$c.value
+                        Sync-HdzFilasConFiltro 'Audio' $cod
                         break
                     }
                 }
@@ -9954,13 +9997,13 @@ function Aplicar-ComandoAgente($c) {
             "set_sub_lang" {
                 $cod = "$($c.code)"
                 foreach ($tbSub in @($script:chipsIdiomas)) {
-                    if ("$($tbSub.Tag)" -eq $cod) { $tbSub.IsChecked = [bool]$c.value; break }
+                    if ("$($tbSub.Tag)" -eq $cod) { $tbSub.IsChecked = [bool]$c.value; Sync-HdzFilasConFiltro 'Sub' $cod; break }
                 }
             }
             "set_sub_tipo" {
                 $tipo = "$($c.code)"
                 foreach ($tbTipo in @($script:chipsTiposSub)) {
-                    if ("$($tbTipo.Tag)" -eq $tipo) { $tbTipo.IsChecked = [bool]$c.value; break }
+                    if ("$($tbTipo.Tag)" -eq $tipo) { $tbTipo.IsChecked = [bool]$c.value; Sync-HdzFilasConFiltro 'Sub' $null $tipo; break }
                 }
             }
             "set_sub_unico" {
