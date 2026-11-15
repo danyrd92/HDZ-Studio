@@ -39,6 +39,7 @@ if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoP
 & node (Join-Path $PSScriptRoot 'test_web_languages.cjs'); if($LASTEXITCODE -ne 0){throw 'Falló la corrección de idiomas web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioTracks.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista de audio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioTracks.ps1') -Remix;if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista en remezcla'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AudioUnd.ps1');if($LASTEXITCODE -ne 0){throw 'Falló quitar los audios sin idioma'}
 & node (Join-Path $PSScriptRoot 'test_web_audio_tracks.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SubTracks.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la selección por pista de subtítulos'}
 & node (Join-Path $PSScriptRoot 'test_web_sub_tracks.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la selección de subtítulos web'}

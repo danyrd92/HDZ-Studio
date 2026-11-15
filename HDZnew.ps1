@@ -2270,8 +2270,14 @@ function Resolve-IdiomasSubs($origenesPistas, $archivoPrincipal, $memoria, $idio
 # Resuelve idiomas indeterminados de pistas de audio (internas y externas) preguntando al usuario.
 # Comparte la misma estructura que Resolve-IdiomasSubs pero ofrece la opción "U" para dejar como und,
 # porque en audio aceptamos und (la conversión a EAC3 es por compatibilidad y no depende del idioma).
-function Resolve-IdiomasAudios($origenesPistas, $archivoPrincipal, $memoria, $idiomaGlobalUnd = $null) {
+function Resolve-IdiomasAudios($origenesPistas, $archivoPrincipal, $memoria, $idiomaGlobalUnd = $null, $idiomasAudioMantener = $null) {
     $audiosDesconocidos = @()
+    # Si el filtro de idiomas de audio deja fuera 'und' (chip «Sin idioma» desmarcado), esas pistas
+    # no llegan al archivo final: no hay idioma que decidir ni incidencia que anotar.
+    $quitarUnd = $false
+    if ($idiomasAudioMantener -and @($idiomasAudioMantener).Count -gt 0) {
+        $quitarUnd = -not (@($idiomasAudioMantener | ForEach-Object { Get-LanguageCode "$_" "" }) -contains 'und')
+    }
 
     $listaArchivos = @($origenesPistas)
 
@@ -2290,6 +2296,8 @@ function Resolve-IdiomasAudios($origenesPistas, $archivoPrincipal, $memoria, $id
                 if (-not (Test-HdzAudioTrackKept $rutaArchivo $idReal)) { continue }
                 $langCode = $pista.Language
                 if ([string]::IsNullOrWhiteSpace($langCode) -or $langCode -eq "und") {
+                    # Filtrada por idioma (salvo que la GUI le haya dado uno a esta pista concreta).
+                    if ($quitarUnd -and -not $global:undPistasGui.ContainsKey("$rutaArchivo|$idReal|Audio")) { continue }
                     $audiosDesconocidos += [PSCustomObject]@{
                         Origen = "Interno"
                         ID = $idReal
@@ -4572,7 +4580,13 @@ foreach ($grupo in $grupos) {
         # subtítulos después. En híbrido recorre AMBOS archivos del par.
         # En HOMOGÉNEO, si el pre-escaneo del lote ya decidió el idioma de los 'und', se aplica
         # sin volver a preguntar (pasamos el idioma global).
-        Resolve-IdiomasAudios $origenesPistas $archivoPrincipal $respuestasIdiomasAudios $global:idiomaUndAudioLote
+        # Idiomas de audio a conservar (global o de esta película): también los usa Resolve-IdiomasAudios
+        # para no avisar de pistas 'und' que el filtro va a quitar.
+        $idiomasAudioMantenerArchivo = $global:idiomasAudioMantener
+        if ($pfDec -and ($pfDec.PSObject.Properties.Name -contains "AudioLangs") -and @($pfDec.AudioLangs).Count -gt 0) {
+            $idiomasAudioMantenerArchivo = @($pfDec.AudioLangs | ForEach-Object { "$_" } | Where-Object { $_ })
+        }
+        Resolve-IdiomasAudios $origenesPistas $archivoPrincipal $respuestasIdiomasAudios $global:idiomaUndAudioLote $idiomasAudioMantenerArchivo
         Resolve-IdiomasSubs   $origenesPistas $archivoPrincipal $respuestasIdiomasSubs   $global:idiomaUndSubLote
 
         # Idiomas de subtítulos a mantener: VA PRIMERO para no preguntar por subs de idiomas
@@ -4731,10 +4745,6 @@ foreach ($grupo in $grupos) {
         # Preguntar forzado/completo de los subs EXTERNOS únicos (SRT sueltos o convertidos de PGS),
         # ahora que ya están en la carpeta (tras la pausa de Subtitle Edit, si la hubo).
         Resolve-SubsExternosForzados $origenesPistas $prefijoSrtPropio $decisionesSubUnico $idiomasSubsMantener
-        $idiomasAudioMantenerArchivo = $global:idiomasAudioMantener
-        if ($pfDec -and ($pfDec.PSObject.Properties.Name -contains "AudioLangs") -and @($pfDec.AudioLangs).Count -gt 0) {
-            $idiomasAudioMantenerArchivo = @($pfDec.AudioLangs | ForEach-Object { "$_" } | Where-Object { $_ })
-        }
         $analisis = Build-PistasBrutas $origenesPistas $esHibrido $memoriaCombinada $decisionPGS $idiomasSubsMantener $prefijoSrtPropio $idiomasAudioMantenerArchivo
         $idVideo    = $analisis.IdVideo
         $altoVideo  = $analisis.AltoVideo

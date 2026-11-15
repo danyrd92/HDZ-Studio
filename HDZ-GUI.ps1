@@ -2335,7 +2335,10 @@ function Reconstruir-ChipsIdiomasAudio($detectados = $null) {
     foreach ($idi in @($detectados)) {
         $tb = New-Object System.Windows.Controls.Primitives.ToggleButton
         $tb.Style = $win.Resources["ChipToggle"]
-        $tb.Content = "$($idi.Nom)  ·  $($idi.Count)"
+        # Las pistas sin idioma también salen como chip: desmarcarlo las quita del archivo final.
+        $nomChip = if ("$($idi.Cod)" -eq 'und') { 'Sin idioma (und)' } else { "$($idi.Nom)" }
+        $tb.Content = "$nomChip  ·  $($idi.Count)"
+        if ("$($idi.Cod)" -eq 'und') { $tb.ToolTip = 'Pistas de audio sin idioma. Desmárcalo para quitarlas del archivo final.' }
         $tb.Tag = "$($idi.Cod)"
         $tb.IsChecked = if ($teniaSeleccion) { $marcadosPrev -contains "$($idi.Cod)" } else { $true }
         $tb.Add_Click({ $script:idiomasAudioSeleccionUsuario = $true })
@@ -3541,10 +3544,9 @@ function Aplicar-Analisis($filas) {
                 if ($a.Title) { $etiq += " · «$($a.Title)»" }
                 $id = if ($null -ne $a.TrackId) { $a.TrackId } else { $a.Index }
                 $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
-            if ($cAudio -ne 'und') {
-                if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
-                $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
-            }
+            # 'und' también cuenta: su chip «Sin idioma (und)» permite quitar esas pistas.
+            if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
+            $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
         }
         foreach ($s in $f.Subs) {
             $c = Get-IdiomaPistaGui $s 'Sub'
@@ -4013,10 +4015,9 @@ function Construir-Adaptacion($selScope) {
                 if ($a.Title) { $etiq += " · «$($a.Title)»" }
                 $id = if ($null -ne $a.TrackId) { $a.TrackId } else { $a.Index }
                 $pistasUndAudio += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
-            if ($cAudio -ne 'und') {
-                if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
-                $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
-            }
+            # 'und' también cuenta: su chip «Sin idioma (und)» permite quitar esas pistas.
+            if (-not $idiomasAudio.Contains($cAudio)) { $idiomasAudio[$cAudio] = 0 }
+            $idiomasAudio[$cAudio] = $idiomasAudio[$cAudio] + 1
         }
         foreach ($s in $f.Subs) {
             $c = Get-IdiomaPistaGui $s 'Sub'
