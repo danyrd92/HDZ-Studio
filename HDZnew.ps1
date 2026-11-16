@@ -3112,6 +3112,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
     # El video se lee SOLO del primer archivo (el preferente / mejor metadata).
     # Las pistas de audio/subs se leen de TODOS los archivos y luego se deduplican.
     $primerArchivo = $listaArchivos[0]
+    $videoElegido = $false
 
     for ($idxArchivo = 0; $idxArchivo -lt $listaArchivos.Count; $idxArchivo++) {
         $rutaArchivo = $listaArchivos[$idxArchivo]
@@ -3130,6 +3131,11 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
             if ($pista.'@type' -eq "Video" -and $rutaArchivo -eq $primerArchivo) {
                 $contIdx.Video++
                 $claveMap = "Video+$($contIdx.Video)"
+                # Solo la PRIMERA pista de vídeo real. Las miniaturas guardadas como pista de vídeo
+                # (PNG/JPEG, típicas de descargas de YouTube) no son el vídeo: antes la última pista
+                # pisaba a la buena y el MKV salía con dos vídeos (y la verificación lo rechazaba).
+                if ($videoElegido -or "$($pista.Format)" -match '(?i)^(PNG|JPEG|MJPEG|MJPG|BMP|GIF|WebP)$') { continue }
+                $videoElegido = $true
                 $idVideo = if ($idMap.ContainsKey($claveMap)) { $idMap[$claveMap] } else { $pista.ID - 1 }
                 $altoVideo = [int]$pista.Height
                 $codecVideo = if     ($pista.Format -match "(?i)AV1")              { "AV1" }
@@ -3663,7 +3669,8 @@ function Invoke-Ensamblaje($archivoPrincipal, $origenesPistas, $esHibrido, $vide
         # los dejó). En REMEZCLA, inputs 1+ = las otras carpetas (--no-video) con sus audios/subs.
         for ($fi = 0; $fi -lt $listaArchivos.Count; $fi++) {
             $mkv = $listaArchivos[$fi]
-            if ($fi -gt 0) { $argsMkv += "--no-video" }
+            # Del archivo de vídeo solo entra la pista elegida (no carátulas ni vídeos extra).
+            if ($fi -gt 0) { $argsMkv += "--no-video" } else { $argsMkv += "-d"; $argsMkv += "$idVideoSalida" }
             $audIds = $audiosPorMkv[$mkv]
             $subIds = $subsPorMkv[$mkv]
             if ($audIds.Count -gt 0) { $argsMkv += "-a"; $argsMkv += ($audIds -join ",") }

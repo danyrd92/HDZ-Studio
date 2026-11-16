@@ -24,8 +24,12 @@ try {
     Actualizar-IdiomasManuales
     Assert (@($script:chipsIdiomasAudio).Count -eq 0) "Queda un chip oculto: [$(@($script:chipsIdiomasAudio|ForEach-Object {"$($_.Tag)"}) -join ',')]"
     Assert ("$($ui.cardFiltroAudio.Visibility)" -ne 'Visible') 'Con un solo idioma no debe mostrarse el filtro'
-    foreach($row in @((Get-HdzTrackState 'Audio').Rows)){if(-not [bool]$row.Choice.IsChecked){Set-HdzTrackSelected 'Audio' $row $true}}
     $ui.txtTitulo.Text='Audio Corregido';$ui.txtAno.Text='2026';$ui.swSerie.IsChecked=$true
+    # Con todas las pistas aún desmarcadas, procesar dejaría los vídeos mudos: debe bloquearse.
+    $script:testJobsMontaje=@();Iniciar-Montaje 'unico'
+    Assert ($script:testJobsMontaje.Count -eq 0) 'Deja procesar vídeos sin ninguna pista de audio'
+    Assert ("$($ui.lblEstado.Text)" -match 'sin audio') "Aviso inesperado: $($ui.lblEstado.Text)"
+    foreach($row in @((Get-HdzTrackState 'Audio').Rows)){if(-not [bool]$row.Choice.IsChecked){Set-HdzTrackSelected 'Audio' $row $true}}
     $script:testJobsMontaje=@();Iniciar-Montaje 'unico'
     Assert ($script:testJobsMontaje.Count -eq 1) "No deja procesar: $($ui.lblEstado.Text)"
     $config=$script:testJobsMontaje[0].CfgJson|ConvertFrom-Json

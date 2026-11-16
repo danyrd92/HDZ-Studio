@@ -8061,6 +8061,18 @@ function Iniciar-Montaje($scope) {
         $ui.navProyecto.IsChecked = $true
         return
     }
+    # Un vídeo con TODAS sus pistas de audio desmarcadas saldría mudo: casi siempre es un descuido
+    # (p. ej. tras quitar idiomas mal etiquetados y corregirlos). En remezcla el audio puede venir de otra carpeta.
+    if (-not $remezclaOn) {
+        $sinAudio = @(@($script:audioTrackRows) | Group-Object Archivo | Where-Object { @($_.Group | Where-Object { $_.Choice.IsChecked }).Count -eq 0 })
+        if ($sinAudio.Count -gt 0) {
+            $nombreMudo = Split-Path "$($sinAudio[0].Name)" -Leaf
+            $resto = if ($sinAudio.Count -gt 1) { " (y $($sinAudio.Count - 1) más)" } else { "" }
+            Set-Estado "«$nombreMudo»$resto se quedaría sin audio: marca al menos una pista en «Audio y subtítulos»." "error"
+            $ui.navProyecto.IsChecked = $true
+            return
+        }
+    }
     if ($filtroVal -eq "PERSONALIZADA" -and $idiomasMarcados.Count -eq 0) {
         Set-Estado "Filtro personalizado de subtítulos: marca al menos un idioma." "error"
         $ui.navProyecto.IsChecked = $true
