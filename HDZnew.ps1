@@ -4462,6 +4462,8 @@ foreach ($grupo in $grupos) {
     $global:idxGrupoGui++
 
     # D2: try/catch por episodio para que un fallo no aborte todo el script
+    # Se vacía en cada vuelta: el catch solo debe borrar el temporal de ESTE episodio.
+    $archivoSalidaTemporal = $null
     try {
 
         $hibridoInfo = Resolve-Hibrido $grupo
@@ -5137,6 +5139,14 @@ foreach ($grupo in $grupos) {
         # Limpieza defensiva de temporales (nombres clásicos y con sufijo de este proceso)
         foreach ($temporary in @($archivosBorrables)) {
             if ($temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+        }
+        # El MKV ensamblado que no pasó la verificación (o falló después) no sirve: antes se quedaba
+        # como «Ensamblaje_*.mkv» huérfano junto a los originales. Solo se borra ese nombre temporal,
+        # nunca un original ni un MKV ya renombrado.
+        if ($archivoSalidaTemporal -and (Split-Path "$archivoSalidaTemporal" -Leaf) -match '^Ensamblaje_[0-9a-f]{32}\.mkv$' -and
+            (Test-Path -LiteralPath $archivoSalidaTemporal -PathType Leaf)) {
+            Remove-Item -LiteralPath $archivoSalidaTemporal -Force -ErrorAction SilentlyContinue
+            Write-DiagLinea "Temporal descartado tras el fallo: $archivoSalidaTemporal"
         }
         Write-Host "   -> Continuando con el siguiente elemento..." -ForegroundColor Yellow
         continue
