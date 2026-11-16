@@ -3232,13 +3232,19 @@ function Actualizar-VisibilidadMultiEp {
     if ($ui.cardMultiEp) { $ui.cardMultiEp.Visibility = if ([bool]$ui.swSerie.IsChecked) { "Visible" } else { "Collapsed" } }
 }
 
+function Clave-OrdenNatural($nombre) {
+    # Orden natural (como el Explorador): cada número del nombre se rellena con ceros para que
+    # «Episodio 10» vaya detrás de «Episodio 9» y no detrás de «Episodio 1».
+    return [regex]::Replace("$nombre".ToLowerInvariant(), '\d+', { param($m) $m.Value.PadLeft(12, '0') })
+}
+
 function Aplicar-NumeracionEpisodios {
     # Numera EN ORDEN los vídeos seleccionados: cada uno recibe N episodios consecutivos.
     $temp   = [int]("0" + ("$($ui.txtTemporadaEp.Text)" -replace '\D','')); if ($temp -le 0) { $temp = 1 }
     $primer = [int]("0" + ("$($ui.txtPrimerEp.Text)"    -replace '\D','')); if ($primer -le 0) { $primer = 1 }
     $n      = [int](Get-ComboValor $ui.cmbEpsPorVideo); if ($n -le 0) { $n = 1 }
     # Se numera por GRUPO (una pareja híbrida = un solo vídeo/episodio), no por archivo suelto.
-    $grps = @(@($script:gruposLote) | Where-Object { $script:seleccion[$_.Principal] -ne $false } | Sort-Object { "$($_.Principal)" })
+    $grps = @(@($script:gruposLote) | Where-Object { $script:seleccion[$_.Principal] -ne $false } | Sort-Object { Clave-OrdenNatural $_.Principal })
     if ($grps.Count -eq 0) { Set-Estado "No hay vídeos seleccionados para numerar." "warn"; return }
     $ep = $primer
     foreach ($g in $grps) {
