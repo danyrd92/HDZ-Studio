@@ -53,6 +53,7 @@ if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoP
 & node (Join-Path $PSScriptRoot 'test_workspace_visual.cjs');if($LASTEXITCODE -ne 0){throw 'Falló el espacio de trabajo visual'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Responsiveness.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la fluidez del escritorio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-NumeracionEpisodios.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la numeración de episodios en orden natural'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-EpisodiosAlLanzar.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la numeración automática de episodios al lanzar'}
 & node (Join-Path $PSScriptRoot 'test_responsiveness.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la estabilidad de los controles web'}
 $tempHdz=[IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')+'\hdz_'
 $historyLeaks=@(if(Test-Path -LiteralPath $realHistory){Get-ChildItem -LiteralPath $realHistory -File -Filter '*.json'|Where-Object{-not $historyBefore.ContainsKey($_.Name)}|Where-Object{

@@ -8201,6 +8201,32 @@ function Iniciar-Montaje($scope) {
     # (S01E01-E02). Se envía el valor editado en la lista o, si está vacío, el autodetectado. El motor
     # lo usa en vez de detectar del nombre, y así nunca pregunta el capítulo por consola.
     if ([bool]$ui.swSerie.IsChecked) {
+        # Vídeos marcados que se quedarían SIN episodio (ni editado ni detectable en el nombre). El
+        # motor los dejaría todos con el mismo nombre final y los desambiguaría con «(2)», «(3)»…
+        $sinEpisodio = {
+            @($script:ultimoScan | Where-Object {
+                $script:seleccion["$($_.Nombre)"] -ne $false -and -not $_.Error -and -not (
+                    ($script:episodiosMap.ContainsKey($_.Nombre) -and "$($script:episodiosMap[$_.Nombre])".Trim()) -or
+                    (Detectar-EpisodioGui $_.Nombre))
+            } | ForEach-Object { "$($_.Nombre)" })
+        }
+        $faltanEp = @(& $sinEpisodio)
+        # (En «Cada archivo distinto» cada pestaña decide si es serie: no se valida aquí.)
+        if ($faltanEp.Count -gt 0 -and -not $remezclaOn -and "$(Get-ChipValor 'modoLote')" -ne "HETEROGENEO") {
+            $conEp = @($marcadosSel | Where-Object { $faltanEp -notcontains $_ })
+            if ($conEp.Count -eq 0 -and -not $multiTemporada) {
+                # Ninguno tiene episodio: se aplica la numeración del bloque «Episodios por vídeo»
+                # (temporada, primer episodio y episodios por vídeo) en orden natural, como si se
+                # hubiera pulsado «Aplicar numeración a la lista».
+                Aplicar-NumeracionEpisodios
+                $faltanEp = @(& $sinEpisodio)
+            }
+            if ($faltanEp.Count -gt 0) {
+                Set-Estado "$($faltanEp.Count) vídeo(s) de la serie no tienen episodio (p. ej. «$($faltanEp[0])»). Escríbelo en la lista o pulsa «Aplicar numeración a la lista»." "error"
+                $ui.navProyecto.IsChecked = $true
+                return
+            }
+        }
         $mapaEp = [ordered]@{}
         foreach ($f in @($script:ultimoScan)) {
             if ($script:seleccion["$($f.Nombre)"] -eq $false) { continue }
