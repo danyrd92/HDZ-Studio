@@ -17,6 +17,9 @@ Write-Fixture (Join-Path $server 'version.json') (@{schema=2;version='2.0.0';arc
 Write-Fixture (Join-Path $installed 'HDZ-update.config.json') '{"baseUrl":"https://invalid.example/"}'
 Copy-Item -LiteralPath (Join-Path $root 'instalacion/Actualizar-Seguro.ps1') -Destination (Join-Path $installed 'instalacion/Actualizar-Seguro.ps1')
 $rsa = [Security.Cryptography.RSACryptoServiceProvider]::new(2048); $rsa.PersistKeyInCsp = $false
+# Las peticiones desatendidas escriben su registro en %APPDATA%: redirigirlo al fixture.
+$realAppData = $env:APPDATA; $env:APPDATA = Join-Path $testRoot "appdata"
+$updateLog = Join-Path $env:APPDATA 'HD ZERO Studio\logs\actualizador.log'
 try {
     Write-Fixture (Join-Path $installed 'update-public-key.xml') $rsa.ToXmlString($false)
     $signature = [Convert]::ToBase64String($rsa.SignData([IO.File]::ReadAllBytes((Join-Path $server 'version.json')), 'SHA256'))
@@ -71,6 +74,8 @@ try {
     Assert ($LASTEXITCODE -eq 1) 'Aceptó firma falsa en modo desatendido'
     Assert-Reopened
     Assert (-not (Get-Content (Join-Path $installed 'instalacion/ultimo-resultado.json') -Raw | ConvertFrom-Json).ok) 'No conservó el aviso de fallo'
+    $logText = if (Test-Path -LiteralPath $updateLog) { [IO.File]::ReadAllText($updateLog) } else { "" }
+    Assert ($logText -match "Actualizador iniciado" -and $logText -match "Firma inv") "El actualizador no dejó registro del fallo: $updateLog"
     Write-Fixture (Join-Path $server 'version.sig') $signature
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Forzar -WaitForProcessId 2147483647 2>&1 | Out-Null
     Assert ($LASTEXITCODE -eq 0) 'Falló actualización desatendida válida'
@@ -111,5 +116,6 @@ try {
     Write-Host "UPDATER_REGRESSION_OK — PS5.1 desde Start-Process/PS7, firma, SHA256, reversión y actualización acumulativa. Pruebas: $testRoot"
 } finally {
     $rsa.Dispose()
+    $env:APPDATA = $realAppData
     Remove-Item Env:HDZ_UPDATE_BASE -ErrorAction SilentlyContinue
 }

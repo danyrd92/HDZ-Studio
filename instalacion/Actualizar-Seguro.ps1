@@ -1,5 +1,19 @@
 ﻿# Distribución completa firmada, verificación SHA256 y reversión ante fallos.
 param([switch]$Forzar, [switch]$NoRelanzar, [int]$WaitForProcessId=0)
+# Lanzado por el programa, el actualizador corre en una ventana invisible: todo lo que
+# hace queda en %APPDATA%\HD ZERO Studio\logs\actualizador.log (junto a los demás registros).
+$transcribing = $false
+if ($WaitForProcessId -gt 0 -and $env:APPDATA) {
+    try {
+        $updateLogDir = Join-Path $env:APPDATA 'HD ZERO Studio\logs'
+        [void][IO.Directory]::CreateDirectory($updateLogDir)
+        $updateLog = Join-Path $updateLogDir 'actualizador.log'
+        # Conservar varios intentos sin crecer sin límite.
+        if ((Test-Path -LiteralPath $updateLog) -and (Get-Item -LiteralPath $updateLog).Length -gt 1MB) { Move-Item -LiteralPath $updateLog -Destination ($updateLog + '.anterior') -Force }
+        Start-Transcript -LiteralPath $updateLog -Append -Force | Out-Null; $transcribing = $true
+        Write-Host "Actualizador iniciado. PowerShell $($PSVersionTable.PSVersion), carpeta: $(Split-Path $PSScriptRoot -Parent)"
+    } catch {}
+}
 # Start-Process desde PowerShell 7 hereda PSModulePath con sus módulos primero.
 # Windows PowerShell 5.1 necesita sus propios módulos (p. ej. Get-FileHash).
 # Solo se cambia el entorno de ESTE actualizador, no el del usuario/sistema.
@@ -187,4 +201,5 @@ try {
     if ($mutex) { $mutex.Dispose() }
     $resolvedTemp = [IO.Path]::GetFullPath($temporary)
     if ($resolvedTemp.StartsWith([IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -and (Split-Path $resolvedTemp -Leaf) -match '^hdz_update_[0-9a-f]{32}$' -and (Test-Path -LiteralPath $resolvedTemp)) { Remove-Item -LiteralPath $resolvedTemp -Recurse -Force }
+    if ($transcribing) { try { Stop-Transcript | Out-Null } catch {} }
 }
