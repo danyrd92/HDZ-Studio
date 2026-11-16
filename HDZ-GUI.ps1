@@ -2334,7 +2334,9 @@ function Reconstruir-ChipsIdiomasAudio($detectados = $null) {
     $marcadosPrev = @($script:chipsIdiomasAudio | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
     $ui.wrapIdiomasAudio.Children.Clear()
     $script:chipsIdiomasAudio = @()
-    foreach ($idi in @($detectados)) {
+    # Sin argumento (un solo idioma o ninguno) no hay chips: @($null) daría una vuelta y crearía un
+    # chip invisible sin idioma que, desmarcado, bloqueaba «Procesar» con «Marca al menos un idioma».
+    foreach ($idi in @($detectados | Where-Object { $null -ne $_ })) {
         $tb = New-Object System.Windows.Controls.Primitives.ToggleButton
         $tb.Style = $win.Resources["ChipToggle"]
         # Las pistas sin idioma también salen como chip: desmarcarlo las quita del archivo final.
