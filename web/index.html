@@ -254,6 +254,7 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
 
 /* ============ Capturas y logos ============ */
 .caps{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:12px}
+.capep{grid-column:1/-1;font-weight:600;margin-top:6px;color:var(--text)}
 @media(min-width:520px){.caps{grid-template-columns:repeat(3,1fr)}}
 .cap{position:relative;border:3px solid var(--chipBorder);border-radius:9px;overflow:hidden;aspect-ratio:16/9;background:#14141e;opacity:.45;transition:opacity .15s,border-color .15s}
 .cap.on{border-color:var(--accent);opacity:1;box-shadow:0 2px 12px var(--accentGlow)}
@@ -420,6 +421,8 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
       <p class="d">Elige archivos concretos, o dos carpetas de una serie: en ese caso se empareja cada capítulo solo por SxxEyy, aunque los títulos sean distintos.</p></div>
       <div class="switch" data-sw="remezcla" onclick="tSwitch(this)"></div></div></div>
     <div class="card" id="cardRemezclaWeb" style="display:none"><h3><span class="ci">🧬</span>Vídeos de la remezcla</h3><p class="d">En cada fuente marca qué conservar. «Vídeo» elige la imagen final; Audio y Subs pueden venir de varias fuentes. Para una serie, añade las carpetas completas.</p><div id="remezclaRows"></div><div class="row wrap mt"><button class="btn sm" onclick="openRemixSource()">＋ Añadir vídeo</button><button class="btn sm" onclick="openRemixSeriesFolder()">📁 Añadir carpeta de serie</button></div><div id="remezclaLangs" style="display:none"><label class="lbl">Audios a conservar</label><div class="chips" id="remezclaAudio"></div><label class="lbl">Subtítulos a conservar</label><div class="chips" id="remezclaSubs"></div></div></div>
+    <div class="card"><h3><span class="ci">🎬</span>Qué hacer con el vídeo</h3><p class="d">«Solo renombrar» no remuxa: lee el vídeo, lo renombra con la norma HDZ (renombra el original) y sigue con capturas, torrent y subida.</p>
+      <div class="chips seg" data-group="modoVideo"><div class="chip" data-v="MONTAJE">Montaje completo</div><div class="chip" data-v="TAL_CUAL">Solo renombrar (sin remux)</div></div></div>
     <div class="card"><h3><span class="ci">🎞</span>Modo de procesamiento</h3><p class="d">¿Comparten proyecto (una temporada) o son títulos distintos?</p>
       <div class="chips seg" data-group="modoLote"><div class="chip" data-v="HOMOGENEO">Mismo proyecto (temporada)</div><div class="chip" data-v="HETEROGENEO">Cada archivo distinto</div></div></div>
     <div class="card"><div class="row wrap"><h3 class="grow"><span class="ci">🔍</span>Análisis del lote</h3><span class="d" id="resumenLote" style="margin:0;font-size:11.5px"></span><span class="counter" id="selCount">—</span><button class="btn sm" id="btnTodosLote" onclick="allFiles(true)">Todos</button><button class="btn sm" id="btnNingunoLote" onclick="allFiles(false)">Ninguno</button></div>
@@ -429,8 +432,11 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
       <button class="btn block mt" onclick="cmd({type:'click',name:'btnAplicarEp'})">Aplicar numeración a la lista</button></div>
     <div class="card"><h3><span class="ci">🗃</span>Archivos originales al terminar</h3>
       <div class="chips list" data-group="originales"><div class="chip" data-v="PROCESADO">Conservar (renombrar a .procesado)</div><div class="chip" data-v="INTACTO">Mantener intactos</div><div class="chip" data-v="BORRAR">Borrarlos</div></div></div>
-    <div class="card"><h3><span class="ci">🏷</span>Sufijo «-HDZ» en el nombre final</h3>
-      <div class="chips seg" data-group="sufijo"><div class="chip" data-v="true">Sí</div><div class="chip" data-v="false">No</div></div></div>
+    <div class="card"><h3><span class="ci">🏷</span>Nombre final</h3>
+      <label class="lbl" style="margin-top:0">Sufijo «-HDZ»</label>
+      <div class="chips seg" data-group="sufijo"><div class="chip" data-v="true">Sí</div><div class="chip" data-v="false">No</div></div>
+      <label class="lbl">Etiqueta de idioma (delante del códec)</label><p class="d">Automática: «VOSE» sin audio castellano y con subtítulos castellanos completos (aunque tenga doblaje latino, que se conserva). «Latino» solo si lo eliges.</p>
+      <div class="chips seg g2" data-group="etqIdioma"><div class="chip" data-v="AUTO">Automática</div><div class="chip" data-v="VOSE">VOSE</div><div class="chip" data-v="LATINO">Latino</div><div class="chip" data-v="NINGUNA">Ninguna</div></div></div>
     <div class="card"><h3><span class="ci">🧲</span>Crear archivos .torrent</h3><p class="d">Torrents PRIVADOS listos para el tracker: uno por archivo, pack del lote, o ambos.</p>
       <div class="chips seg g2" data-group="torrent"><div class="chip" data-v="NO">No</div><div class="chip" data-v="INDIVIDUAL">Uno por archivo</div><div class="chip" data-v="PACK">Pack del lote</div><div class="chip" data-v="AMBOS">Ambos</div></div>
       <div id="rowPack" style="display:none"><label class="lbl">Nombre del pack (se calcula solo; edítalo solo si lo quieres cambiar)</label><input class="input" data-in="packNombre"></div></div>
@@ -499,16 +505,21 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
       <div class="acts">
         <button class="act" onclick="cmd({type:'click',name:'btnTorrentUltimo'})"><span class="ai">⬆</span>Último torrent creado</button>
         <button class="act" onclick="openPick('cargar_torrent')"><span class="ai">📥</span>Cargar un .torrent…</button>
+        <button class="act" onclick="openPick('cargar_episodios')"><span class="ai">📺</span>Cargar episodios…</button>
         <button class="act" onclick="openPick('crear_archivo')"><span class="ai">🧲</span>Torrent de un archivo…</button>
         <button class="act" onclick="openPick('crear_pack')"><span class="ai">📦</span>Torrent de un pack…</button>
         <button class="act wide" onclick="cmd({type:'click',name:'btnNuevaSubida'})"><span class="ai">➕</span>Nueva subida (pestaña en blanco)</button>
       </div></div>
+    <div class="card" id="cardSerieWeb" style="display:none"><h3><span class="ci">📺</span>Episodios de la serie <span class="counter" id="serieCount"></span></h3>
+      <p class="d">Una sola ficha para todos (TMDB, categoría, banderas, logo, firma y descripción). Cada episodio lleva su título, su número, su MediaInfo y las capturas que marques de él. «Subir todos» va en orden y se para en el primero que falle.</p>
+      <div id="serieRows" class="mt"></div>
+      <div class="row wrap mt"><button class="btn grow" id="btnAbrirTodosWeb" onclick="cmd({type:'abrir_todos'})">🌱 Abrir todos en el PC</button><button class="btn grow" id="btnDescargarTodosWeb" onclick="descargarTodosSerie()">⬇ Descargar todos</button></div></div>
     <div class="card"><h3><span class="ci">📝</span>Datos del torrent</h3>
-      <label class="lbl" style="margin-top:10px">Título</label><input class="input" data-in="upTitulo" placeholder="Nombre del release">
+      <div id="rowTituloWeb"><label class="lbl" style="margin-top:10px">Título</label><input class="input" data-in="upTitulo" placeholder="Nombre del release"></div>
       <label class="lbl">Keywords</label><input class="input" data-in="upKeywords" placeholder="palabras clave">
       <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">TMDB</label><input class="input" data-in="upTmdb" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">IMDb</label><input class="input" data-in="upImdb"></div></div>
       <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">TVDB</label><input class="input" data-in="upTvdb" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">MAL</label><input class="input" data-in="upMal" inputmode="numeric"></div></div>
-      <div class="row mt"><div class="grow"><label class="lbl" style="margin-top:0">Temporada</label><input class="input" data-in="upTemporada" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">Episodio</label><input class="input" data-in="upEpisodio" inputmode="numeric"></div></div>
+      <div class="row mt" id="rowTempEpWeb"><div class="grow"><label class="lbl" style="margin-top:0">Temporada</label><input class="input" data-in="upTemporada" inputmode="numeric"></div><div class="grow"><label class="lbl" style="margin-top:0">Episodio</label><input class="input" data-in="upEpisodio" inputmode="numeric"></div></div>
       <button class="btn block mt" data-icon="search" onclick="cmd({type:'click',name:'btnBuscarTmdb'})">🔍 Buscar en TMDB</button>
       <div id="tmdbResults" class="mt" aria-live="polite"></div>
       <p class="d mt">Al cambiar el TMDB se sustituyen automáticamente la categoría, IMDb, TVDB, keywords y logos de la ficha anterior.</p></div>
@@ -523,13 +534,13 @@ body.hasPeli .topline{top:calc(var(--appbar) + var(--safe-t) + 46px)}
         <div class="chip sm" data-flag="upDV">Dolby Vision</div><div class="chip sm" data-flag="upHDR10P">HDR10+</div>
         <div class="chip sm" data-flag="upHDR10">HDR10</div><div class="chip sm" data-flag="upModQueue">Cola moderación</div></div></div>
     <div class="card"><h3><span class="ci">📄</span>Textos</h3>
-      <label class="lbl" style="margin-top:10px">MediaInfo</label><textarea class="input" data-in="upMediainfo" placeholder="(se rellena al cargar el vídeo)"></textarea>
-      <button class="btn sm mt" onclick="cmd({type:'click',name:'btnMediaRefrescar'})">↻ Regenerar MediaInfo</button>
+      <div id="rowMediainfoWeb"><label class="lbl" style="margin-top:10px">MediaInfo</label><textarea class="input" data-in="upMediainfo" placeholder="(se rellena al cargar el vídeo)"></textarea>
+      <button class="btn sm mt" onclick="cmd({type:'click',name:'btnMediaRefrescar'})">↻ Regenerar MediaInfo</button></div>
       <label class="lbl">Descripción (BBCode)</label><textarea class="input" data-in="upDescripcion"></textarea>
       <label class="lbl">NFO (ruta)</label><input class="input" data-in="upNfo"><button class="btn block mt" onclick="openAuxFile('nfo')">Elegir NFO del PC…</button></div>
     <div class="card"><h3><span class="ci">📷</span>Capturas</h3><p class="d">Genera las capturas del vídeo cargado y súbelas/añádelas a la descripción.</p>
       <div class="row mt"><span class="lbl grow" style="margin:0">Nº de capturas</span><select class="input" data-combo="numCapturas" style="width:100px"></select></div>
-      <div class="row mt"><button class="btn grow" data-icon="capture" onclick="cmd({type:'click',name:'btnCapGenerar'})">📷 Crear</button><button class="btn grow" data-icon="upload" onclick="cmd({type:'click',name:'btnCapInsertar'})">⬆ Subir y añadir</button></div><button class="btn block mt" onclick="openAuxFile('imagen')">+ Añadir captura existente del PC…</button></div>
+      <div class="row mt" id="rowCapGenWeb"><button class="btn grow" data-icon="capture" onclick="cmd({type:'click',name:'btnCapGenerar'})">📷 Crear</button><button class="btn grow" data-icon="upload" onclick="cmd({type:'click',name:'btnCapInsertar'})">⬆ Subir y añadir</button></div><button class="btn block mt" onclick="openAuxFile('imagen')">+ Añadir captura existente del PC…</button></div>
     <div class="card" id="firmasCard"><h3>Firma</h3><div id="firmasList" class="mt"></div><button class="btn mt" onclick="cmd({type:'sel_firma',path:''})">Sin firma</button></div>
     <div class="card" id="cardLogos" style="display:none"><h3><span class="ci">🎨</span>Logos de TMDB</h3><p class="d">Toca un logo para añadirlo a la descripción (resaltado = el elegido).</p>
       <div class="row mt"><button class="btn" id="btnActualizarLogos" onclick="cmd({type:'click',name:'btnActualizarLogos'})">↻ Actualizar logos</button><input class="input grow" id="logoPersonalizado" type="url" inputmode="url" placeholder="URL de logo HTTPS"><button class="btn" id="btnUsarLogoPersonalizado" onclick="useCustomLogo()">Añadir</button></div>
@@ -744,7 +755,7 @@ function cmd(c){
   // La web se sirve por http://IP-del-PC: crypto.randomUUID solo existe en HTTPS o localhost.
   const requestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
   const payload={...c,requestId,session:remoteData.session};
-  const isUpload=['subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
+  const isUpload=['cargar_episodios','set_ep_titulo','abrir_todos','subir','sel_tmdb','sel_firma','add_captura','description_image','sel_captura','cap_todas','sel_logo','set_custom_logo','set_check','crear_torrent','cargar_torrent'].includes(c.type)||c.type==='set_input'&&String(c.name).startsWith('up')||c.type==='set_combo'&&String(c.name).startsWith('up')||c.type==='click'&&c.name!=='btnAplicarEp';
   if(isUpload)payload.subidaTab=remoteData.tabSubidaActual;
   else if(['set_videos','set_input','set_combo','set_chip','set_conv','set_episodio','set_salida','set_audio_lang','set_audio_track','set_sub_track','set_sub_lang','set_sub_tipo','set_sub_unico','set_und','iniciar','iniciar_todos'].includes(c.type))payload.projectTab=remoteData.tabProyActual;
   commandPending++;
@@ -1054,7 +1065,7 @@ function render(s){
         +`</div></div>`;
     }).join(''):'<div class="empty"><span class="eic">🎬</span>Sin vídeos. Escribe la ruta arriba y pulsa Enter,<br>o explora las carpetas del PC.</div>';
     bindEpInputs();}
-  renderCaps(d.capturas);renderLogos(d.logos);
+  renderCaps(d.capturas);renderLogos(d.logos);renderSerie(d.serie);renderTorrentChips(d.esSerieProyecto);
   applyInterface(d);
   const refreshLogos=document.getElementById('btnActualizarLogos'),customLogo=document.getElementById('logoPersonalizado'),customLogoBtn=document.getElementById('btnUsarLogoPersonalizado');
   refreshLogos.disabled=!d.logoRefresh||!remoteResponsive||!!d.busy;
@@ -1073,10 +1084,36 @@ function renderCaps(caps){const card=document.getElementById('cardCaps');
   if(!caps||!caps.length){card.style.display='none';lastCaps='';return;}
   card.style.display='block';
   if(Date.now()<capLock){updateCapCount();return;}
-  const key=JSON.stringify(caps.map(c=>[c.i,c.sel,c.thumb,c.subida]));
+  const key=JSON.stringify(caps.map(c=>[c.i,c.sel,c.thumb,c.subida,c.ep]));
   if(key===lastCaps){return;}lastCaps=key;
-  document.getElementById('capsBox').innerHTML=caps.map(c=>`<div class="cap ${c.sel?'on':''}" onclick="toggleCap(this,${Number(c.i)})"><img src="${esc(c.thumb||'')}" alt="" loading="lazy"><button class="capzoom" data-url="${esc(c.subida||c.thumb||'')}" onclick="event.stopPropagation();lightbox(this.dataset.url)">🔍</button></div>`).join('');
+  let epPrev=null;
+  document.getElementById('capsBox').innerHTML=caps.map(c=>{const cab=(c.ep&&c.ep!==epPrev)?`<div class="capep">${esc(c.ep)}</div>`:'';epPrev=c.ep||epPrev;return cab+`<div class="cap ${c.sel?'on':''}" onclick="toggleCap(this,${Number(c.i)})"><img src="${esc(c.thumb||'')}" alt="" loading="lazy"><button class="capzoom" data-url="${esc(c.subida||c.thumb||'')}" onclick="event.stopPropagation();lightbox(this.dataset.url)">🔍</button></div>`;}).join('');
   updateCapCount();}
+/* ===== Serie (episodios): una pestaña con todos los episodios, igual que en el PC ===== */
+let lastSerie='',serieLock=0;
+const SERIE_ESTADO={subido:'✓ Subido',error:'✗ Error',subiendo:'⏳ Subiendo…',pendiente:'Pendiente'};
+function renderSerie(s){const on=!!(s&&s.activa),card=document.getElementById('cardSerieWeb');
+  card.style.display=on?'block':'none';
+  for(const id of ['rowTituloWeb','rowTempEpWeb','rowMediainfoWeb','rowCapGenWeb']){const el=document.getElementById(id);if(el)el.style.display=on?'none':'';}
+  const sb=document.getElementById('btnUploadWeb');
+  if(sb)sb.textContent=on?((s.subidos>0&&s.subidos<s.total)?'⬆ Subir los que faltan (en orden)':'⬆ Subir todos (en orden)'):'⬆ Subir al tracker';
+  if(sb)sb.disabled=on&&!!s.subiendo;
+  if(!on){lastSerie='';return;}
+  document.getElementById('serieCount').textContent=(s.subidos||0)+' de '+(s.total||0)+' subidos';
+  document.getElementById('btnAbrirTodosWeb').disabled=!s.abribles;
+  document.getElementById('btnAbrirTodosWeb').textContent='🌱 Abrir todos en el PC ('+(s.abribles||0)+')';
+  const eps=s.episodios||[];
+  document.getElementById('btnDescargarTodosWeb').disabled=!eps.some(e=>e.descarga&&e.descarga.disponible);
+  if(Date.now()<serieLock)return;
+  const key=JSON.stringify(eps);if(key===lastSerie)return;lastSerie=key;
+  setMarkup('serieRows',eps.map(e=>{const dl=(e.descarga&&e.descarga.disponible&&/^[0-9a-f]{64}$/.test(String(e.descarga.id)))?`<a class="btn sm link" href="${esc(API+'/torrent?id='+encodeURIComponent(e.descarga.id))}" download="${esc(e.descarga.nombre||'tracker.torrent')}" data-dl="1">⬇</a>`:'';
+    const web=e.urlWeb?`<a class="btn sm link" href="${esc(e.urlWeb)}" target="_blank" rel="noopener noreferrer">🌐</a>`:'';
+    return `<div class="row mt"><span class="counter" style="min-width:64px">${esc(e.ep)}</span><input class="input grow epTitulo" data-i="${Number(e.i)}" value="${esc(e.titulo)}"${e.estado==='subido'?' disabled':''}><span class="d" style="margin:0 0 0 6px;white-space:nowrap" title="${esc(e.error||'')}">${esc(SERIE_ESTADO[e.estado]||e.estado)}</span>${web}${dl}</div>`;}).join(''));}
+document.getElementById('serieRows').addEventListener('input',e=>{const t=e.target.closest('.epTitulo');if(!t)return;serieLock=Date.now()+2500;clearTimeout(t._tm);t._tm=setTimeout(()=>cmd({type:'set_ep_titulo',idx:Number(t.dataset.i),value:t.value}),500);});
+function descargarTodosSerie(){const links=[...document.querySelectorAll('#serieRows a[data-dl]')];if(!links.length){toast('Aún no hay torrents del tracker','warn');return;}
+  links.forEach((a,k)=>setTimeout(()=>a.click(),k*700));toast('Descargando '+links.length+' torrent(s)…','ok');}
+function renderTorrentChips(serie){const t=serie?{INDIVIDUAL:'Serie (episodios)',PACK:'Serie (pack)',AMBOS:'Episodios + pack'}:{INDIVIDUAL:'Uno por archivo',PACK:'Pack del lote',AMBOS:'Ambos'};
+  document.querySelectorAll('[data-group="torrent"] .chip').forEach(c=>{if(t[c.dataset.v])c.textContent=t[c.dataset.v];});}
 function lightbox(src){if(!src)return;const lb=document.getElementById('lightbox');lb.querySelector('img').src=src;lb.classList.add('open');}
 /* ===== Logos TMDB ===== */
 let lastLogos='';
@@ -1090,16 +1127,16 @@ function renderLogos(logos){const card=document.getElementById('cardLogos');
   document.getElementById('logosBox').innerHTML=logos.map(l=>`<div class="logo ${l.sel?'on':''}" data-url="${esc(l.url)}" onclick="selLogo(this);cmd({type:'sel_logo',url:this.dataset.url})"><img src="${esc(l.url)}" alt="logo"><span>${esc(l.w)}×${esc(l.h)}${l.lang?' · '+esc(l.lang):''}</span></div>`).join('');}
 /* ===== Explorador de carpetas / ficheros ===== */
 let browseOpen=false,brState=null,brWant='',brFiltro='video',brMode='folder',brOnFolder=null,brOnFile=null;
-let brSelFiles=new Set();
+let brSelFiles=new Set(),brOnMulti=null;
 function _openBr(titulo){browseOpen=true;brWant='';brState=null;brSelFiles.clear();
   document.getElementById('brTitle').textContent='📂 '+titulo;
   const ub=document.getElementById('brUseBtn');
   ub.style.display=(brMode==='folder'||brMode==='multi')?'':'none';
-  ub.textContent=(brMode==='multi')?'✓ Usar estos vídeos':'✓ Usar esta carpeta';
+  ub.textContent=(brMode==='multi')?(brOnMulti?'✓ Cargar estos episodios':'✓ Usar estos vídeos'):'✓ Usar esta carpeta';
   document.getElementById('modal').classList.add('open');renderBrowse(null);cmd({type:'browse',path:'',filtro:brFiltro});}
 /* Una sola orden guarda carpeta y selección en el PC antes de analizarla, igual
    que el escritorio. No depende de que el móvil siga abierto durante el escaneo. */
-function openElegir(){brMode='multi';brFiltro='video';brOnFile=null;brOnFolder=null;_openBr('Elegir vídeos (marca uno o varios)');}
+function openElegir(){brMode='multi';brFiltro='video';brOnFile=null;brOnFolder=null;brOnMulti=null;_openBr('Elegir vídeos (marca uno o varios)');}
 function openExtraFolder(){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=p=>cmd({type:'add_carpeta',path:p});_openBr('Añadir temporada independiente');}
 function openAuxFile(kind){brMode='file';brFiltro=kind==='descripcion_imagen'?'imagen':kind;brOnFolder=null;brOnFile=p=>cmd(kind==='nfo'?{type:'set_input',name:'upNfo',value:p}:{type:kind==='descripcion_imagen'?'description_image':'add_captura',path:p});_openBr(kind==='nfo'?'Elegir NFO':kind==='descripcion_imagen'?'Subir imagen a la descripción':'Añadir captura existente');}
 /* Modo carpeta: fija el valor de un campo de ruta */
@@ -1111,6 +1148,7 @@ function openBrowse(target){target=target||'carpeta';brMode='folder';brFiltro='v
 function openPick(kind){
   if(kind==='crear_pack'){brMode='folder';brFiltro='video';brOnFile=null;brOnFolder=(p)=>{cmd({type:'crear_torrent',modo:'pack',path:p});toast('Creando torrent del pack…','ok');};_openBr('Carpeta / pack ya procesado');}
   else if(kind==='crear_archivo'){brMode='file';brFiltro='video';brOnFolder=null;brOnFile=(p)=>{cmd({type:'crear_torrent',modo:'archivo',path:p});toast('Creando torrent del archivo…','ok');};_openBr('Elegir archivo procesado (.mkv/.mp4)');}
+  else if(kind==='cargar_episodios'){brMode='multi';brFiltro='torrent';brOnFile=null;brOnFolder=null;brOnMulti=async(paths)=>{const ok=await cmd({type:'cargar_episodios',paths});if(ok)toast(paths.length+' episodio(s) cargándose en una pestaña de serie…','ok');return ok;};_openBr('Elegir los .torrent de los episodios');}
   else if(kind==='cargar_torrent'){brMode='file';brFiltro='torrent';brOnFolder=null;brOnFile=(p)=>{cmd({type:'cargar_torrent',path:p});toast('Cargando torrent…','ok');};_openBr('Elegir un .torrent existente');}
 }
 /* Carpeta de salida propia de un vídeo concreto */
@@ -1121,7 +1159,8 @@ function brUp(){if(brState)brGo(brState.up||'');}
 async function brUse(){
   if(brMode==='multi'){
     if(!brState||!brState.path){return;}
-    if(brSelFiles.size===0){toast('Marca al menos un vídeo','warn');return;}
+    if(brSelFiles.size===0){toast(brOnMulti?'Marca al menos un .torrent':'Marca al menos un vídeo','warn');return;}
+    if(brOnMulti){const paths=[...brSelFiles];if(await brOnMulti(paths))closeBrowse();return;}
     if(!remoteData.selectVideos){toast('Actualiza HDZ Studio a 1.17.10 o posterior para seleccionar vídeos desde la web','warn');return;}
     const paths=[...brSelFiles],button=document.getElementById('brUseBtn');
     if(button.disabled)return;
@@ -1145,7 +1184,7 @@ function renderBrowse(b){
   if(brMode==='file'){
     h+=files.map(f=>`<div class="filepick" data-path="${esc(f.path)}"><span class="ic">${brFiltro==='torrent'?'📥':'🎬'}</span><span class="grow">${esc(f.name)}</span><span class="pick">Elegir ›</span></div>`).join('');
   }else if(brMode==='multi'){
-    h+=files.map(f=>{const on=brSelFiles.has(f.path);return `<div class="filepick" data-mpath="${esc(f.path)}"><div class="cb ${on?'on':''}" style="pointer-events:none"></div><span class="ic">🎬</span><span class="grow">${esc(f.name)}</span></div>`;}).join('');
+    h+=files.map(f=>{const on=brSelFiles.has(f.path);return `<div class="filepick" data-mpath="${esc(f.path)}"><div class="cb ${on?'on':''}" style="pointer-events:none"></div><span class="ic">${brFiltro==='torrent'?'📥':'🎬'}</span><span class="grow">${esc(f.name)}</span></div>`;}).join('');
   }else if(files.length){
     h+=`<div class="diritem" style="opacity:.65"><span class="ic">🎬</span><span class="grow">${files.length} vídeo(s) en esta carpeta</span></div>`;
   }

@@ -1112,7 +1112,16 @@ $xaml = @'
             </StackPanel>
           </Border>
           <StackPanel x:Name="panGeneral" Visibility="Collapsed">
-            <Border Style="{StaticResource Card}">
+            <Border x:Name="cardModoVideo" Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource H}" Text="Qué hacer con el vídeo"/>
+                <TextBlock Style="{StaticResource D}" Text="«Montaje completo» remuxa el vídeo con las pistas elegidas. «Solo renombrar» no lo remuxa: lee su información, lo renombra con la norma HDZ y después hace las capturas, el torrent, el pack y la subida como siempre."/>
+                <WrapPanel x:Name="chModoVideo" Margin="0,11,0,-8"/>
+                <TextBlock x:Name="lblModoTalCual" Style="{StaticResource D}" Foreground="{StaticResource WarnBrush}" Margin="0,16,0,0" Visibility="Collapsed"
+                           Text="Se renombra el archivo ORIGINAL (no se hace copia). Si ya lo estás compartiendo en un cliente torrent, el cliente lo perderá. Las secciones de audio, subtítulos y remezcla no se usan en este modo."/>
+              </StackPanel>
+            </Border>
+            <Border x:Name="cardRemezcla" Style="{StaticResource Card}">
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -1206,7 +1215,7 @@ $xaml = @'
               </StackPanel>
             </Border>
             <!-- Las capturas se configuran SIEMPRE en el panel «Proyecto» (en todos los modos). -->
-            <Border Style="{StaticResource Card}">
+            <Border x:Name="cardOriginales" Style="{StaticResource Card}">
               <StackPanel>
                 <TextBlock Style="{StaticResource H}" Text="Archivos originales al terminar"/>
                 <TextBlock Style="{StaticResource D}" Text="«Conservar» los renombra con «.procesado» (y van a la carpeta de Ajustes si la fijaste). «Mantener intactos» no toca nada. «Borrarlos» ahorra espacio."/>
@@ -1215,8 +1224,12 @@ $xaml = @'
             </Border>
             <Border Style="{StaticResource Card}">
               <StackPanel>
-                <TextBlock Style="{StaticResource H}" Text="Sufijo «-HDZ» en el nombre final"/>
-                <WrapPanel x:Name="chSufijo" Margin="0,11,0,-8"/>
+                <TextBlock Style="{StaticResource H}" Text="Nombre final"/>
+                <TextBlock Style="{StaticResource Lbl}" Text="Sufijo «-HDZ»"/>
+                <WrapPanel x:Name="chSufijo" Margin="0,4,0,-8"/>
+                <TextBlock Style="{StaticResource Lbl}" Margin="0,14,0,0" Text="Etiqueta de idioma (va delante del códec de vídeo)"/>
+                <TextBlock Style="{StaticResource D}" Text="«Automática»: «VOSE» si no hay audio castellano pero sí subtítulos castellanos completos (aunque tenga doblaje latino, que se conserva); nada en el resto de casos. «Latino» solo se pone si lo eliges."/>
+                <WrapPanel x:Name="chEtqIdioma" Margin="0,8,0,-8"/>
               </StackPanel>
             </Border>
             <Border Style="{StaticResource Card}">
@@ -1585,6 +1598,11 @@ $xaml = @'
                   <Button x:Name="btnTorrentExaminar" Style="{StaticResource Ghost}" Grid.Column="1" Content="Examinar…" Margin="9,0,0,0"/>
                   <Button x:Name="btnTorrentUltimo" Style="{StaticResource Ghost}" Grid.Column="2" Content="Último creado" Margin="9,0,0,0"/>
                 </Grid>
+                <TextBlock Style="{StaticResource Lbl}" Text="…o varios episodios de una serie en una sola subida"/>
+                <StackPanel Orientation="Horizontal">
+                  <Button x:Name="btnTorrentEpisodios" Style="{StaticResource Ghost}" Content="📺  Cargar episodios…"
+                          ToolTip="Elige los .torrent de varios episodios: quedan en UNA pestaña con ficha común, capturas por episodio y subida en orden."/>
+                </StackPanel>
                 <TextBlock Style="{StaticResource Lbl}" Text="…o crear el torrent de algo ya procesado"/>
                 <StackPanel Orientation="Horizontal">
                   <Button x:Name="btnCrearTorrentArchivo" Style="{StaticResource Ghost}" Content="🧲  De un archivo…"/>
@@ -1609,10 +1627,22 @@ $xaml = @'
               </StackPanel>
             </Border>
 
+            <Border x:Name="cardSerieEps" Style="{StaticResource Card}" Visibility="Collapsed">
+              <StackPanel>
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <TextBlock Style="{StaticResource H}" Text="Episodios de la serie"/>
+                  <TextBlock x:Name="bdgSerieEps" Style="{StaticResource Bdg}" Grid.Column="1"/>
+                </Grid>
+                <TextBlock Style="{StaticResource D}" Text="Una sola ficha para todos: TMDB, categoría, banderas, logo, firma y descripción son comunes. Cada episodio lleva su título, su número, su MediaInfo y las capturas que marques de él. «Subir todos» los sube en orden (E01, E02…) y se para en el primero que falle; los ya subidos se saltan."/>
+                <StackPanel x:Name="panSerieEps" Margin="0,10,0,0"/>
+              </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource Card}">
               <StackPanel>
                 <TextBlock Style="{StaticResource H}" Text="Datos del torrent"/>
-                <TextBlock Style="{StaticResource Lbl}" Text="Título (nombre de la release)"/>
+                <TextBlock x:Name="lblUpTitulo" Style="{StaticResource Lbl}" Text="Título (nombre de la release)"/>
                 <TextBox x:Name="upTitulo" Style="{StaticResource Input}"/>
                 <Grid Margin="0,2,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -1742,7 +1772,7 @@ $xaml = @'
               </StackPanel>
             </Border>
 
-            <Border Style="{StaticResource Card}">
+            <Border x:Name="cardMediainfo" Style="{StaticResource Card}">
               <StackPanel>
                 <Grid>
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -2002,7 +2032,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panCrear","panGeneral","panProyecto","panAudio","panSubs",
           "secHdrGeneral","secChevGeneral","secHdrProyecto","secChevProyecto",
           "secHdrAudio","secChevAudio","secHdrSubs","secChevSubs",
-          "chModoLote","chOriginales","chSufijo",
+          "chModoLote","chOriginales","chSufijo","chEtqIdioma","chModoVideo","lblModoTalCual","cardModoVideo","cardRemezcla","cardOriginales",
           "chTorrent","panTorrentDatos","txtAnnounce","panPackNombre","txtPackNombre",
           "txtSalidaArchivo","btnSalidaArchivo","txtSalidaTorrent","btnSalidaTorrent","lblSalidaTorrent",
           "bdgModoLote","bdgFiltroAudio","bdgConvAudio","bdgDefAudio","bdgUndAudio","bdgUndSub",
@@ -2025,7 +2055,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "panProgreso2","barProgreso2","lblProgreso2","lblProgreso2Pct","gridListado","gripListado",
           "panTareasAux",
           "navSubida","navAjustes","panSubida","panAjustes",
-          "txtTorrentSubir","btnTorrentExaminar","btnTorrentUltimo","lblTorrentInfo",
+          "txtTorrentSubir","btnTorrentExaminar","btnTorrentUltimo","lblTorrentInfo","btnTorrentEpisodios","cardSerieEps","bdgSerieEps","panSerieEps","lblUpTitulo","cardMediainfo",
           "btnCrearTorrentArchivo","btnCrearTorrentCarpeta","btnCrearTorrentDisco","lblMediainfoTitulo","lblMediainfoDesc","btnBdinfoCargar","btnBdinfoGenerar","panTorrentProgreso","barTorrentProgreso","lblTorrentProgreso","lblTorrentProgresoPct",
           "btnNuevaSubida","panTabsSubida","scrTabs","btnTabIzq","btnTabDer",
           "upTitulo","upCategoria","upTipo","upResolucion","panTV","upTemporada","upEpisodio","upKeywords",
@@ -2366,6 +2396,30 @@ Add-ChipGroup $ui.chOriginales "originales" @(
     @{T="Borrarlos"; V="BORRAR"}
 )
 Add-ChipGroup $ui.chSufijo "sufijo" @(@{T="Sí"; V=$true}, @{T="No"; V=$false})
+Add-ChipGroup $ui.chEtqIdioma "etqIdioma" @(
+    @{T="Automática"; V="AUTO"},
+    @{T="VOSE"; V="VOSE"},
+    @{T="Latino"; V="LATINO"},
+    @{T="Ninguna"; V="NINGUNA"}
+)
+# Modo de vídeo: arranca SIEMPRE en «Montaje completo» (no se guarda entre sesiones) para que nadie
+# lance sin querer un trabajo sin remux.
+function Actualizar-ModoVideo {
+    $tc = ("$(Get-ChipValor 'modoVideo')" -eq "TAL_CUAL")
+    $vis = if ($tc) { "Collapsed" } else { "Visible" }
+    foreach ($c in @($ui.cardRemezcla, $ui.cardOriginales, $ui.secHdrAudio, $ui.secHdrSubs)) { if ($c) { $c.Visibility = $vis } }
+    if ($tc) {
+        foreach ($p in @($ui.panAudio, $ui.panSubs)) { if ($p) { $p.Visibility = "Collapsed" } }
+        foreach ($ch in @($ui.secChevAudio, $ui.secChevSubs)) { if ($ch) { $ch.Text = "▸" } }
+        if ($ui.swRemezcla -and $ui.swRemezcla.IsChecked) { $ui.swRemezcla.IsChecked = $false }
+    }
+    if ($ui.lblModoTalCual) { $ui.lblModoTalCual.Visibility = if ($tc) { "Visible" } else { "Collapsed" } }
+    if (Get-Command Actualizar-BotonesIniciar -ErrorAction SilentlyContinue) { Actualizar-BotonesIniciar }
+}
+Add-ChipGroup $ui.chModoVideo "modoVideo" @(
+    @{T="Montaje completo"; V="MONTAJE"},
+    @{T="Solo renombrar (sin remux)"; V="TAL_CUAL"}
+) 0 { Actualizar-ModoVideo }
 Add-ChipGroup $ui.chTorrent "torrent" @(
     @{T="No"; V="NO"},
     @{T="Uno por archivo"; V="INDIVIDUAL"},
@@ -3884,7 +3938,7 @@ function Nuevo-EstadoProy {
     $capDef = Get-ChipValor "capturasProy"; if ($null -eq $capDef) { $capDef = 6 }
     @{ Titulo=""; Ano=""; EsSerie=$false; Origen="WEB"; WebTipo="WEB-DL"
        PlatIdx=0; PlatOtra=""; FmtIdx=0; FmtOtro=""; Etiquetas=""; Capturas=$capDef
-       Originales=(Get-ChipValor "originales"); Sufijo=(Get-ChipValor "sufijo"); Torrent=(Get-ChipValor "torrent") }
+       Originales=(Get-ChipValor "originales"); Sufijo=(Get-ChipValor "sufijo"); Torrent=(Get-ChipValor "torrent"); EtqIdioma=(Get-ChipValor "etqIdioma") }
 }
 function Snapshot-Proyecto {
     @{
@@ -3895,6 +3949,7 @@ function Snapshot-Proyecto {
         Etiquetas = "$($ui.txtEtiquetas.Text)"; Capturas = (Get-ChipValor "capturasProy")
         # Ajustes de General que en «Cada archivo distinto» son propios de cada película.
         Originales = (Get-ChipValor "originales"); Sufijo = (Get-ChipValor "sufijo"); Torrent = (Get-ChipValor "torrent")
+        EtqIdioma = (Get-ChipValor "etqIdioma")
     }
 }
 function Restore-Proyecto($s) {
@@ -3909,6 +3964,7 @@ function Restore-Proyecto($s) {
     if ($null -ne $s.Capturas) { Set-ChipValor "capturasProy" $s.Capturas }
     if ($null -ne $s.Originales) { Set-ChipValor "originales" $s.Originales }
     if ($null -ne $s.Sufijo)     { Set-ChipValor "sufijo"     $s.Sufijo }
+    if ($null -ne $s.EtqIdioma)  { Set-ChipValor "etqIdioma"  $s.EtqIdioma }
     if ($null -ne $s.Torrent)    { Set-ChipValor "torrent"    $s.Torrent }
     Actualizar-Proyecto   # ajusta visibilidad WEB/Físico según el origen restaurado
 }
@@ -4971,8 +5027,16 @@ Init-Combo $ui.cmbNumCapturas @(@{T="3";V=3},@{T="4";V=4},@{T="5";V=5},@{T="6";V
 Init-Combo $ui.cmbEpsPorVideo @(1..6 | ForEach-Object { @{T="$_"; V=$_} }) 0
 $ui.txtTemporadaEp.Text = "1"; $ui.txtPrimerEp.Text = "1"
 $ui.btnAplicarEp.Add_Click({ Aplicar-NumeracionEpisodios })
-$ui.swSerie.Add_Checked({   Actualizar-VisibilidadMultiEp; if (-not $script:construyendoLista) { Refrescar-Adaptacion } })
-$ui.swSerie.Add_Unchecked({ Actualizar-VisibilidadMultiEp; if (-not $script:construyendoLista) { Refrescar-Adaptacion } })
+# En una serie, los modos de torrent se nombran como lo que son: un torrent por episodio (que en
+# «Torrent y subida» quedan en UNA pestaña de serie) o el pack de la temporada.
+function Actualizar-EtiquetasTorrent {
+    $serie = [bool]$ui.swSerie.IsChecked
+    $txt = if ($serie) { @{ INDIVIDUAL = "Serie (episodios)"; PACK = "Serie (pack)"; AMBOS = "Episodios + pack" } }
+           else        { @{ INDIVIDUAL = "Uno por archivo"; PACK = "Pack del lote"; AMBOS = "Ambos" } }
+    foreach ($e in @($script:gruposChips["torrent"])) { if ($txt.ContainsKey("$($e.Valor)")) { $e.Radio.Content = $txt["$($e.Valor)"] } }
+}
+$ui.swSerie.Add_Checked({   Actualizar-VisibilidadMultiEp; Actualizar-EtiquetasTorrent; if (-not $script:construyendoLista) { Refrescar-Adaptacion } })
+$ui.swSerie.Add_Unchecked({ Actualizar-VisibilidadMultiEp; Actualizar-EtiquetasTorrent; if (-not $script:construyendoLista) { Refrescar-Adaptacion } })
 Actualizar-VisibilidadMultiEp
 # Muestra/oculta los paneles de cada host según el seleccionado (clave imgbb / cuenta imgbox).
 function Actualizar-PanelHost {
@@ -5820,6 +5884,7 @@ function Add-HdzImageTags([string]$txt,$urls) {
 $script:suprimirRehacerCaps = $false
 function Rehacer-CapturasDescripcion {
     if ($script:suprimirRehacerCaps) { return }
+    if ($null -ne $script:serieEps -and -not $script:serieSubiendo) { Actualizar-ContadorCapturas; return }
     $tb = $ui.upDescripcion
     if (-not $tb) { return }
     $caps=@($script:capRows | ForEach-Object {@{Ruta=$_.Ruta;Subida=$_.Subida;Marcada=[bool]$_.Check.IsChecked}})
@@ -6165,6 +6230,16 @@ function Construir-Capturas($rutas,$estados=$null) {
     $ui.panCapturas.Children.Clear()
     $script:capRows = @()
     $rutas=@($rutas | Where-Object {$_})
+    # Serie (episodios): las capturas van en orden de episodio y con una cabecera por episodio.
+    $epDeRuta=@{}
+    if ($null -ne $script:serieEps) {
+        $ordenadas=@()
+        foreach ($epS in @(Get-EpisodiosSerieOrdenados)) {
+            foreach ($rS in @($epS.Caps)) { if ($rS -and -not $epDeRuta.ContainsKey("$rS")) { $epDeRuta["$rS"]=(Get-EtiquetaEpisodio $epS); $ordenadas+="$rS" } }
+        }
+        $rutas=$ordenadas
+    }
+    $epActual=$null
     # La caché de miniaturas es COMPARTIDA entre pestañas (antes se sustituía por las de la rejilla
     # actual y cada cambio de pestaña volvía a leer y decodificar los PNG desde la unidad de red:
     # 2-4 s). Solo se cargan en segundo plano las que faltan; si están todas, el cambio es inmediato.
@@ -6185,6 +6260,19 @@ function Construir-Capturas($rutas,$estados=$null) {
         } finally {$previewTimer.Stop();$script:capPreviewSync=$null;Actualizar-PanelTareasAux}
     }
     foreach ($rc in $rutas) {
+        $epRc = if ($epDeRuta.ContainsKey("$rc")) { $epDeRuta["$rc"] } else { $null }
+        if ($epRc -and $epRc -ne $epActual) {
+            $epActual = $epRc
+            $cab = New-Object System.Windows.Controls.TextBlock
+            $cab.Text = $epRc; $cab.FontSize = 14; $cab.FontWeight = "SemiBold"
+            $cab.Foreground = $win.Resources["TextBrush"]
+            $cab.Margin = [System.Windows.Thickness]::new(0, 6, 0, 8)
+            # Ocupa todo el ancho: fuerza salto de línea en el WrapPanel.
+            $binAncho = New-Object System.Windows.Data.Binding('ActualWidth')
+            $binAncho.Source = $ui.panCapturas
+            [void]$cab.SetBinding([System.Windows.FrameworkElement]::WidthProperty, $binAncho)
+            [void]$ui.panCapturas.Children.Add($cab)
+        }
         $cont = New-Object System.Windows.Controls.StackPanel
         $cont.Width = 380
         $cont.Margin = [System.Windows.Thickness]::new(0, 0, 12, 12)
@@ -6246,7 +6334,7 @@ function Construir-Capturas($rutas,$estados=$null) {
         $cb.Add_Unchecked({ & $pintar; Rehacer-CapturasDescripcion }.GetNewClosure())
         [void]$cont.Children.Add($cb)
         [void]$ui.panCapturas.Children.Add($cont)
-        $script:capRows += [PSCustomObject]@{ Ruta = $rc; Check = $cb; Subida = $(if($anterior){$anterior.Subida}else{$null}) }
+        $script:capRows += [PSCustomObject]@{ Ruta = $rc; Check = $cb; Subida = $(if($anterior){$anterior.Subida}else{$null}); Ep = $epRc }
     }
     Actualizar-ContadorCapturas
 }
@@ -6504,6 +6592,7 @@ function Nuevo-EstadoSubida {
         Anon=$false; Personal=$false; AudioEd=$false; Proper=$false; DV=$false; HDR10P=$false; HDR10=$false; ModQueue=$false
         Firma=$null; Logos=@(); LogoSel=$null; Caps=@(); UrlWeb=""; VideosPack=@()
         TorrentTrackerRuta=""; TorrentRemotoId=0; TorrentRemotoNombre=""
+        Serie=$null
     }
 }
 function Snapshot-Subida {
@@ -6522,11 +6611,16 @@ function Snapshot-Subida {
         Caps=@($script:capRows | ForEach-Object { @{ Ruta=$_.Ruta; Marcada=[bool]$_.Check.IsChecked; Subida=$_.Subida } })
         UrlWeb="$($script:urlTorrentWeb)"; VideosPack=@($script:videosPackSubir)
         TorrentTrackerRuta="$($script:rutaTorrentTracker)"; TorrentRemotoId=[string]$script:torrentRemotoId; TorrentRemotoNombre="$($script:torrentRemotoNombre)"
+        Serie=$(if ($null -ne $script:serieEps) { @{ Clave = "$($script:serieClave)"; Episodios = @($script:serieEps) } } else { $null })
     }
 }
 function Restore-Subida($s) {
     if(-not $s.Id){$s.Id=[guid]::NewGuid().ToString('N')}
     $script:subidaTabId="$($s.Id)"
+    # Pestaña de SERIE (episodios): se fija ANTES de reconstruir las capturas (van agrupadas).
+    $serieTab = if ($s -is [System.Collections.IDictionary]) { $s['Serie'] } else { $s.Serie }
+    if ($serieTab) { $script:serieEps = @($serieTab.Episodios); $script:serieClave = "$($serieTab.Clave)" }
+    else { $script:serieEps = $null; $script:serieClave = "" }
     $ui.txtTorrentSubir.Text="$($s.TorrentRuta)"; $script:videoSubir=$s.Video; $script:videosPackSubir=@($s.VideosPack)
     $ui.upTitulo.Text="$($s.Titulo)"; $ui.upKeywords.Text="$($s.Keywords)"
     $ui.upTmdb.Text="$($s.Tmdb)"; $ui.upImdb.Text="$($s.Imdb)"; $ui.upTvdb.Text="$($s.Tvdb)"; $ui.upMal.Text="$($s.Mal)"
@@ -6556,6 +6650,7 @@ function Restore-Subida($s) {
     $script:torrentRemotoNombre = "$($s.TorrentRemotoNombre)"
     if ($ui.btnVerWeb) { $ui.btnVerWeb.Visibility = if ($script:urlTorrentWeb) { "Visible" } else { "Collapsed" } }
     if ($ui.btnAbrirTorrent) { $ui.btnAbrirTorrent.Visibility = if ($script:rutaTorrentTracker -and (Test-Path -LiteralPath $script:rutaTorrentTracker)) { "Visible" } else { "Collapsed" } }
+    Actualizar-VistaSerie
     # volver a modo Escribir en la descripción al cambiar de pestaña
     if ($ui.tabEscribir) { $ui.tabEscribir.IsChecked=$true }
     Set-ModoDiscoSubida (Test-SubidaEsDisco)
@@ -6623,6 +6718,7 @@ function Update-FlechasTabs {
 # panel a medias: la rejilla de una pestaña acababa en otra (cruce de capturas E05/E06). Por eso las
 # operaciones de pestañas esperan a que termine.
 function Test-PestanasOcupadas {
+    if ($script:serieSubiendo) { Set-Estado "Espera: se están subiendo los episodios de la serie." "error"; return $true }
     if ($script:networkBusy) { Set-Estado "Espera un momento: hay una operación en curso. Cambia de pestaña cuando termine." "error"; return $true }
     return $false
 }
@@ -6702,6 +6798,288 @@ function Anadir-SubidaAuto($torrent, $video, $origen = "", $capturas = @(), $tra
     if ($traerAlFrente) { Set-Estado "Subida añadida: $(Split-Path $torrent -Leaf). Está en «Torrent y subida»." "ok" }
     else { Set-Estado "Nueva subida lista en «Torrent y subida»: $(Split-Path $torrent -Leaf)." "ok" }
 }
+# =========================================================================
+# SERIE (EPISODIOS): UNA pestaña de subida para todos los episodios de una temporada.
+# Ficha común (TMDB, categoría, banderas, logo, firma, descripción) en los controles de siempre;
+# lo propio de cada episodio (torrent, título, nº, MediaInfo, capturas, estado) en $script:serieEps.
+# =========================================================================
+$script:serieEps = $null; $script:serieClave = ""; $script:serieSubiendo = $false
+$script:ultimaSubidaOk = $false
+
+# Temporada/episodio del nombre de un torrent de episodio (SxxEyy). $null si no es un episodio.
+function Get-EpisodioDeNombre([string]$nombre) {
+    if ("$nombre" -match '(?i)\bS(\d{1,3})E(\d{1,4})') { return [pscustomobject]@{ Temporada = [int]$Matches[1]; Episodio = [int]$Matches[2] } }
+    return $null
+}
+# Clave de la serie: título (lo que va antes del SxxEyy, normalizado) + temporada.
+function Get-ClaveSerieTorrent([string]$nombre) {
+    if ("$nombre" -notmatch '(?i)^(.*?)\bS(\d{1,3})E\d{1,4}') { return $null }
+    $tit = (($Matches[1] -replace '[^\p{L}\p{N}]+', ' ').Trim()).ToLowerInvariant()
+    return "$tit|S$([int]$Matches[2])"
+}
+function Get-EtiquetaEpisodio($ep) { 'S{0:D2}E{1:D2}' -f [int]$ep.Temporada, [int]$ep.Episodio }
+function Get-EpisodiosSerieOrdenados {
+    @(@($script:serieEps) | Where-Object { $_ } | Sort-Object @{Expression={[int]$_.Temporada}}, @{Expression={[int]$_.Episodio}}, @{Expression={"$($_.Titulo)"}})
+}
+# Capturas de un torrent: rutas exactas del motor si las hay; si no, las «_cap_N» del título en las
+# carpetas candidatas; y como respaldo, cualquier «_cap_N» de la carpeta del vídeo/torrent.
+function Find-CapturasTorrent($rutaTorrent, $nombre, $video, $origenHint = "", $capturasHint = @()) {
+    $caps = @(@($capturasHint) | Where-Object { $_ -and (Test-Path -LiteralPath "$_") } | Select-Object -Unique)
+    if ($caps.Count -gt 0) { return $caps }
+    $baseEsc = [regex]::Escape((Quitar-ExtConocida $nombre))
+    $dirs = @("$origenHint".Trim(), $(if ($video) { Split-Path $video -Parent }), $(Split-Path $rutaTorrent -Parent),
+              "$($ui.txtCarpeta.Text)".Trim(), "$($ui.txtSalidaArchivo.Text)".Trim()) |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+    $caps = @($dirs | ForEach-Object {
+        Get-ChildItem -LiteralPath $_ -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -match "(?i)^\.(jpg|jpeg|png)$" -and $_.BaseName -match "(?i)^$baseEsc.*_cap_\d+$" }
+    } | Sort-Object FullName -Unique | ForEach-Object { $_.FullName })
+    return $caps
+}
+# Ficha de un episodio a partir de su torrent, sin tocar los controles de la pestaña.
+function New-EpisodioSerie($rutaTorrent, $video = $null, $origen = "", $capturas = @()) {
+    $nombre = Get-NombreTorrent $rutaTorrent
+    if (-not $nombre) { throw "No se pudo leer el nombre interno de $(Split-Path $rutaTorrent -Leaf)." }
+    $epNum = Get-EpisodioDeNombre $nombre
+    if ((-not $video) -and @($capturas).Count -eq 0) {
+        $mem = Recordar-Torrent $rutaTorrent $nombre
+        if ($mem) {
+            if ("$($mem.Video)" -and (Test-Path -LiteralPath "$($mem.Video)")) { $video = "$($mem.Video)" }
+            $capturas = @(@($mem.Capturas) | Where-Object { $_ -and (Test-Path -LiteralPath "$_") })
+            if (-not "$origen") { $origen = "$($mem.Origen)" }
+        }
+    }
+    if (-not ($video -and (Test-Path -LiteralPath "$video"))) { $video = Resolve-VideoDeTorrent $rutaTorrent $nombre }
+    $mi = if ($video) { Get-MediaInfoTexto $video } else { "" }
+    $caps = @(Find-CapturasTorrent $rutaTorrent $nombre $video $origen @($capturas))
+    Guardar-MemoriaTorrent $rutaTorrent $video $caps $(if ($origen) { $origen } elseif ($video) { Split-Path $video -Parent } else { "" })
+    return @{
+        Torrent = "$rutaTorrent"; Video = $video; Titulo = (Quitar-ExtConocida $nombre)
+        Temporada = $(if ($epNum) { $epNum.Temporada } else { 0 }); Episodio = $(if ($epNum) { $epNum.Episodio } else { 0 })
+        Mediainfo = "$mi"; Caps = @($caps); Estado = "pendiente"; Error = ""
+        TorrentTracker = ""; UrlWeb = ""; RemotoId = ""; RemotoNombre = ""
+    }
+}
+# Añade un episodio a la pestaña de SU serie (la crea si no existe). La primera vez rellena la ficha
+# común con ese episodio (TMDB, categoría, specs, logos…), igual que una subida normal.
+function Anadir-EpisodioSerie($torrent, $video = $null, $origen = "", $capturas = @(), $traerAlFrente = $true) {
+    $torNorm = "$torrent".Trim()
+    $nombre = Get-NombreTorrent $torNorm
+    $clave = Get-ClaveSerieTorrent $nombre
+    if (-not $clave) { Anadir-SubidaAuto $torNorm $video $origen @($capturas) $traerAlFrente; return }
+    if (Test-PestanasOcupadas) { return }
+    $volverA = $script:tabActual
+    if ($script:tabActual -ge 0 -and $script:tabActual -lt @($script:tabs).Count) { $script:tabs[$script:tabActual] = Snapshot-Subida }
+    # ¿Ya está cargado este episodio en alguna pestaña?
+    for ($i = 0; $i -lt @($script:tabs).Count; $i++) {
+        $serieI = $script:tabs[$i].Serie
+        $yaEsta = ("$($script:tabs[$i].TorrentRuta)".Trim() -eq $torNorm) -or ($serieI -and @(@($serieI.Episodios) | Where-Object { "$($_.Torrent)" -eq $torNorm }).Count -gt 0)
+        if ($yaEsta) { if ($traerAlFrente) { Cambiar-Tab $i; Set-Estado "Ese episodio ya estaba cargado." "ok" }; Construir-TabBar; return }
+    }
+    $idxSerie = -1
+    for ($i = 0; $i -lt @($script:tabs).Count; $i++) { if ($script:tabs[$i].Serie -and "$($script:tabs[$i].Serie.Clave)" -eq $clave) { $idxSerie = $i; break } }
+    if ($idxSerie -ge 0) {
+        if ($idxSerie -ne $script:tabActual) { Cambiar-Tab $idxSerie }
+        Set-Estado "Añadiendo $(Split-Path $torNorm -Leaf) a la serie…"
+        $ep = New-EpisodioSerie $torNorm $video $origen @($capturas)
+        $script:serieEps = @(@($script:serieEps) + $ep)
+    } else {
+        # Serie nueva: pestaña propia, rellenada con el primer episodio como cualquier subida.
+        $vacia = [string]::IsNullOrWhiteSpace($ui.txtTorrentSubir.Text) -and [string]::IsNullOrWhiteSpace($ui.upTitulo.Text) -and $null -eq $script:serieEps
+        if (-not ($vacia -and @($script:tabs).Count -le 1)) { Nueva-Tab }
+        $script:serieEps = $null; $script:serieClave = ""
+        Cargar-TorrentParaSubir $torNorm $(if ($video -and (Test-Path -LiteralPath "$video")) { "$video" } else { $null }) $origen @($capturas)
+        $epNum = Get-EpisodioDeNombre $nombre
+        $ep = @{
+            Torrent = $torNorm; Video = $script:videoSubir; Titulo = "$($ui.upTitulo.Text)"
+            Temporada = $epNum.Temporada; Episodio = $epNum.Episodio
+            Mediainfo = "$($ui.upMediainfo.Text)"; Caps = @($script:capRows | ForEach-Object { $_.Ruta })
+            Estado = "pendiente"; Error = ""; TorrentTracker = ""; UrlWeb = ""; RemotoId = ""; RemotoNombre = ""
+        }
+        $script:serieEps = @($ep); $script:serieClave = $clave
+        # La descripción común no lleva capturas (se insertan las de cada episodio al subirlo).
+        $supA = $script:suprimirRehacerCaps; $script:suprimirRehacerCaps = $false
+        try { $ui.upDescripcion.Text = Get-HdzCaptureDescription "$($ui.upDescripcion.Text)" @($script:capRows | ForEach-Object { @{ Ruta = $_.Ruta; Subida = $_.Subida; Marcada = $false } }) } finally { $script:suprimirRehacerCaps = $supA }
+    }
+    Refrescar-CapturasSerie
+    Actualizar-VistaSerie
+    $script:tabs[$script:tabActual] = Snapshot-Subida
+    if (-not $traerAlFrente -and $volverA -ge 0 -and $volverA -lt @($script:tabs).Count -and $volverA -ne $script:tabActual) { Cambiar-Tab $volverA }
+    Construir-TabBar
+    Set-Estado "Serie: $(@($script:tabs | Where-Object { $_.Serie -and $_.Serie.Clave -eq $clave } | ForEach-Object { @($_.Serie.Episodios).Count }) | Select-Object -First 1) episodio(s) en la pestaña. Último: $(Split-Path $torNorm -Leaf)." "ok"
+}
+# Reconstruye la rejilla con las capturas de todos los episodios, conservando marcas y URLs.
+function Refrescar-CapturasSerie {
+    $estados = @($script:capRows | ForEach-Object { @{ Ruta = $_.Ruta; Marcada = [bool]$_.Check.IsChecked; Subida = $_.Subida } })
+    $supA = $script:suprimirRehacerCaps; $script:suprimirRehacerCaps = $true
+    try { Construir-Capturas @(@(Get-EpisodiosSerieOrdenados) | ForEach-Object { @($_.Caps) }) $estados } finally { $script:suprimirRehacerCaps = $supA }
+}
+# Un resultado del montaje: los episodios (SxxEyy) van a la pestaña de su serie; el resto, como siempre.
+function Anadir-ResultadoSubida($r, $traerAlFrente = $false) {
+    $nom = Get-NombreTorrent "$($r.torrent)"
+    if ("$($r.tipo)" -ne 'pack' -and (Get-ClaveSerieTorrent $nom)) { Anadir-EpisodioSerie $r.torrent "$($r.video)" "$($r.origen)" @($r.capturas) $traerAlFrente }
+    else { Anadir-SubidaAuto $r.torrent "$($r.video)" "$($r.origen)" @($r.capturas) $traerAlFrente }
+}
+function Get-ResumenSerie {
+    $eps = @(Get-EpisodiosSerieOrdenados)
+    $sub = @($eps | Where-Object { $_.Estado -eq 'subido' }).Count
+    $base = if ($eps.Count) { ("$($eps[0].Titulo)" -replace '(?i)\bS(\d{1,3})E\d{1,4}(?:-?E?\d{1,4})*\b', 'S$1') } else { "Serie" }
+    [pscustomobject]@{ Total = $eps.Count; Subidos = $sub; Titulo = "$base".Trim() }
+}
+# Muestra/oculta lo propio de una subida suelta y pinta la lista de episodios.
+function Actualizar-VistaSerie {
+    $esSerie = ($null -ne $script:serieEps)
+    $visSuelta = if ($esSerie) { "Collapsed" } else { "Visible" }
+    foreach ($c in @($ui.lblUpTitulo, $ui.upTitulo, $ui.cardMediainfo)) { if ($c) { $c.Visibility = $visSuelta } }
+    if ($esSerie -and $ui.panTV) { $ui.panTV.Visibility = "Collapsed" }
+    elseif ($ui.panTV) { Actualizar-TipoCategoria }
+    foreach ($b in @($ui.btnCapGenerar, $ui.btnCapInsertar, $ui.btnMediaRefrescar)) { if ($b) { $b.IsEnabled = -not $esSerie } }
+    if ($ui.cardSerieEps) { $ui.cardSerieEps.Visibility = if ($esSerie) { "Visible" } else { "Collapsed" } }
+    if (-not $esSerie) {
+        $ui.btnSubir.Content = "☁   Subir a HDZERO"
+        if ($ui.btnAbrirTorrent) { $ui.btnAbrirTorrent.Content = "🌱  Abrir torrent" }
+        return
+    }
+    $res = Get-ResumenSerie
+    $ui.upTitulo.Text = "$($res.Titulo) · $($res.Total) episodios"
+    $ui.bdgSerieEps.Text = "$($res.Subidos) de $($res.Total) subidos"
+    $ui.btnSubir.Content = if ($res.Subidos -gt 0 -and $res.Subidos -lt $res.Total) { "☁   Subir los que faltan (en orden)" } else { "☁   Subir todos (en orden)" }
+    $abribles = @(Get-EpisodiosSerieOrdenados | Where-Object { $_.TorrentTracker -and (Test-Path -LiteralPath "$($_.TorrentTracker)") })
+    if ($ui.btnAbrirTorrent) {
+        $ui.btnAbrirTorrent.Content = "🌱  Abrir todos los torrents ($($abribles.Count))"
+        $ui.btnAbrirTorrent.Visibility = if ($abribles.Count -gt 0) { "Visible" } else { "Collapsed" }
+    }
+    $ui.panSerieEps.Children.Clear()
+    $iEp = 0
+    foreach ($ep in @(Get-EpisodiosSerieOrdenados)) {
+        $epRef = $ep
+        $g = New-Object System.Windows.Controls.Grid
+        $g.Margin = [System.Windows.Thickness]::new(0, 0, 0, 6)
+        foreach ($w in @('Auto', '*', 'Auto')) {
+            $cd = New-Object System.Windows.Controls.ColumnDefinition
+            $cd.Width = if ($w -eq '*') { [System.Windows.GridLength]::new(1, 'Star') } else { [System.Windows.GridLength]::Auto }
+            [void]$g.ColumnDefinitions.Add($cd)
+        }
+        $lb = New-Object System.Windows.Controls.TextBlock
+        $lb.Text = Get-EtiquetaEpisodio $ep; $lb.FontWeight = "SemiBold"; $lb.Width = 76
+        $lb.VerticalAlignment = "Center"; $lb.Foreground = $win.Resources["TextBrush"]
+        [void]$g.Children.Add($lb)
+        $tb = New-Object System.Windows.Controls.TextBox
+        $tb.Style = $win.Resources["Input"]; $tb.Text = "$($ep.Titulo)"; $tb.ToolTip = "Título con el que se sube este episodio"
+        $tb.IsEnabled = ($ep.Estado -ne 'subido')
+        $tb.Add_TextChanged({ $epRef.Titulo = "$($this.Text)" }.GetNewClosure())
+        [System.Windows.Controls.Grid]::SetColumn($tb, 1); [void]$g.Children.Add($tb)
+        $st = New-Object System.Windows.Controls.TextBlock
+        $st.VerticalAlignment = "Center"; $st.Margin = [System.Windows.Thickness]::new(12, 0, 0, 0); $st.MinWidth = 90
+        switch ("$($ep.Estado)") {
+            'subido' { $st.Text = "✓ Subido"; $st.Foreground = $win.Resources["OkBrush"] }
+            'error'  { $st.Text = "✗ Error"; $st.Foreground = $win.Resources["WarnBrush"]; $st.ToolTip = "$($ep.Error)" }
+            'subiendo' { $st.Text = "⏳ Subiendo…"; $st.Foreground = $win.Resources["TextBrush"] }
+            default  { $st.Text = "Pendiente"; $st.Foreground = $win.Resources["SubBrush"] }
+        }
+        if ($ep.UrlWeb) {
+            $st.Cursor = [System.Windows.Input.Cursors]::Hand; $st.ToolTip = "Abrir la página del torrent"
+            $urlEp = "$($ep.UrlWeb)"
+            $st.Add_MouseLeftButtonUp({ try { Start-Process $urlEp } catch {} }.GetNewClosure())
+        }
+        [System.Windows.Controls.Grid]::SetColumn($st, 2); [void]$g.Children.Add($st)
+        [void]$ui.panSerieEps.Children.Add($g)
+        $iEp++
+    }
+}
+# Sube los episodios pendientes EN ORDEN (E01, E02…) con la ficha común y lo propio de cada uno.
+# Se para en el primer fallo: nunca se sube un episodio posterior a uno que no entró.
+function Invoke-SubidaSerie {
+    if ($null -eq $script:serieEps -or $script:serieSubiendo) { return }
+    $pend = @(Get-EpisodiosSerieOrdenados | Where-Object { $_.Estado -ne 'subido' })
+    if ($pend.Count -eq 0) { Set-SubidaEstado "Todos los episodios ya están subidos." "ok"; return }
+    $todas = @($script:capRows)
+    $descComun = "$($ui.upDescripcion.Text)"
+    $comun = @{ Titulo = "$($ui.upTitulo.Text)"; Torrent = "$($ui.txtTorrentSubir.Text)"; Video = $script:videoSubir; Mediainfo = "$($ui.upMediainfo.Text)"; Temporada = "$($ui.upTemporada.Text)"; Episodio = "$($ui.upEpisodio.Text)" }
+    $script:serieSubiendo = $true
+    $n = 0; $okTotal = 0
+    try {
+        foreach ($ep in $pend) {
+            $n++
+            $et = Get-EtiquetaEpisodio $ep
+            $ep.Estado = 'subiendo'; Actualizar-VistaSerie
+            Set-SubidaEstado "Subiendo $et ($n de $($pend.Count))…"
+            $ui.txtTorrentSubir.Text = "$($ep.Torrent)"; $ui.upTitulo.Text = "$($ep.Titulo)"
+            $ui.upTemporada.Text = "$([int]$ep.Temporada)"; $ui.upEpisodio.Text = "$([int]$ep.Episodio)"
+            $ui.upMediainfo.Text = "$($ep.Mediainfo)"; $script:videoSubir = $ep.Video
+            $ui.upDescripcion.Text = $descComun
+            $epCaps = @($ep.Caps | ForEach-Object { "$_" })
+            $script:capRows = @($todas | Where-Object { $epCaps -contains "$($_.Ruta)" })
+            Invoke-SubidaTracker
+            if ($script:ultimaSubidaOk) {
+                $ep.Estado = 'subido'; $ep.Error = ''
+                $ep.TorrentTracker = "$($script:rutaTorrentTracker)"; $ep.UrlWeb = "$($script:urlTorrentWeb)"
+                $ep.RemotoId = "$($script:torrentRemotoId)"; $ep.RemotoNombre = "$($script:torrentRemotoNombre)"
+                $okTotal++
+            } else {
+                $ep.Estado = 'error'; $ep.Error = "$($ui.lblEstado.Text)"
+                Set-SubidaEstado "✗  $et no se pudo subir: $($ep.Error). Se para aquí para no desordenar la serie; corrige y pulsa de nuevo." "error"
+                break
+            }
+        }
+    } finally {
+        # La pestaña vuelve a su ficha común (sin capturas en la descripción).
+        $script:capRows = $todas
+        $ui.upDescripcion.Text = $descComun
+        $ui.txtTorrentSubir.Text = $comun.Torrent; $script:videoSubir = $comun.Video
+        $ui.upMediainfo.Text = $comun.Mediainfo; $ui.upTemporada.Text = $comun.Temporada; $ui.upEpisodio.Text = $comun.Episodio
+        $script:rutaTorrentTracker = ""; $script:torrentRemotoId = ""; $script:torrentRemotoNombre = ""
+        $script:serieSubiendo = $false
+        foreach ($ep in @($script:serieEps)) { if ($ep.Estado -eq 'subiendo') { $ep.Estado = 'pendiente' } }
+        Actualizar-VistaSerie
+        Actualizar-ContadorCapturas
+        if ($script:tabActual -ge 0 -and $script:tabActual -lt @($script:tabs).Count) { $script:tabs[$script:tabActual] = Snapshot-Subida }
+        Construir-TabBar
+        if ($script:agSync) { $script:agSync.PushNow = $true }
+    }
+    $res = Get-ResumenSerie
+    if ($res.Subidos -eq $res.Total) { Set-SubidaEstado "✓  Serie completa: $($res.Total) episodios subidos en orden. Ya puedes abrir todos los torrents para sembrar." "ok" }
+}
+# Programa con el que Windows abre los .torrent (para pasarle TODOS de una vez).
+function Get-HdzAppTorrent {
+    try {
+        $progId = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.torrent\UserChoice' -ErrorAction Stop).ProgId
+    } catch { $progId = $null }
+    if (-not $progId) { try { $progId = (Get-ItemProperty -LiteralPath 'Registry::HKEY_CLASSES_ROOT\.torrent' -ErrorAction Stop).'(default)' } catch {} }
+    if (-not $progId) { return $null }
+    try { $cmdLine = (Get-ItemProperty -LiteralPath "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction Stop).'(default)' } catch { return $null }
+    if ("$cmdLine" -match '^\s*"([^"]+\.exe)"' -or "$cmdLine" -match '^\s*(\S+\.exe)') {
+        $exe = [Environment]::ExpandEnvironmentVariables($Matches[1])
+        if (Test-Path -LiteralPath $exe) { return $exe }
+    }
+    return $null
+}
+# Abre de golpe todos los .torrent del tracker de la serie (los que llevan tu passkey), en orden.
+function Abrir-TorrentsSerie {
+    $rutas = @(Get-EpisodiosSerieOrdenados | Where-Object { $_.TorrentTracker -and (Test-Path -LiteralPath "$($_.TorrentTracker)") } | ForEach-Object { "$($_.TorrentTracker)" })
+    if ($rutas.Count -eq 0) { Set-SubidaEstado "Aún no hay torrents del tracker: sube primero los episodios." "warn"; return }
+    try {
+        $exe = Get-HdzAppTorrent
+        if ($exe) { Start-Process -FilePath $exe -ArgumentList @($rutas | ForEach-Object { '"' + $_ + '"' }) }
+        else { foreach ($r in $rutas) { Start-Process -FilePath $r } }
+        Set-SubidaEstado "🌱  Abiertos $($rutas.Count) torrents para sembrar." "ok"
+    } catch { Set-SubidaEstado "No pude abrir los torrents: $($_.Exception.Message)" "warn" }
+}
+function Cargar-EpisodiosSerie([string[]]$rutas) {
+    $lista = @($rutas | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Sort-Object { $n = Get-NombreTorrent $_; $e = Get-EpisodioDeNombre $n; if ($e) { '{0:D4}{1:D5}' -f $e.Temporada, $e.Episodio } else { "99999999$n" } })
+    if ($lista.Count -eq 0) { return }
+    foreach ($r in $lista) {
+        try { Anadir-EpisodioSerie $r }
+        catch { Set-Estado "No se pudo cargar $(Split-Path $r -Leaf): $($_.Exception.Message)" "error" }
+    }
+}
+$ui.btnTorrentEpisodios.Add_Click({
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Filter = "Torrents (*.torrent)|*.torrent"; $dlg.Multiselect = $true
+    $dlg.Title = "Elige los .torrent de los episodios"
+    if ($ui.txtCarpeta.Text -and (Test-Path -LiteralPath $ui.txtCarpeta.Text)) { $dlg.InitialDirectory = $ui.txtCarpeta.Text }
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Cargar-EpisodiosSerie @($dlg.FileNames) }
+})
 $ui.btnNuevaSubida.Add_Click({ Nueva-Tab })
 $ui.btnTabIzq.Add_Click({ $ui.scrTabs.ScrollToHorizontalOffset([Math]::Max(0, $ui.scrTabs.HorizontalOffset - 240)) })
 $ui.btnTabDer.Add_Click({ $ui.scrTabs.ScrollToHorizontalOffset($ui.scrTabs.HorizontalOffset + 240) })
@@ -7504,6 +7882,7 @@ function Set-SubidaEstado($texto, $tipo = "info") {
 
 # Construye la subida completa: sube capturas seleccionadas, monta el BBCode y hace el POST a la API.
 function Invoke-SubidaTracker {
+    $script:ultimaSubidaOk = $false   # lo lee la subida de series para saber si seguir
     # --- Validaciones ---
     $rutaTorrent = "$($ui.txtTorrentSubir.Text)"
     if ([string]::IsNullOrWhiteSpace($rutaTorrent) -or -not (Test-Path -LiteralPath $rutaTorrent)) {
@@ -7691,6 +8070,7 @@ function Invoke-SubidaTracker {
         $msg = "$($resp.message)$($resp.data)"
         try { Log-Sec "SUBIDA AL TRACKER · respuesta"; Log-Linea "success=$($resp.success) | message=$($resp.message) | data=$($resp.data)" } catch {}
         if ("$($resp.success)" -ieq 'true') {
+            $script:ultimaSubidaOk = $true
             Set-SubidaEstado "✓  Subido correctamente. $($resp.message)" "ok"
             # El resultado anterior de esta pestaña deja de ser el vigente desde que el tracker
             # acepta una nueva subida. Se rellenan de nuevo al descargar/publicar el torrent actual.
@@ -7811,13 +8191,14 @@ function Publicar-TorrentAgente($ruta) {
 
 $ui.btnVerWeb.Add_Click({ if ($script:urlTorrentWeb) { try { Start-Process $script:urlTorrentWeb } catch { Set-SubidaEstado "No se pudo abrir el navegador: $($_.Exception.Message)" "warn" } } })
 $ui.btnAbrirTorrent.Add_Click({
+    if ($null -ne $script:serieEps) { Abrir-TorrentsSerie; return }
     if ($script:rutaTorrentTracker -and (Test-Path -LiteralPath $script:rutaTorrentTracker)) {
         try { Start-Process -FilePath $script:rutaTorrentTracker }
         catch { Set-SubidaEstado "No pude abrir el torrent: $($_.Exception.Message)" "warn" }
     }
 })
 
-$ui.btnSubir.Add_Click({ Invoke-SubidaTracker })
+$ui.btnSubir.Add_Click({ if ($null -ne $script:serieEps) { Invoke-SubidaSerie } else { Invoke-SubidaTracker } })
 if ($ui.btnEnviarLog) { $ui.btnEnviarLog.Add_Click({ Enviar-LogSoporte }) }
 
 # =========================================================================
@@ -7990,6 +8371,8 @@ function Arrancar-JobMontaje($job) {
 # Cada película lanzada se anota en $script:gruposLanzados para no encolarla dos veces.
 function Iniciar-Montaje($scope) {
     if ($script:timerIdiomasManuales.IsEnabled) { Actualizar-IdiomasManuales }
+    # «Tal cual» (sin remux): las comprobaciones de pistas de audio/subtítulos no aplican.
+    $talCualOn = ("$(Get-ChipValor 'modoVideo')" -eq "TAL_CUAL")
     if (-not (Test-Path -LiteralPath $rutaScript)) {
         Set-Estado "No se encuentra HDZnew.ps1 junto a esta interfaz ($rutaScript)." "error"
         return
@@ -8040,7 +8423,7 @@ function Iniciar-Montaje($scope) {
                 return
             }
             $dAud = $script:tabsProy[$i].Decisiones
-            if ($dAud -and @($dAud.AudioLangsTodos).Count -gt 0 -and @($dAud.AudioLangs).Count -eq 0) {
+            if (-not $talCualOn -and $dAud -and @($dAud.AudioLangsTodos).Count -gt 0 -and @($dAud.AudioLangs).Count -eq 0) {
                 $ui.navProyecto.IsChecked = $true
                 Cambiar-TabProy $i
                 Set-Estado "La película «$($script:tabsProy[$i].Principal)» no tiene ningún idioma de audio marcado." "error"
@@ -8056,14 +8439,14 @@ function Iniciar-Montaje($scope) {
     $idiomasMarcados = @($script:chipsIdiomas | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
     $audiosDisponibles = @($script:chipsIdiomasAudio | ForEach-Object { "$($_.Tag)" })
     $audiosMarcados = @($script:chipsIdiomasAudio | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
-    if ($audiosDisponibles.Count -gt 0 -and $audiosMarcados.Count -eq 0) {
+    if (-not $talCualOn -and $audiosDisponibles.Count -gt 0 -and $audiosMarcados.Count -eq 0) {
         Set-Estado "Marca al menos un idioma de audio para conservar." "error"
         $ui.navProyecto.IsChecked = $true
         return
     }
     # Un vídeo con TODAS sus pistas de audio desmarcadas saldría mudo: casi siempre es un descuido
     # (p. ej. tras quitar idiomas mal etiquetados y corregirlos). En remezcla el audio puede venir de otra carpeta.
-    if (-not $remezclaOn) {
+    if (-not $remezclaOn -and -not $talCualOn) {
         $sinAudio = @(@($script:audioTrackRows) | Group-Object Archivo | Where-Object { @($_.Group | Where-Object { $_.Choice.IsChecked }).Count -eq 0 })
         if ($sinAudio.Count -gt 0) {
             $nombreMudo = Split-Path "$($sinAudio[0].Name)" -Leaf
@@ -8073,13 +8456,13 @@ function Iniciar-Montaje($scope) {
             return
         }
     }
-    if ($filtroVal -eq "PERSONALIZADA" -and $idiomasMarcados.Count -eq 0) {
+    if (-not $talCualOn -and $filtroVal -eq "PERSONALIZADA" -and $idiomasMarcados.Count -eq 0) {
         Set-Estado "Filtro personalizado de subtítulos: marca al menos un idioma." "error"
         $ui.navProyecto.IsChecked = $true
         return
     }
     $tiposSubMarcados = @($script:chipsTiposSub | Where-Object { $_.IsChecked } | ForEach-Object { "$($_.Tag)" })
-    if ($ui.cardFiltro.Visibility -eq "Visible" -and $tiposSubMarcados.Count -eq 0) {
+    if (-not $talCualOn -and $ui.cardFiltro.Visibility -eq "Visible" -and $tiposSubMarcados.Count -eq 0) {
         Set-Estado "Tipos de subtítulos: marca al menos uno (completos, forzados o SDH)." "error"
         $ui.navProyecto.IsChecked = $true
         return
@@ -8111,6 +8494,8 @@ function Iniciar-Montaje($scope) {
     $v = Get-ChipValor "capturasProy"; if ($null -ne $v) { $cfg.NumCapturas = [int]$v }
     $v = Get-ChipValor "originales";   if ($null -ne $v) { $cfg.AccionOriginales = "$v"; $cfg.BorrarOriginales = ("$v" -eq "BORRAR") }
     $v = Get-ChipValor "sufijo";       if ($null -ne $v) { $cfg.SufijoHDZ = $v }
+    $v = Get-ChipValor "etqIdioma";    if ($null -ne $v) { $cfg.EtiquetaIdioma = "$v" }
+    $v = Get-ChipValor "modoVideo";    if ($null -ne $v) { $cfg.ModoVideo = "$v" }
     $v = Get-ChipValor "torrent";      if ($null -ne $v) { $cfg.ModoTorrent = $v }
     # La URL de anuncio y el nombre del pack se envían siempre que estén rellenos.
     if (-not [string]::IsNullOrWhiteSpace($ui.txtAnnounce.Text))   { $cfg.TorrentAnnounce   = $ui.txtAnnounce.Text.Trim() }
@@ -8290,6 +8675,7 @@ function Iniciar-Montaje($scope) {
             $gen = [ordered]@{}
             if ($null -ne $e.Originales) { $gen.AccionOriginales = "$($e.Originales)"; $gen.BorrarOriginales = ("$($e.Originales)" -eq "BORRAR") }
             if ($null -ne $e.Sufijo)     { $gen.SufijoHDZ = $e.Sufijo }
+            if ($null -ne $e.EtqIdioma)  { $gen.EtiquetaIdioma = "$($e.EtqIdioma)" }
             if ($null -ne $e.Torrent)    { $gen.ModoTorrent = "$($e.Torrent)" }
             if ($gen.Count -gt 0) { 
                 foreach ($arch in @($tb.Archivos)) { 
@@ -8539,6 +8925,7 @@ function Actualizar-BotonesIniciar {
         $ui.btnIniciar.IsEnabled = $true
         if ($ui.btnIniciarTodos) { $ui.btnIniciarTodos.Visibility = "Collapsed" }
     }
+    if ("$(Get-ChipValor 'modoVideo')" -eq "TAL_CUAL") { $ui.btnIniciar.Content = "▶   Renombrar y preparar" }
 }
 
 # Sondeo del fichero de progreso que escribe HDZnew.ps1 (~3/s) + detección de fin de proceso.
@@ -8601,7 +8988,7 @@ function Iniciar-SondeoProgreso {
                     $script:resultadosLeidos++
                     $r = $linea | ConvertFrom-Json
                     if ($r -and $r.torrent -and (Test-Path -LiteralPath $r.torrent)) {
-                        Anadir-SubidaAuto $r.torrent "$($r.video)" "$($r.origen)" @($r.capturas) $false
+                        Anadir-ResultadoSubida $r $false
                     }
                 }
             } catch {}
@@ -8616,7 +9003,7 @@ function Iniciar-SondeoProgreso {
                     $lineasFin = @(Get-Content -LiteralPath $script:rutaResultados -Encoding UTF8 -ErrorAction Stop)
                     while ($script:resultadosLeidos -lt $lineasFin.Count) {
                         $lf = $lineasFin[$script:resultadosLeidos]; $script:resultadosLeidos++
-                        try { $rf = $lf | ConvertFrom-Json; if ($rf -and $rf.torrent -and (Test-Path -LiteralPath $rf.torrent)) { Anadir-SubidaAuto $rf.torrent "$($rf.video)" "$($rf.origen)" @($rf.capturas) $false } } catch {}
+                        try { $rf = $lf | ConvertFrom-Json; if ($rf -and $rf.torrent -and (Test-Path -LiteralPath $rf.torrent)) { Anadir-ResultadoSubida $rf $false } } catch {}
                     }
                 } catch {}
             }
@@ -9587,7 +9974,7 @@ function Listar-CarpetaAgenteCore($p, $filtro = "video") {
         return [ordered]@{ path = "$p"; up = "$up"; dirs = $dirs; files = $files; filtro = "$filtro" }
     } catch { return [ordered]@{ path = "$p"; up = ""; dirs = @(); files = @(); filtro = "$filtro"; error = "$($_.Exception.Message)" } }
 }
-$script:agGruposChip = @('modoLote','originales','sufijo','torrent','origen','webTipo','capturasProy','defAudio','filtro','extraerPGS','conservarPGS','hostImg')
+$script:agGruposChip = @('modoVideo','modoLote','originales','sufijo','etqIdioma','torrent','origen','webTipo','capturasProy','defAudio','filtro','extraerPGS','conservarPGS','hostImg')
 function _agMapSwitch { @{ remezcla=$ui.swRemezcla; proyecto=$ui.swProyecto; serie=$ui.swSerie; aplicarTodos=$ui.swAplicarTodos } }
 function _agMapCombo  { @{ plataforma=$ui.cmbPlataforma; formato=$ui.cmbFormato; upCategoria=$ui.upCategoria; upTipo=$ui.upTipo; upResolucion=$ui.upResolucion; numCapturas=$ui.cmbNumCapturas; epsPorVideo=$ui.cmbEpsPorVideo } }
 $script:agFlags = @('upAnon','upPersonal','upAudioEd','upProper','upDV','upHDR10P','upHDR10','upModQueue')
@@ -9899,7 +10286,7 @@ function Componer-EstadoAgente {
     $caps = @()
     $ci = 0
     foreach ($cr in @($script:capRows)) {
-        $caps += [ordered]@{ i = $ci; nombre = (Split-Path "$($cr.Ruta)" -Leaf); sel = [bool]$cr.Check.IsChecked; thumb = (Get-CapturaThumbB64 "$($cr.Ruta)"); subida = "$($cr.Subida)" }
+        $caps += [ordered]@{ i = $ci; nombre = (Split-Path "$($cr.Ruta)" -Leaf); sel = [bool]$cr.Check.IsChecked; thumb = (Get-CapturaThumbB64 "$($cr.Ruta)"); subida = "$($cr.Subida)"; ep = "$($cr.Ep)" }
         $ci++
     }
     $est.capturas = $caps
@@ -9916,6 +10303,22 @@ function Componer-EstadoAgente {
     }
     $est.tabsSubida = $tabsSub
     $est.tabSubidaActual = [int]$script:tabActual
+    # Serie (episodios): misma pestaña única que en el PC, con la lista de episodios, su estado y el
+    # torrent del tracker de cada uno (descargable desde el móvil).
+    $est.esSerieProyecto = [bool]$ui.swSerie.IsChecked
+    if ($null -ne $script:serieEps) {
+        $resS = Get-ResumenSerie
+        $iS = 0
+        $est.serie = [ordered]@{
+            activa = $true; titulo = "$($resS.Titulo)"; total = [int]$resS.Total; subidos = [int]$resS.Subidos
+            subiendo = [bool]$script:serieSubiendo
+            abribles = @(Get-EpisodiosSerieOrdenados | Where-Object { $_.TorrentTracker -and (Test-Path -LiteralPath "$($_.TorrentTracker)") }).Count
+            episodios = @(Get-EpisodiosSerieOrdenados | ForEach-Object {
+                $o = [ordered]@{ i = $iS; ep = (Get-EtiquetaEpisodio $_); titulo = "$($_.Titulo)"; estado = "$($_.Estado)"; error = "$($_.Error)"; urlWeb = "$($_.UrlWeb)"
+                    descarga = [ordered]@{ disponible = [bool]("$($_.RemotoId)" -match '^[0-9a-f]{64}$' -and "$($_.RemotoNombre)"); id = "$($_.RemotoId)"; nombre = "$($_.RemotoNombre)" } }
+                $iS++; $o })
+        }
+    } else { $est.serie = [ordered]@{ activa = $false } }
     # Pestañas por película (solo en «Cada archivo distinto»): el móvil las muestra y cambia de
     # película igual que el programa. El título de la activa se lee en vivo del campo; el de las
     # demás, de su Estado guardado. Cambiar de pestaña en el móvil llama a Cambiar-TabProy (comando
@@ -10133,6 +10536,9 @@ function Aplicar-ComandoAgente($c) {
             "set_salida"   { $nm = "$($c.nombre)"; if ($nm) { $v = "$($c.value)".Trim(); foreach ($m in Miembros-GrupoDe $nm) { if ($v) { $script:salidaMap[$m] = $v } else { [void]$script:salidaMap.Remove($m) }; if ($script:salidaBtns.ContainsKey($m)) { $script:salidaBtns[$m].Content = Etiqueta-SalidaArchivo $m } } } }
             "crear_torrent" { $modo = if ("$($c.modo)" -eq "pack") { "pack" } else { "archivo" }; if ("$($c.path)") { Start-CrearTorrentAsync $modo "$($c.path)" } }
             "cargar_torrent"{ if ("$($c.path)") { Anadir-SubidaAuto "$($c.path)" } }
+            "cargar_episodios" { $pp = @($c.paths | ForEach-Object { "$_" } | Where-Object { $_ }); if ($pp.Count) { Cargar-EpisodiosSerie $pp } }
+            "set_ep_titulo" { $epsW = @(Get-EpisodiosSerieOrdenados); $i = [int]$c.idx; if ($i -ge 0 -and $i -lt $epsW.Count -and $epsW[$i].Estado -ne 'subido') { $epsW[$i].Titulo = "$($c.value)"; Actualizar-VistaSerie } }
+            "abrir_todos" { Abrir-TorrentsSerie }
             default       { throw 'Orden remota no reconocida.' }
         }
         $commandOk = $true
@@ -10234,7 +10640,8 @@ Restaurar-Ajustes
 if ([string]::IsNullOrWhiteSpace($ui.txtSalidaTorrent.Text) -and -not [string]::IsNullOrWhiteSpace($ui.cfgCarpetaTorrent.Text)) {
     $ui.txtSalidaTorrent.Text = "$($ui.cfgCarpetaTorrent.Text)".Trim()
 }
-if ([string]::IsNullOrWhiteSpace($ui.txtCarpeta.Text)) { $ui.txtCarpeta.Text = (Get-Location).Path }
+# La carpeta de vídeos arranca vacía. Antes se rellenaba con la carpeta de trabajo (la de la
+# instalación) y «Añadir temporada» la contaba como primera temporada del lote.
 if ([string]::IsNullOrWhiteSpace($ui.cfgTrackerUrl.Text)) { $ui.cfgTrackerUrl.Text = "https://hdzero.org" }
 Actualizar-Proyecto
 Actualizar-Filtro

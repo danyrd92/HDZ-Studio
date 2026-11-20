@@ -71,7 +71,7 @@ try {
   $encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new();$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap));$file=[IO.File]::Create((Join-Path $env:TEMP "hdz_design_$width.png"));try{$encoder.Save($file)}finally{$file.Dispose()}
   Mostrar-Panel 'panSubida';$content.Measure([Windows.Size]::new($width,850));$content.Arrange([Windows.Rect]::new(0,0,$width,850));$content.UpdateLayout()
   $publishing=$ui.panSubidaBody.Child.Children[0]
-  foreach($card in @($publishing.Children|Where-Object {$_ -is [Windows.Controls.Border]}|Select-Object -First 3)){Assert ($card.ActualWidth -ge $publishing.ActualWidth-2) 'Tarjeta de publicación ocupa solo media anchura'}
+  foreach($card in @($publishing.Children|Where-Object {$_ -is [Windows.Controls.Border] -and $_.Visibility -eq 'Visible'}|Select-Object -First 3)){Assert ($card.ActualWidth -ge $publishing.ActualWidth-2) 'Tarjeta de publicación ocupa solo media anchura'}
   $bitmap=[Windows.Media.Imaging.RenderTargetBitmap]::new($width,850,96,96,[Windows.Media.PixelFormats]::Pbgra32);$bitmap.Render($content);$encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new();$encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap));$file=[IO.File]::Create((Join-Path $env:TEMP "hdz_publicar_$width.png"));try{$encoder.Save($file)}finally{$file.Dispose()};Mostrar-Panel 'panCrear'
  }
  Write-Host 'DESIGN_WPF_OK: uniform headers, expansion, preserved events, vector navigation, keyboard focus, compact empty state and wide-screen layout.'

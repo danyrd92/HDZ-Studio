@@ -54,6 +54,10 @@ if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoP
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Responsiveness.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la fluidez del escritorio'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-NumeracionEpisodios.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la numeración de episodios en orden natural'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-EpisodiosAlLanzar.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la numeración automática de episodios al lanzar'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-CarpetaInicial.ps1');if($LASTEXITCODE -ne 0){throw 'La carpeta de vídeos no arranca vacía'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-NombreFinal.ps1');if($LASTEXITCODE -ne 0){throw 'Falló el nombrado HDZ (códec, VOSE/Latino) o el modo tal cual'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SerieEpisodios.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la subida de series por episodios'}
+& node (Join-Path $PSScriptRoot 'test_web_serie.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la serie por episodios en la web'}
 & node (Join-Path $PSScriptRoot 'test_responsiveness.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la estabilidad de los controles web'}
 $tempHdz=[IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')+'\hdz_'
 $historyLeaks=@(if(Test-Path -LiteralPath $realHistory){Get-ChildItem -LiteralPath $realHistory -File -Filter '*.json'|Where-Object{-not $historyBefore.ContainsKey($_.Name)}|Where-Object{

@@ -1087,6 +1087,12 @@ function Get-FpsReal($rutaVideo) {
 function Rename-EvitarColision($pathOrigen, $nombreDeseado) {
     $dir = Split-Path $pathOrigen -Parent
     $destino = Join-Path $dir $nombreDeseado
+    # Ya se llama así (modo tal cual con un vídeo ya nombrado): no se toca. Si solo cambian
+    # mayúsculas, se renombra sin buscar colisión (Windows ve el mismo archivo).
+    if ((Split-Path $pathOrigen -Leaf) -ieq $nombreDeseado) {
+        if ((Split-Path $pathOrigen -Leaf) -cne $nombreDeseado) { Rename-Item -LiteralPath $pathOrigen -NewName $nombreDeseado }
+        return $destino
+    }
     if (-not (Test-Path -LiteralPath $destino)) {
         Rename-Item -LiteralPath $pathOrigen -NewName $nombreDeseado
         return $destino
@@ -3904,9 +3910,13 @@ function Get-DatosTecnicosMkv($rutaMkv) {
 
         # Códec de video
         $fmt = "$($pistaVideo.Format)"
+        # VC-1 y MPEG-2 son habituales en Blu-rays antiguos (BDRemux/BDFull): antes caían en «264»
+        # y el nombre decía AVC sin serlo.
         $resultado.CodecVideo = if     ($fmt -match "(?i)AV1")              { "AV1" }
                                 elseif ($fmt -match "(?i)HEVC|H\.?265")     { "265" }
                                 elseif ($fmt -match "(?i)AVC|H\.?264")      { "264" }
+                                elseif ($fmt -match "(?i)VC-?1")            { "VC1" }
+                                elseif ($fmt -match "(?i)MPEG-?2|MPEG Video") { "MPEG2" }
                                 else { "264" }
 
         # HDR: leemos el campo HDR_Format que en el archivo final ya combina la info de DV + HDR10/HDR10+
@@ -3967,6 +3977,140 @@ function Get-DatosTecnicosMkv($rutaMkv) {
     }
 
     return $resultado
+}
+
+# =========================================================================
+# NOMBRE FINAL HDZ (compartido por el montaje y por el modo «tal cual»)
+# =========================================================================
+
+# Audio que da nombre al archivo: dentro del idioma de mayor prioridad, el mejor DTS si lo hay
+# (DTS-HD MA antes que DTS); si no, la primera pista de ese idioma (la mejor Dolby según el orden
+# de Format-Audios). Devuelve "CODEC CANALES [Atmos]" o "" si no hay audios.
+function Get-AudioParaNombreHdz($audiosOrdenados) {
+    $audiosOrdenados = @($audiosOrdenados | Where-Object { $_ })
+    if ($audiosOrdenados.Count -eq 0) { return "" }
+    $pesoMin = ($audiosOrdenados | Measure-Object PesoLang -Minimum).Minimum
+    $audiosIdiomaTop = @($audiosOrdenados | Where-Object { $_.PesoLang -eq $pesoMin })
+    $dtsDelTop = @($audiosIdiomaTop | Where-Object { $_.Format -match "(?i)DTS" })
+    $audioParaNombre = if ($dtsDelTop.Count -gt 0) {
+        $dtsDelTop | Sort-Object @{Expression={ if ($_.Profile -match "(?i)MA|Master Audio" -or $_.Comm -match "(?i)MA|Master Audio") {1} else {0} }; Descending=$true} | Select-Object -First 1
+    } else { $audiosIdiomaTop[0] }
+    if (-not $audioParaNombre) { return "" }
+    $aFmt = "$($audioParaNombre.Format)"; $aProf = "$($audioParaNombre.Profile)"; $aComm = "$($audioParaNombre.Comm)"
+    $cN = switch ("$($audioParaNombre.Chan)") { "8" {"7.1"} "6" {"5.1"} "2" {"2.0"} "1" {"1.0"} default { "$($audioParaNombre.Chan)" } }
+    if (-not $cN) { $cN = "2.0" }
+    $cod = $aFmt
+    if ($aFmt -match "(?i)E-?AC-?3" -or $aComm -match "(?i)Plus" -or $aProf -match "(?i)E-?AC-?3") { $cod = "DD+" }
+    elseif ($aFmt -match "(?i)AC-?3")    { $cod = "DD" }
+    elseif ($aFmt -match "(?i)TrueHD|MLP") { $cod = "TrueHD" }
+    elseif ($aFmt -match "(?i)DTS") {
+        if ($aProf -match "(?i)MA|Master Audio" -or $aComm -match "(?i)MA|Master Audio") { $cod = "DTS-HD MA" } else { $cod = "DTS" }
+    }
+    elseif ($aFmt -match "(?i)AAC") { $cod = "AAC" }
+    elseif ($aFmt -match "(?i)FLAC") { $cod = "FLAC" }
+    elseif ($aFmt -match "(?i)PCM|LPCM") { $cod = "LPCM" }
+    $atmN = if ($aComm -match "(?i)Atmos" -or $aFmt -match "(?i)Atmos") { " Atmos" } else { "" }
+    return "$cod $cN$atmN"
+}
+
+# Pistas de audio y subtítulos tal como están en el archivo (sin remux): para el modo «tal cual».
+# Mismos campos que usan Format-Audios, Get-AudioParaNombreHdz y Get-EtiquetaIdiomaAuto.
+function Get-PistasArchivoHdz($rutaVideo) {
+    $audios = @(); $subs = @()
+    $json = Get-MediainfoJson $rutaVideo
+    if (-not $json) { return [PSCustomObject]@{ Audios = @(); Subs = @() } }
+    foreach ($p in @($json.media.track)) {
+        if ($p.'@type' -notin @('Audio', 'Text')) { continue }
+        $titulo = "$($p.Title)"
+        $lang = "$($p.Language)"; if ([string]::IsNullOrWhiteSpace($lang)) { $lang = "und" }
+        $cod = Get-LanguageCode $lang $titulo
+        $nom = Get-LanguageName $cod $titulo
+        if ($p.'@type' -eq 'Audio') {
+            $audios += [PSCustomObject]@{
+                Tipo = "Audio"; CodLang = $cod; NomLang = $nom; PesoLang = (Get-PesoIdioma $nom)
+                Format = "$($p.Format)"; Profile = "$($p.Format_Profile)"; Comm = "$($p.Format_Commercial_IfAny)"; Chan = "$($p.Channels)"
+                NomFinal = ""
+            }
+        } else {
+            $forzado = ("$($p.Forced)" -match "(?i)yes|1|true") -or ($titulo -match "(?i)(forced|forzado|forzados)")
+            $subs += [PSCustomObject]@{ Tipo = "Sub"; CodLang = $cod; NomLang = $nom; IsForced = [bool]$forzado; Format = "$($p.Format)" }
+        }
+    }
+    if ($audios.Count -gt 0) { $audios = @(Format-Audios $audios) }
+    return [PSCustomObject]@{ Audios = $audios; Subs = $subs }
+}
+
+# Etiqueta de idioma automática (normas del tracker):
+#  - con audio castellano -> nada
+#  - sin audio castellano y con subtítulos castellanos COMPLETOS (no forzados) -> "VOSE".
+#    Da igual que haya doblaje latino: se sube como VOSE y la pista latina se conserva.
+#  - el resto (p. ej. una película rodada en español latino sin doblaje al castellano) -> nada,
+#    se sube tal cual. «Latino» solo se pone si se elige a mano.
+function Get-EtiquetaIdiomaAuto($audios, $subs) {
+    $nomsAudio = @(@($audios) | Where-Object { $_ } | ForEach-Object { "$($_.NomLang)" })
+    if ($nomsAudio -contains "Castellano") { return "" }
+    $subsCast = @(@($subs) | Where-Object { $_ -and "$($_.NomLang)" -eq "Castellano" -and -not $_.IsForced })
+    if ($subsCast.Count -gt 0) { return "VOSE" }
+    return ""
+}
+
+# Decide la etiqueta final según el ajuste: AUTO (detecta), VOSE, LATINO o NINGUNA.
+function Resolve-EtiquetaIdioma($ajuste, $audios, $subs) {
+    switch ("$ajuste".ToUpperInvariant()) {
+        "VOSE"    { return "VOSE" }
+        "LATINO"  { return "Latino" }
+        "NINGUNA" { return "" }
+        default   { return (Get-EtiquetaIdiomaAuto $audios $subs) }
+    }
+}
+
+# Etiqueta del códec de vídeo según el origen:
+#  - WEB:                    H.264 / H.265 / AV1 / VC-1 / MPEG-2
+#  - Rip y MicroHD:          x264 / x265 (encodes)
+#  - Remastered, Full, Remux: AVC / HEVC / VC-1 / MPEG-2 (vídeo del disco sin recodificar)
+function Get-CodecTagHdz($tipoOrigen, $plataformaFormato, $codecVideo) {
+    $c = "$codecVideo"
+    if ($c -eq "AV1")   { return "AV1" }
+    if ($c -eq "VC1")   { return "VC-1" }
+    if ($c -eq "MPEG2") { return "MPEG-2" }
+    if ($tipoOrigen -eq "WEB") { return "H.$c" }
+    if ("$plataformaFormato" -match "(?i)Rip" -or "$plataformaFormato" -eq "MHD") { return "x$c" }
+    return $(if ($c -eq "265") { "HEVC" } else { "AVC" })
+}
+
+# Nombre final según las normas HDZ (sin carpeta). Separador: espacio.
+#  WEB:    Título (Año) [SxxEyy] RES PLAT WEB-DL|WEBRip AUDIO [HDR] [VOSE|Latino] H.265[-HDZ].ext
+#  Físico: Título (Año) [SxxEyy] [Etiq] FORMATO RES [HDR] [VOSE|Latino] CODEC AUDIO[-HDZ].ext
+function Get-NombreFinalHdz {
+    param(
+        [string]$Base, [string]$EtiquetasExtra, [string]$TipoOrigen, [string]$Resolucion,
+        [string]$PlataformaFormato, [string]$WebTipo, [string]$Audio, [string]$Hdr,
+        [string]$CodecVideo, [bool]$Sufijo, [string]$EtiquetaIdioma, [string]$Extension = ".mkv"
+    )
+    $sufijoHDZ = if ($Sufijo) { "-HDZ" } else { "" }
+    $codecTag = Get-CodecTagHdz $TipoOrigen $PlataformaFormato $CodecVideo
+    $piezas = @($Base)
+    if ($EtiquetasExtra) { $piezas += $EtiquetasExtra }
+    if ($TipoOrigen -eq "WEB") {
+        $piezas += $Resolucion; $piezas += $PlataformaFormato; $piezas += $WebTipo; $piezas += $Audio
+        if ($Hdr) { $piezas += $Hdr }
+        if ($EtiquetaIdioma) { $piezas += $EtiquetaIdioma }
+        $piezas += "$codecTag$sufijoHDZ"
+    } else {
+        $piezas += $PlataformaFormato; $piezas += $Resolucion
+        if ($Hdr) { $piezas += $Hdr }
+        if ($EtiquetaIdioma) { $piezas += $EtiquetaIdioma }
+        $piezas += $codecTag
+        $piezas += "$Audio$sufijoHDZ"
+    }
+    if ([string]::IsNullOrWhiteSpace($Extension)) { $Extension = ".mkv" }
+    if (-not $Extension.StartsWith(".")) { $Extension = ".$Extension" }
+    $nombre = (($piezas | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { "$_".Trim() }) -join " ") + $Extension.ToLowerInvariant()
+    # Fuera los caracteres que Windows NO admite en un nombre de archivo (: ? * " < > | / \).
+    # Son muy normales en los títulos («Underworld: La Rebelión de los Licántropos»); sin esto el
+    # renombrado lanzaba IOException y el MKV se quedaba como «Ensamblaje_...».
+    foreach ($chInv in [System.IO.Path]::GetInvalidFileNameChars()) { $nombre = $nombre.Replace("$chInv", "") }
+    return ($nombre -replace "\s+", " ").Trim()
 }
 
 # =========================================================================
@@ -4105,7 +4249,16 @@ if ($cfgSeleccionGui) {
 # las dos versiones del par DV+HDR10 (capa HDR, códec de audio, etiqueta Atmos, formato de plataforma).
 # Es case-insensitive y cubre las variaciones más comunes en releases de Apple TV, iTunes, Disney+, etc.
 $normalizadorAgrupacion = '(?i)[\._\s\-\(\)]+(Dolby[\._\s\-]Vision|DolbyVision|HDR10\+|HDR10|HDR|DV|2160p|1080p|UHD|WEB[\._\s\-]?DL|Apple[\._\s\-]?TV|iTunes|Disney\+?|Atmos|TrueHD|DTS[\._\s\-]?HD[\._\s\-]?MA|DTS[\._\s\-]?HD|DTS[\._\s\-]?X|DTS|E[\._\s\-]?AC[\._\s\-]?3|EAC3|AC3|DDP\+?|DD\+|DDP|DD|AAC|FLAC|MA|HRA)(?=[\._\s\-\(\)]|$)'
-$grupos = @($todosLosArchivos | Group-Object { ($_.BaseName -replace $normalizadorAgrupacion, "") -replace "\s+", " " })
+# Modo de vídeo: MONTAJE (remux completo, lo de siempre) o TAL_CUAL (sin remux: se lee la información
+# del vídeo, se renombra con la norma HDZ y siguen capturas, torrent, pack y subida).
+$talCual = ("$(Get-CfgGui 'ModoVideo')".ToUpperInvariant() -eq "TAL_CUAL")
+if ($talCual) {
+    # Sin remux no se pueden fusionar pares DV + HDR10: cada archivo va por separado.
+    $grupos = @($todosLosArchivos | Group-Object FullName)
+    Write-Host "[GUI] Modo SOLO RENOMBRAR: no se remuxa; cada vídeo se renombra y se prepara tal como está." -ForegroundColor Yellow
+} else {
+    $grupos = @($todosLosArchivos | Group-Object { ($_.BaseName -replace $normalizadorAgrupacion, "") -replace "\s+", " " })
+}
 
 Write-Host "Detectados $($grupos.Count) archivo(s) para procesar." -ForegroundColor Green
 $global:totalGruposGui = $grupos.Count
@@ -4192,6 +4345,15 @@ if ($null -ne $cfgSufijo) {
     $anadirSufijoHDZ = ($respSufijo -match "^[sS]")
 }
 
+# Etiqueta de idioma en el nombre (VOSE / Latino). AUTO = la decide el motor por archivo con las
+# pistas finales; VOSE / LATINO / NINGUNA = forzada desde la GUI. Sin GUI: AUTO.
+$etiquetaIdiomaAjuste = "AUTO"
+$cfgEtqIdioma = Get-CfgGui "EtiquetaIdioma"
+if ("$cfgEtqIdioma".ToUpperInvariant() -in @("AUTO", "VOSE", "LATINO", "NINGUNA")) {
+    $etiquetaIdiomaAjuste = "$cfgEtqIdioma".ToUpperInvariant()
+    Write-Host "[GUI] Etiqueta de idioma en el nombre: $etiquetaIdiomaAjuste (configuración)." -ForegroundColor DarkGray
+}
+
 # Carpetas de salida elegidas en la GUI (vacías = junto a los vídeos de origen).
 #  - CarpetaSalida (sesión): carpeta explícita para el MKV resultado de ESTE montaje.
 $carpetaSalidaGui  = "$(Get-CfgGui 'CarpetaSalida')".Trim()
@@ -4242,7 +4404,7 @@ $hayDTS = $false
 $archivosConDTS = 0
 $totalArchivos = ($grupos | ForEach-Object { $_.Group.Count } | Measure-Object -Sum).Sum
 $nProc = 0
-foreach ($g in $grupos) {
+foreach ($g in $(if ($talCual) { @() } else { $grupos })) {   # tal cual: no hay audio que convertir
     foreach ($f in $g.Group) {
         $nProc++
         Write-Progress -Activity "Comprobando audio DTS en el lote" -Status "$nProc/$totalArchivos : $($f.Name)" -PercentComplete (($nProc/$totalArchivos)*100)
@@ -4269,7 +4431,7 @@ if ($hayDTS) {
 # Pre-escaneo de pistas con idioma 'und' (audio y subtítulo): si las hay, preguntar UNA vez
 # por tipo a qué idioma corresponden. Va el PRIMERO porque resuelve idiomas que el resto de
 # pre-escaneos (filtro de idiomas, subs únicos) van a necesitar ya normalizados.
-if ($modoLote -eq "HOMOGENEO") {
+if ($modoLote -eq "HOMOGENEO" -and -not $talCual) {
     Set-ProgresoGui 4 "Detectando idiomas indeterminados (und)…" ""
     Resolve-IdiomasUndLote $grupos
 }
@@ -4278,7 +4440,7 @@ if ($modoLote -eq "HOMOGENEO") {
 # Va PRIMERO (antes que el forzado/completo) para no preguntar por subs de idiomas que se
 # van a descartar. En HOMOGÉNEO se decide una vez para todo el lote.
 $idiomasSubsMantenerGlobal = $null
-if ($modoLote -eq "HOMOGENEO") {
+if ($modoLote -eq "HOMOGENEO" -and -not $talCual) {
     Set-ProgresoGui 6 "Analizando idiomas de subtítulos…" ""
     $idiomasSubsMantenerGlobal = Resolve-IdiomasSubsLote $grupos
 }
@@ -4287,7 +4449,7 @@ if ($modoLote -eq "HOMOGENEO") {
 # Se ejecuta DESPUÉS del filtro de idiomas y lo respeta: no pregunta por subs de idiomas
 # que ya se van a descartar. En HETEROGÉNEO se preguntará en el bucle, archivo por archivo.
 $decisionesSubUnico = @{}
-if ($modoLote -eq "HOMOGENEO") {
+if ($modoLote -eq "HOMOGENEO" -and -not $talCual) {
     $decisionesSubUnico = Resolve-SubsUnicosLote $grupos $idiomasSubsMantenerGlobal
 }
 
@@ -4300,9 +4462,12 @@ $existeCasoDolbyDTS = $false
 # Decisión pre-elegida en la GUI: si está definida, nos saltamos también el escaneo de la
 # casuística Dolby+DTS (solo servía para decidir si hacía falta preguntar).
 $cfgDefAudio = Get-CfgGui "DefaultPreferidoAudio"
-if ("$cfgDefAudio" -in @("DOLBY", "DTS")) {
-    $defaultPreferidoAudio = "$cfgDefAudio"
-    Write-Host "[GUI] Pista de audio predeterminada: $defaultPreferidoAudio (configuración)." -ForegroundColor DarkGray
+if ($talCual -or "$cfgDefAudio" -in @("DOLBY", "DTS")) {
+    # Tal cual: no se tocan las banderas de las pistas, no hace falta decidir nada.
+    if ("$cfgDefAudio" -in @("DOLBY", "DTS")) {
+        $defaultPreferidoAudio = "$cfgDefAudio"
+        Write-Host "[GUI] Pista de audio predeterminada: $defaultPreferidoAudio (configuración)." -ForegroundColor DarkGray
+    }
 } else {
 # La conversión DTS->EAC3 puede CREAR un audio Dolby donde antes solo había DTS. Por eso
 # evaluamos la casuística sobre el ESTADO FINAL: para cada idioma miramos qué audios quedarán.
@@ -4366,7 +4531,7 @@ if ($existeCasoDolbyDTS) {
 $decisionExtraerPGS = $false       # ¿extraer PGS para OCR?
 $decisionConservarPGS = "CONSERVAR_PGS"  # tras convertir: conservar PGS o solo SRT
 $pgsYaExtraidos = $false           # marca para que el bucle no vuelva a extraer/pausar
-if ($modoLote -eq "HOMOGENEO") {
+if ($modoLote -eq "HOMOGENEO" -and -not $talCual) {
     # ¿Hay PGS en algún archivo del lote?
     $hayPgsEnLote = $false
     foreach ($g in $grupos) {
@@ -4491,11 +4656,13 @@ foreach ($grupo in $grupos) {
         $accionOrigEste  = $accionOriginales
         $sufijoEste      = $anadirSufijoHDZ
         $modoTorrentEste = $modoTorrent
+        $etiquetaIdiomaEste = $etiquetaIdiomaAjuste
         $cfgGPA = Get-CfgGui "GeneralPorArchivo"
         if ($cfgGPA -and $archivoPrincipal -and ($cfgGPA.PSObject.Properties.Name -contains $archivoPrincipal.Name)) {
             $pfGen = $cfgGPA.$($archivoPrincipal.Name)
             if (($pfGen.PSObject.Properties.Name -contains 'AccionOriginales') -and "$($pfGen.AccionOriginales)") { $accionOrigEste = "$($pfGen.AccionOriginales)" }
             if ($pfGen.PSObject.Properties.Name -contains 'SufijoHDZ') { $sufijoEste = [bool]$pfGen.SufijoHDZ }
+            if (($pfGen.PSObject.Properties.Name -contains 'EtiquetaIdioma') -and "$($pfGen.EtiquetaIdioma)".ToUpperInvariant() -in @("AUTO", "VOSE", "LATINO", "NINGUNA")) { $etiquetaIdiomaEste = "$($pfGen.EtiquetaIdioma)".ToUpperInvariant() }
             if (($pfGen.PSObject.Properties.Name -contains 'ModoTorrent') -and "$($pfGen.ModoTorrent)") { $modoTorrentEste = "$($pfGen.ModoTorrent)" }
             Write-Host "   [GUI] Ajustes propios de esta película: originales=$accionOrigEste, sufijo=$(if ($sufijoEste) {'Sí'} else {'No'}), torrent=$modoTorrentEste." -ForegroundColor DarkGray
         }
@@ -4565,6 +4732,9 @@ foreach ($grupo in $grupos) {
             }
         }
 
+        # Modo TAL CUAL: se salta el análisis de pistas, la fusión y el ensamblaje (fases 2-4).
+        # El bloque siguiente es el montaje completo; la rama «else» del final lee el vídeo tal cual.
+        if (-not $talCual) {
         # Pre-carga de mediainfo y mkvmerge -J del archivo (o ambos, si es híbrido). La primera
         # lectura puede ser lenta en archivos grandes (AV1, UHD remuxes), así que la disparamos
         # AQUÍ una sola vez con barra de progreso, en lugar de en silencio dentro de cada
@@ -4919,44 +5089,12 @@ foreach ($grupo in $grupos) {
         $hdrVideo    = $datosTec.HdrVideo
         $audioFichero = $datosTec.AudioPista
 
-        # Cambio 2b: el nombre del archivo se basa en el MEJOR audio del idioma prioritario,
-        # prefiriendo DTS sobre Dolby. Recorremos $audiosOrdenados (ya ordenado por idioma),
-        # tomamos el idioma de mayor prioridad presente, y dentro de ese idioma elegimos:
-        #   - si hay DTS, el mejor DTS (DTS-HD MA > DTS)
-        #   - si no hay DTS, el mejor Dolby (el primero de ese idioma)
-        # El resultado sustituye al audio "por defecto" (primera pista) que daba Get-DatosTecnicosMkv.
-        if ($audiosOrdenados -and $audiosOrdenados.Count -gt 0) {
-            $pesoMin = ($audiosOrdenados | Measure-Object PesoLang -Minimum).Minimum
-            $audiosIdiomaTop = @($audiosOrdenados | Where-Object { $_.PesoLang -eq $pesoMin })
-            $audioParaNombre = $null
-            # ¿hay DTS en el idioma prioritario?
-            $dtsDelTop = @($audiosIdiomaTop | Where-Object { $_.Format -match "(?i)DTS" })
-            if ($dtsDelTop.Count -gt 0) {
-                # Mejor DTS: DTS-HD MA antes que DTS pelado
-                $audioParaNombre = $dtsDelTop | Sort-Object @{Expression={ if ($_.Profile -match "(?i)MA|Master Audio" -or $_.Comm -match "(?i)MA|Master Audio") {1} else {0} }; Descending=$true} | Select-Object -First 1
-            } else {
-                # No hay DTS: el primer audio del idioma top (que será el mejor Dolby por orden)
-                $audioParaNombre = $audiosIdiomaTop[0]
-            }
-            if ($audioParaNombre) {
-                # Reconstruir la cadena "CODEC CANALES [Atmos]" desde la pista elegida (sin idioma)
-                $aFmt = $audioParaNombre.Format; $aProf = $audioParaNombre.Profile; $aComm = $audioParaNombre.Comm
-                $cN = switch ("$($audioParaNombre.Chan)") { "8" {"7.1"} "6" {"5.1"} "2" {"2.0"} "1" {"1.0"} default { "$($audioParaNombre.Chan)" } }
-                if (-not $cN) { $cN = "2.0" }
-                $cod = $aFmt
-                if ($aFmt -match "(?i)E-?AC-?3" -or $aComm -match "(?i)Plus" -or $aProf -match "(?i)E-?AC-?3") { $cod = "DD+" }
-                elseif ($aFmt -match "(?i)AC-?3")    { $cod = "DD" }
-                elseif ($aFmt -match "(?i)TrueHD|MLP") { $cod = "TrueHD" }
-                elseif ($aFmt -match "(?i)DTS") {
-                    if ($aProf -match "(?i)MA|Master Audio" -or $aComm -match "(?i)MA|Master Audio") { $cod = "DTS-HD MA" } else { $cod = "DTS" }
-                }
-                elseif ($aFmt -match "(?i)AAC") { $cod = "AAC" }
-                elseif ($aFmt -match "(?i)FLAC") { $cod = "FLAC" }
-                elseif ($aFmt -match "(?i)PCM|LPCM") { $cod = "LPCM" }
-                $atmN = if ($aComm -match "(?i)Atmos" -or $aFmt -match "(?i)Atmos") { " Atmos" } else { "" }
-                $audioFichero = "$cod $cN$atmN"
-            }
-        }
+        # El nombre se basa en el MEJOR audio del idioma prioritario (DTS antes que Dolby si lo hay).
+        $audioNombre = Get-AudioParaNombreHdz $audiosOrdenados
+        if ($audioNombre) { $audioFichero = $audioNombre }
+
+        # Etiqueta de idioma (VOSE / Latino): sobre las pistas que de verdad quedan en el MKV final.
+        $etiquetaIdiomaFinal = Resolve-EtiquetaIdioma $etiquetaIdiomaEste $audiosOrdenados $subsOrdenados
 
         # Volcado al log de los datos técnicos releídos del archivo final.
         Write-DiagSeccion "DATOS TÉCNICOS RELEÍDOS DEL ARCHIVO FINAL"
@@ -4965,59 +5103,52 @@ foreach ($grupo in $grupos) {
         Write-DiagLinea "HdrVideo: '$hdrVideo'  (vacío si no detectado)"
         Write-DiagLinea "AudioPista (Get-DatosTecnicosMkv): '$($datosTec.AudioPista)'"
         Write-DiagLinea "AudioFichero (para nombre, regla DTS): '$audioFichero'"
+        Write-DiagLinea "EtiquetaIdioma: ajuste=$etiquetaIdiomaEste -> '$etiquetaIdiomaFinal'"
 
         $base = "$tituloPelicula ($anoPelicula)"
         if ($serieTag) { $base += " $serieTag" }
 
-        # =========================================================================
-        # CONSTRUCCIÓN DEL NOMBRE FINAL SEGÚN NORMAS HDZ
-        # =========================================================================
-        # Separador: ESPACIO en todos los casos (WEB-DL y Físico).
-        # Audio: el formato leído del archivo final, sin idioma (ej: "DD+ 5.1", "TrueHD 7.1 Atmos").
-        # =========================================================================
-
-        # Sufijo -HDZ: opcional según elección del usuario (cambio 5).
-        $sufijoHDZ = if ($sufijoEste) { "-HDZ" } else { "" }
-
-        if ($tipoOrigen -eq "WEB") {
-            # Patrón WEB: Título (Año) [Etiq] [SXXEXX] 2160p PLAT WEB-DL|WEBRip AUDIO [HDR] H.265[-HDZ].mkv
-            $piezas = @()
-            $piezas += $base
-            if ($etiquetasExtra) { $piezas += $etiquetasExtra }
-            $piezas += $resStr
-            $piezas += $plataformaFormato
-            $piezas += $webTipo   # "WEB-DL" o "WEBRip"
-            $piezas += $audioFichero
-            if ($hdrVideo) { $piezas += $hdrVideo }
-            $piezas += if ($codecVideo -eq "AV1") { "AV1$sufijoHDZ" } else { "H.$codecVideo$sufijoHDZ" }
+        # CONSTRUCCIÓN DEL NOMBRE FINAL SEGÚN NORMAS HDZ (Get-NombreFinalHdz).
+        $nombreFinal = Get-NombreFinalHdz -Base $base -EtiquetasExtra $etiquetasExtra -TipoOrigen $tipoOrigen `
+            -Resolucion $resStr -PlataformaFormato $plataformaFormato -WebTipo $webTipo -Audio $audioFichero `
+            -Hdr $hdrVideo -CodecVideo $codecVideo -Sufijo ([bool]$sufijoEste) -EtiquetaIdioma $etiquetaIdiomaFinal -Extension ".mkv"
         } else {
-            # Patrón Físico: Título (Año) [Etiq] FORMATO RESOLUCION [CAPA] [CODEC] AUDIO[-HDZ].mkv
-            # CODEC: "x265"/"x264" en Rip y MHD; "HEVC" en Remastered; vacío en Full/Remux.
-            $codecTag = ""
-            if ($plataformaFormato -match "Rip")           { $codecTag = if ($codecVideo -eq "AV1") { "AV1" } else { "x$codecVideo" } }
-            elseif ($plataformaFormato -eq "Remastered")   { $codecTag = if ($codecVideo -eq "AV1") { "AV1" } else { "HEVC" } }
-            elseif ($plataformaFormato -eq "MHD")          { $codecTag = if ($codecVideo -eq "AV1") { "AV1" } else { "x$codecVideo" } }
-            # En Full/Remux el códec NO se incluye
-
-            $piezas = @()
-            $piezas += $base
-            if ($etiquetasExtra) { $piezas += $etiquetasExtra }
-            $piezas += $plataformaFormato
-            $piezas += $resStr
-            if ($hdrVideo) { $piezas += $hdrVideo }
-            if ($codecTag) { $piezas += $codecTag }
-            $piezas += "$audioFichero$sufijoHDZ"
+            # =====================================================================
+            # TAL CUAL: sin remux. El «resultado» es el propio vídeo de origen, que se renombra.
+            # =====================================================================
+            Set-ProgresoGui ([int]($global:pctBaseGui + $global:pctPasoGui * 0.30)) "Leyendo vídeo $($global:idxGrupoGui)/$($global:totalGruposGui)" $archivoPrincipal.Name
+            Write-DiagPaso "Tal cual: lectura de datos técnicos INICIO"
+            $archivosBorrables = @()
+            # El original ES el resultado: nunca se borra ni se marca como .procesado.
+            $accionOrigEste = "INTACTO"
+            $archivoSalidaTemporal = $archivoPrincipal.FullName
+            $pistasTC = Get-PistasArchivoHdz $archivoPrincipal.FullName
+            $audiosOrdenados = @($pistasTC.Audios)
+            $subsOrdenados   = @($pistasTC.Subs)
+            $datosTec = Get-DatosTecnicosMkv $archivoPrincipal.FullName
+            $resStr = $datosTec.Resolucion; $codecVideo = $datosTec.CodecVideo; $hdrVideo = $datosTec.HdrVideo
+            $audioFichero = Get-AudioParaNombreHdz $audiosOrdenados
+            if (-not $audioFichero) { $audioFichero = $datosTec.AudioPista }
+            $etiquetaIdiomaFinal = Resolve-EtiquetaIdioma $etiquetaIdiomaEste $audiosOrdenados $subsOrdenados
+            $base = "$tituloPelicula ($anoPelicula)"
+            if ($serieTag) { $base += " $serieTag" }
+            $nombreFinal = Get-NombreFinalHdz -Base $base -EtiquetasExtra $etiquetasExtra -TipoOrigen $tipoOrigen `
+                -Resolucion $resStr -PlataformaFormato $plataformaFormato -WebTipo $webTipo -Audio $audioFichero `
+                -Hdr $hdrVideo -CodecVideo $codecVideo -Sufijo ([bool]$sufijoEste) -EtiquetaIdioma $etiquetaIdiomaFinal `
+                -Extension $archivoPrincipal.Extension
+            Write-DiagSeccion "TAL CUAL: DATOS TÉCNICOS DEL VÍDEO"
+            Write-DiagLinea "Resolucion: $resStr  CodecVideo: $codecVideo  Hdr: '$hdrVideo'  Audio: '$audioFichero'"
+            Write-DiagLinea "EtiquetaIdioma: ajuste=$etiquetaIdiomaEste -> '$etiquetaIdiomaFinal'"
+            Write-Host "   -> Nombre HDZ: $nombreFinal" -ForegroundColor Green
+            # Carpeta de salida: el vídeo se MUEVE allí al final (no hay copia que ensamblar).
+            $carpetaSalidaArch = $carpetaSalidaGui
+            $csMapTC = Get-CfgGui "CarpetaSalidaPorArchivo"
+            if ($csMapTC -and ($csMapTC.PSObject.Properties.Name -contains $archivoPrincipal.Name)) {
+                $csValTC = "$($csMapTC.$($archivoPrincipal.Name))".Trim()
+                if ($csValTC) { $carpetaSalidaArch = $csValTC }
+            }
+            $moverAlFinal = [bool]($carpetaSalidaArch -and ([IO.Path]::GetFullPath($carpetaSalidaArch).TrimEnd('') -ine [IO.Path]::GetFullPath($rutaCarpeta).TrimEnd('')))
         }
-
-        $nombreFinal = (($piezas | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() }) -join " ") + ".mkv"
-        # Fuera los caracteres que Windows NO admite en un nombre de archivo (: ? * " < > | / \).
-        # Son MUY normales en los títulos («Underworld: La Rebelión de los Licántropos»), y sin esto
-        # el Rename-Item de más abajo lanzaba IOException («El parámetro no es correcto») y, con
-        # $ErrorActionPreference = "Stop", el montaje MORÍA en seco justo tras muxear: te dejaba el
-        # archivo bien hecho pero con el nombre «Ensamblaje_...» para siempre y sin ningún error a
-        # la vista. El nombre del pack ya se limpiaba así; el del archivo se había quedado sin ello.
-        foreach ($chInv in [System.IO.Path]::GetInvalidFileNameChars()) { $nombreFinal = $nombreFinal.Replace("$chInv", "") }
-        $nombreFinal = ($nombreFinal -replace "\s+", " ").Trim()
 
         # =========================================================================
         # FASE 5: CAPTURAS Y LIMPIEZA
@@ -5048,9 +5179,10 @@ foreach ($grupo in $grupos) {
             try { $archivoFinalDestino = Move-HdzFinalASalida $archivoFinalDestino $carpetaSalidaArch }
             catch { throw "No se pudo guardar en la carpeta de salida. Originales intactos: $($_.Exception.Message)" }
         }
-        Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName
+        # Tal cual: no hubo mux que verificar (el vídeo es el original renombrado).
+        if (-not $talCual) { Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName }
         $fuentesOrig = @()
-        if (Test-Path -LiteralPath $archivoFinalDestino) {
+        if ((Test-Path -LiteralPath $archivoFinalDestino) -and -not $talCual) {
             # TODOS los archivos fuente de este grupo: 1 normal, 2 en híbrido, y vídeo+audios+subs en
             # remezcla (cada uno en su carpeta de origen). La acción se aplica a todos por igual.
             $fuentesOrig = @(@($origenesPistas) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)
@@ -5105,14 +5237,16 @@ foreach ($grupo in $grupos) {
             Set-ProgresoGui ([int]($global:pctBaseGui + $global:pctPasoGui * 0.96)) "Moviendo a la carpeta de salida $($global:idxGrupoGui)/$($global:totalGruposGui)" (Split-Path $archivoFinalDestino -Leaf)
             try {
                 $archivoFinalDestino = Move-HdzFinalASalida $archivoFinalDestino $carpetaSalidaArch
-                Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName
-                Invoke-AccionOriginales $fuentesOrig $accionOrigEste $global:archivoEnCurso
+                if (-not $talCual) {
+                    Assert-HdzMux $archivoFinalDestino @($audiosOrdenados).Count @($subsOrdenados).Count $archivoPrincipal.FullName
+                    Invoke-AccionOriginales $fuentesOrig $accionOrigEste $global:archivoEnCurso
+                }
             } catch {
                 Add-Incidencia $global:archivoEnCurso "No se pudo llevar el MKV a la carpeta de salida; sigue en '$archivoFinalDestino' y los originales no se han tocado: $($_.Exception.Message)"
             }
         } elseif ($moverAlFinal) {
             # Se agrupa al final en la carpeta de temporada/pack (que se arma en el disco de trabajo).
-            $global:pendientesSalida.Add([pscustomobject]@{ Ruta = $archivoFinalDestino; Destino = $carpetaSalidaArch; Entregado = $false; Fuentes = $fuentesOrig; Accion = $accionOrigEste; Archivo = $global:archivoEnCurso; Audios = @($audiosOrdenados).Count; Subs = @($subsOrdenados).Count; Principal = $archivoPrincipal.FullName })
+            $global:pendientesSalida.Add([pscustomobject]@{ Ruta = $archivoFinalDestino; Destino = $carpetaSalidaArch; Entregado = $false; Fuentes = $fuentesOrig; Accion = $accionOrigEste; Archivo = $global:archivoEnCurso; Audios = @($audiosOrdenados).Count; Subs = @($subsOrdenados).Count; Principal = $archivoPrincipal.FullName; Verificar = (-not $talCual) })
         }
         $global:archivosFinalesLote += $archivoFinalDestino
         if ($rutaTorrentFinal) {
@@ -5123,7 +5257,7 @@ foreach ($grupo in $grupos) {
 
         try {
             $historyIncidents = @($global:incidencias | ForEach-Object { "$_" })
-            [void](Add-HdzHistory @{kind='montaje';status=$(if($historyIncidents.Count){'Con incidencias'}else{'Verificado'});sources=@($origenesPistas);video=$archivoFinalDestino;torrent=$rutaTorrentFinal;captures=@($global:ultimasCapturas);incidents=$historyIncidents;tracks=@{video=1;audio=@($audiosOrdenados|ForEach-Object { @{language=$_.CodLang;format=$_.Format;source=$_.ArchivoFuenteMkv} });subtitles=@($subsOrdenados|ForEach-Object { @{language=$_.CodLang;format=$_.Format} })}})
+            [void](Add-HdzHistory @{kind='montaje';status=$(if($historyIncidents.Count){'Con incidencias'}elseif($talCual){'Tal cual (sin remux)'}else{'Verificado'});sources=@($origenesPistas);video=$archivoFinalDestino;torrent=$rutaTorrentFinal;captures=@($global:ultimasCapturas);incidents=$historyIncidents;tracks=@{video=1;audio=@($audiosOrdenados|ForEach-Object { @{language=$_.CodLang;format=$_.Format;source=$_.ArchivoFuenteMkv} });subtitles=@($subsOrdenados|ForEach-Object { @{language=$_.CodLang;format=$_.Format} })}})
         } catch { Add-Incidencia $global:archivoEnCurso "No se pudo guardar el historial: $($_.Exception.Message)" }
         $etiquetaTipo = if ($esSerie) { "Episodio" } else { "Archivo" }
         Set-ProgresoGui ([int]($global:pctBaseGui + $global:pctPasoGui)) "Completado $($global:idxGrupoGui)/$($global:totalGruposGui)" (Split-Path $archivoFinalDestino -Leaf)
@@ -5305,7 +5439,7 @@ foreach ($pend in @($global:pendientesSalida)) {
             $pend.Ruta = Move-HdzFinalASalida $pend.Ruta $pend.Destino
             $pend.Entregado = $true
         }
-        if ($pend.Entregado) {
+        if ($pend.Entregado -and $pend.Verificar -ne $false) {
             Assert-HdzMux $pend.Ruta $pend.Audios $pend.Subs $pend.Principal
             Invoke-AccionOriginales $pend.Fuentes $pend.Accion $pend.Archivo
         }
