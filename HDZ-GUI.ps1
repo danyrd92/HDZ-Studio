@@ -2407,8 +2407,17 @@ Add-ChipGroup $ui.chEtqIdioma "etqIdioma" @(
 function Actualizar-ModoVideo {
     $tc = ("$(Get-ChipValor 'modoVideo')" -eq "TAL_CUAL")
     $vis = if ($tc) { "Collapsed" } else { "Visible" }
-    foreach ($c in @($ui.cardRemezcla, $ui.cardOriginales, $ui.secHdrAudio, $ui.secHdrSubs)) { if ($c) { $c.Visibility = $vis } }
-    if ($tc) {
+    foreach ($c in @($ui.cardRemezcla, $ui.cardOriginales)) { if ($c) { $c.Visibility = $vis } }
+    # Con el diseño por pestañas (HDZ-Design.ps1) las cabeceras plegables antiguas van siempre ocultas
+    # y las pistas viven en la pestaña «Audio y subtítulos»: allí solo se ocultan/restauran los paneles.
+    if ($script:workspaceReady) {
+        foreach ($p in @($ui.panAudio, $ui.panSubs)) { if ($p) { $p.Visibility = $vis } }
+        if ($tc -and $ui.swRemezcla -and $ui.swRemezcla.IsChecked) { $ui.swRemezcla.IsChecked = $false }
+        if (Get-Command Update-HdzProductState -ErrorAction SilentlyContinue) { Update-HdzProductState }
+    } else {
+        foreach ($c in @($ui.secHdrAudio, $ui.secHdrSubs)) { if ($c) { $c.Visibility = $vis } }
+    }
+    if ($tc -and -not $script:workspaceReady) {
         foreach ($p in @($ui.panAudio, $ui.panSubs)) { if ($p) { $p.Visibility = "Collapsed" } }
         foreach ($ch in @($ui.secChevAudio, $ui.secChevSubs)) { if ($ch) { $ch.Text = "▸" } }
         if ($ui.swRemezcla -and $ui.swRemezcla.IsChecked) { $ui.swRemezcla.IsChecked = $false }
