@@ -9269,7 +9269,11 @@ function Reset-Todo {
     $script:firmaSel = $null
     Refresh-FirmaSel
     Reset-Descripcion
+    # La serie por episodios vive aparte de los campos de la subida: sin esto, su lista seguía en pantalla.
+    $script:serieEps = $null; $script:serieClave = ""; $script:serieSubiendo = $false
+    if ($ui.panSerieEps) { $ui.panSerieEps.Children.Clear() }
     if (Get-Command Init-Tabs -ErrorAction SilentlyContinue) { Init-Tabs }   # una sola subida en blanco
+    if (Get-Command Actualizar-VistaSerie -ErrorAction SilentlyContinue) { Actualizar-VistaSerie }
     if (Get-Command Construir-TabBarProy -ErrorAction SilentlyContinue) { Construir-TabBarProy }
     $script:agBrowse = $null; $script:agCapThumbs = @{}
     $script:capPreviewCache=[ordered]@{};$script:capPreviewSync=$null

@@ -92,6 +92,10 @@ try {
     Assert ($null -eq $script:serieEps -and "$($ui.cardSerieEps.Visibility)" -eq 'Collapsed') 'Una pestaña normal muestra la vista de serie'
     Cambiar-Tab ([array]::IndexOf(@($script:tabs | ForEach-Object { [bool]$_.Serie }), $true))
     Assert (@($script:serieEps).Count -eq 3 -and @($script:capRows | Where-Object Ep).Count -eq 6) 'La serie no se restauró al volver a su pestaña'
+    # «Empezar de Zero» también vacía la serie (antes la lista de episodios seguía en la subida).
+    Reset-Todo
+    Assert ($null -eq $script:serieEps -and "$($ui.cardSerieEps.Visibility)" -eq 'Collapsed' -and $ui.panSerieEps.Children.Count -eq 0) "Empezar de Zero deja la lista de episodios: eps=$(@($script:serieEps).Count) vis=$($ui.cardSerieEps.Visibility) hijos=$($ui.panSerieEps.Children.Count)"
+    Assert ("$($ui.upTitulo.Visibility)" -eq 'Visible' -and @($script:tabs).Count -eq 1) 'Empezar de Zero no deja una subida suelta en blanco'
     Write-Host "OK Test-SerieEpisodios: una pestaña, capturas por episodio, subida en orden con parada y reanudación, abrir todos y web. $testRoot"
 } finally {
     Remove-Item Env:HDZ_GUI_TEST,Env:HDZ_GUI_TEST_DIR,Env:HDZ_HISTORY_TEST_DIR -ErrorAction SilentlyContinue
