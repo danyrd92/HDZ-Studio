@@ -3021,7 +3021,8 @@ function Build-HdzSubTracks($scope) {
         $id=if($null -ne $sub.TrackId){[int]$sub.TrackId}else{[int]$sub.Index};$key="$source|$id"
         if($seen.ContainsKey($key)){continue};$seen[$key]=$true
         $language=Get-IdiomaPistaGui $sub 'Sub';$formato=Get-HdzFormatoSubGui $sub.Codec
-        $tipoSub=if($sub.Forced -or "$($sub.Title)" -match '(?i)forced|forzad'){'Forzados'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){'SDH'}else{'Completos'}
+        $tituloCompleto=("$($sub.Title)" -match '(?i)completos?|complete|full') -and ("$($sub.Title)" -notmatch '(?i)forced|forzad')   # igual que Test-TituloSubCompleto del motor
+        $tipoSub=if(($sub.Forced -and -not $tituloCompleto) -or "$($sub.Title)" -match '(?i)forced|forzad'){'Forzados'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){'SDH'}else{'Completos'}
         if($tipoSub -eq 'Forzados'){$formato+=' · Forzado'}elseif($tipoSub -eq 'SDH'){$formato+=' · SDH'}
         $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
         if($sub.Title){$label+=" · $($sub.Title)"}

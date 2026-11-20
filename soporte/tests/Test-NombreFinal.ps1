@@ -10,7 +10,7 @@ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'HDZnew
 . (Join-Path $root 'HDZ-Core.ps1')
 $dictNode=$ast.Find({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and "$($n.Left)" -eq '$dictIdiomas'},$true)
 . ([scriptblock]::Create($dictNode.Extent.Text))
-foreach($name in @('Get-LanguageName','Get-LanguageCode','Get-PesoIdioma','Format-Audios','Get-AudioParaNombreHdz','Get-EtiquetaIdiomaAuto','Resolve-EtiquetaIdioma','Get-CodecTagHdz','Get-NombreFinalHdz')){
+foreach($name in @('Get-LanguageName','Get-LanguageCode','Get-PesoIdioma','Format-Audios','Get-AudioParaNombreHdz','Get-EtiquetaIdiomaAuto','Resolve-EtiquetaIdioma','Get-CodecTagHdz','Get-NombreFinalHdz','Test-TituloSubCompleto')){
     $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
     Assert $node "Falta la función $name"
     . ([scriptblock]::Create($node.Extent.Text))
@@ -64,6 +64,12 @@ Assert ((Resolve-EtiquetaIdioma 'AUTO' @(A 'eng') @(S 'es')) -eq 'VOSE') 'Autom�
 # Audio del nombre: el mejor DTS del idioma prioritario.
 $aud=Format-Audios @((A 'eng' 'E-AC-3'),([pscustomobject]@{CodLang='eng';NomLang='Inglés';PesoLang=3;Format='DTS';Profile='MA / Core';Comm='DTS-HD Master Audio';Chan='8';NomFinal=''}))
 Assert ((Get-AudioParaNombreHdz $aud) -eq 'DTS-HD MA 7.1') "Audio del nombre: $(Get-AudioParaNombreHdz $aud)"
+# Subs titulados «Completos» pero marcados como forzados (p. ej. Crunchyroll): manda el título.
+Assert (Test-TituloSubCompleto 'Castellano Completos ASS') 'Completos debe contar como completo'
+Assert (Test-TituloSubCompleto 'Spanish (Full)') 'Full debe contar como completo'
+Assert (-not (Test-TituloSubCompleto 'Castellano Forzados')) 'Forzados no es completo'
+Assert (-not (Test-TituloSubCompleto 'Forced (complete signs)')) 'Si menciona forced, no se ignora la marca'
+Assert (-not (Test-TituloSubCompleto '')) 'Sin título no hay señal de completo'
 Write-Host 'OK nombres: 10 ejemplos + VC-1/MPEG-2 + extensiones + VOSE/Latino'
 
 # --- Modo TAL CUAL de punta a punta (GUI -> motor) ---
@@ -73,7 +79,7 @@ $ff=Join-Path $root 'bin/ffmpeg.exe'
 $fuente=Join-Path $testRoot 'Peli.Original.2019.mkv'
 $srt=Join-Path $testRoot 'subs.srt'
 [IO.File]::WriteAllText($srt,"1`r`n00:00:00,000 --> 00:00:01,500`r`nHola`r`n",[Text.UTF8Encoding]::new($false))
-& $ff -v error -f lavfi -i 'color=c=blue:s=160x90:r=24:d=2' -f lavfi -i 'sine=frequency=440:duration=2' -i $srt -map 0:v -map 1:a -map 2:s -c:v libx264 -preset ultrafast -c:a ac3 -c:s srt -metadata:s:a:0 language=kor -metadata:s:s:0 language=spa -shortest $fuente
+& $ff -v error -f lavfi -i 'color=c=blue:s=160x90:r=24:d=2' -f lavfi -i 'sine=frequency=440:duration=2' -i $srt -map 0:v -map 1:a -map 2:s -c:v libx264 -preset ultrafast -c:a ac3 -c:s srt -metadata:s:a:0 language=kor -metadata:s:s:0 language=spa -metadata:s:s:0 'title=Castellano Completos ASS' -disposition:s:0 forced -shortest $fuente
 Assert ($LASTEXITCODE -eq 0) 'No se pudo crear el vídeo de prueba'
 $hashFuente=(Get-FileHash -LiteralPath $fuente).Hash
 $env:HDZ_GUI_TEST='1'; $env:HDZ_GUI_TEST_DIR=$testRoot
@@ -86,6 +92,11 @@ try {
     Set-ChipValor 'modoVideo' 'TAL_CUAL'
     Assert ("$($ui.cardOriginales.Visibility)" -eq 'Collapsed' -and "$($ui.secHdrAudio.Visibility)" -eq 'Collapsed' -and "$($ui.cardRemezcla.Visibility)" -eq 'Collapsed') 'Tal cual no oculta lo que no aplica'
     Assert ("$($ui.btnIniciar.Content)" -match 'Renombrar') "Botón: $($ui.btnIniciar.Content)"
+    # Ida y vuelta: con el diseño por pestañas las cabeceras antiguas no reaparecen en Fuentes y las pistas vuelven.
+    Set-ChipValor 'modoVideo' 'MONTAJE'
+    Assert ("$($ui.secHdrAudio.Visibility)" -eq 'Collapsed' -and "$($ui.secHdrSubs.Visibility)" -eq 'Collapsed') 'Audio/Subtítulos reaparecen en Fuentes al volver a Montaje'
+    Assert ("$($ui.panAudio.Visibility)" -eq 'Visible' -and "$($ui.panSubs.Visibility)" -eq 'Visible') 'Las pistas no vuelven al regresar a Montaje'
+    Set-ChipValor 'modoVideo' 'TAL_CUAL'
     $estado=Componer-EstadoAgente | ConvertFrom-Json
     Assert ($estado.opciones.modoVideo -eq 'TAL_CUAL' -and $estado.opciones.etqIdioma -eq 'AUTO') 'La web no recibe los chips nuevos'
     $ui.txtTitulo.Text='Parásitos'; $ui.txtAno.Text='2019'; $ui.swSerie.IsChecked=$false

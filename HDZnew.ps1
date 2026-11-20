@@ -1219,6 +1219,12 @@ function Get-TipoPistaExterno($archivo, $pistaMediainfo) {
 # - Si hay 2 subs idénticos en tamaño → se reducirán a 1 tras la deduplicación → AHÍ sí preguntamos.
 # - Si solo hay 1 sub de entrada → preguntamos.
 # La función toma 1 ó 2 paths (lista de archivos del par híbrido).
+# Algunos releases (p. ej. Crunchyroll vía unshackle) marcan como forzada una pista titulada
+# «Castellano Completos». Si el título dice explícitamente completo y no menciona forzado, manda el título.
+function Test-TituloSubCompleto([string]$titulo) {
+    return ($titulo -match "(?i)(completos?|complete|full)") -and ($titulo -notmatch "(?i)(forced|forzado|forzados)")
+}
+
 function Get-SubsUnicosArchivo($rutasArchivosMkv, $incluirExternos = $false, $prefijoArchivo = "") {
     $resultado = @()
     $listaArchivos = @($rutasArchivosMkv)
@@ -1258,6 +1264,7 @@ function Get-SubsUnicosArchivo($rutasArchivosMkv, $incluirExternos = $false, $pr
             $tieneSenalForzado = $false
             if ($pista.PSObject.Properties.Name -contains "Forced" -and "$($pista.Forced)" -match "(?i)yes|1|true") { $tieneSenalForzado = $true }
             if ($tituloPista -match "(?i)(forced|forzado|forzados)") { $tieneSenalForzado = $true }
+            if (Test-TituloSubCompleto $tituloPista) { $tieneSenalForzado = $false }
 
             # Señal positiva de COMPLETO: título con "completo"/"completos"/"complete"/"full".
             # Si el sub viene etiquetado explícitamente como completo, no hay ambigüedad → no preguntar.
@@ -3247,6 +3254,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
                 # marcamos como forzado. Algunos releases (Disney+, Apple TV) usan Title pero
                 # dejan el flag Forced=No, y sin esto se nos escapan.
                 if ($tituloPista -match "(?i)(forced|forzado|forzados)") { $forcedFlag = $true }
+                if ($pista.'@type' -eq "Text" -and (Test-TituloSubCompleto $tituloPista)) { $forcedFlag = $false }
                 # SDH: flag hearing-impaired (mediainfo ServiceKind=HI o mkvmerge -J) o Title.
                 $sdhFlag = ("$($pista.ServiceKind)" -match '(?i)\bHI\b') -or ($tituloPista -match $patronTituloSdh)
                 if (-not $sdhFlag -and $pista.'@type' -eq "Text") {
@@ -3443,6 +3451,7 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
         if ($ext.Name -match "(?i)\b(forced|forzado|forzados)\b") { $forcedFlag = $true }
         # Y si el Title (de mediainfo) lo indica también
         if ($tituloExt -match "(?i)(forced|forzado|forzados)") { $forcedFlag = $true }
+        if ($ext.Name -notmatch "(?i)(forced|forzado|forzados)" -and (Test-TituloSubCompleto $tituloExt)) { $forcedFlag = $false }
         # SDH en externos: ServiceKind=HI, Title o nombre del archivo (p. ej. "pelicula.es.sdh.srt").
         $sdhFlagExt = ($pExt -and "$($pExt.ServiceKind)" -match '(?i)\bHI\b') -or ($tituloExt -match $patronTituloSdh) -or
                       ($ext.BaseName -match '(?i)(?<![a-z])(sdh|cc|sordos)(?![a-z])')   # "hi" no: es el código de hindi
@@ -4032,7 +4041,7 @@ function Get-PistasArchivoHdz($rutaVideo) {
                 NomFinal = ""
             }
         } else {
-            $forzado = ("$($p.Forced)" -match "(?i)yes|1|true") -or ($titulo -match "(?i)(forced|forzado|forzados)")
+            $forzado = (("$($p.Forced)" -match "(?i)yes|1|true") -or ($titulo -match "(?i)(forced|forzado|forzados)")) -and -not (Test-TituloSubCompleto $titulo)
             $subs += [PSCustomObject]@{ Tipo = "Sub"; CodLang = $cod; NomLang = $nom; IsForced = [bool]$forzado; Format = "$($p.Format)" }
         }
     }
