@@ -32,7 +32,6 @@ try {
     function Descargar-TorrentTracker($url,$token,$dirDest,$nombreFallback) { $d=Join-Path $testRoot ("tracker_"+[guid]::NewGuid().ToString('N')+'.torrent'); Copy-Item -LiteralPath $torrents[0] -Destination $d; $d }
     function Publicar-TorrentAgente($ruta) { $null }
     $script:abiertos=@()
-    function Get-HdzAppTorrent { 'C:\fake\qbittorrent.exe' }
     function Start-Process { param($FilePath,$ArgumentList) $script:abiertos+=[pscustomobject]@{Exe=$FilePath;Args=@($ArgumentList)} }
     $ui.cfgTrackerToken.Text='token-de-prueba'; $ui.cfgTrackerUrl.Text='https://tracker.invalid'; $ui.cfgTmdbKey.Text=''
     $script:firmaSel=$null
@@ -84,9 +83,9 @@ try {
     Assert ($script:subidasHechas[1].Desc -notmatch 'img\.invalid') 'El E02 no debía llevar capturas'
     Assert ($script:subidasHechas[2].Desc -match 'S01E03.*_cap_1\.png' -and $script:subidasHechas[2].Desc -notmatch 'S01E01') "Capturas del E03: $($script:subidasHechas[2].Desc)"
     Assert (@(Get-EpisodiosSerieOrdenados | Where-Object { $_.Estado -ne 'subido' }).Count -eq 0) 'No quedaron todos subidos'
-    # --- Abrir todos: una sola llamada con los 3 torrents ---
+    # --- Abrir todos: cada .torrent con el programa predeterminado de Windows (como el Explorador) ---
     Abrir-TorrentsSerie
-    Assert ($script:abiertos.Count -eq 1 -and @($script:abiertos[0].Args).Count -eq 3) "Abrir todos: $($script:abiertos.Count) llamadas"
+    Assert ($script:abiertos.Count -eq 3 -and @($script:abiertos | Where-Object { "$($_.Exe)" -like '*.torrent' -and -not $_.Args }).Count -eq 3) "Abrir todos: $($script:abiertos.Count) llamadas"
     # --- Cambiar de pestaña y volver conserva la serie ---
     Nueva-Tab
     Assert ($null -eq $script:serieEps -and "$($ui.cardSerieEps.Visibility)" -eq 'Collapsed') 'Una pestaña normal muestra la vista de serie'

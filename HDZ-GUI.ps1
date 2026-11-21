@@ -6944,6 +6944,13 @@ function Actualizar-VistaSerie {
     if ($esSerie -and $ui.panTV) { $ui.panTV.Visibility = "Collapsed" }
     elseif ($ui.panTV) { Actualizar-TipoCategoria }
     foreach ($b in @($ui.btnCapGenerar, $ui.btnCapInsertar, $ui.btnMediaRefrescar)) { if ($b) { $b.IsEnabled = -not $esSerie } }
+    # En serie el botón no se usa: las capturas marcadas de cada episodio se suben e insertan en SU
+    # descripción al pulsar «Subir todos». Se dice en el propio botón para que no parezca roto.
+    if ($ui.btnCapInsertar) {
+        $ui.btnCapInsertar.Content = if ($esSerie) { "Se añaden al subir cada episodio" } else { "⬆  Subir y añadir a descripción" }
+        $ui.btnCapInsertar.ToolTip = if ($esSerie) { "En modo serie, las capturas marcadas de cada episodio se suben y se insertan en la descripción de ese episodio al pulsar «Subir todos». La descripción común no lleva capturas." } else { $null }
+        [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($ui.btnCapInsertar, $true)
+    }
     if ($ui.cardSerieEps) { $ui.cardSerieEps.Visibility = if ($esSerie) { "Visible" } else { "Collapsed" } }
     if (-not $esSerie) {
         $ui.btnSubir.Content = "☁   Subir a HDZERO"
@@ -7050,28 +7057,16 @@ function Invoke-SubidaSerie {
     $res = Get-ResumenSerie
     if ($res.Subidos -eq $res.Total) { Set-SubidaEstado "✓  Serie completa: $($res.Total) episodios subidos en orden. Ya puedes abrir todos los torrents para sembrar." "ok" }
 }
-# Programa con el que Windows abre los .torrent (para pasarle TODOS de una vez).
-function Get-HdzAppTorrent {
-    try {
-        $progId = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.torrent\UserChoice' -ErrorAction Stop).ProgId
-    } catch { $progId = $null }
-    if (-not $progId) { try { $progId = (Get-ItemProperty -LiteralPath 'Registry::HKEY_CLASSES_ROOT\.torrent' -ErrorAction Stop).'(default)' } catch {} }
-    if (-not $progId) { return $null }
-    try { $cmdLine = (Get-ItemProperty -LiteralPath "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction Stop).'(default)' } catch { return $null }
-    if ("$cmdLine" -match '^\s*"([^"]+\.exe)"' -or "$cmdLine" -match '^\s*(\S+\.exe)') {
-        $exe = [Environment]::ExpandEnvironmentVariables($Matches[1])
-        if (Test-Path -LiteralPath $exe) { return $exe }
-    }
-    return $null
-}
 # Abre de golpe todos los .torrent del tracker de la serie (los que llevan tu passkey), en orden.
 function Abrir-TorrentsSerie {
     $rutas = @(Get-EpisodiosSerieOrdenados | Where-Object { $_.TorrentTracker -and (Test-Path -LiteralPath "$($_.TorrentTracker)") } | ForEach-Object { "$($_.TorrentTracker)" })
     if ($rutas.Count -eq 0) { Set-SubidaEstado "Aún no hay torrents del tracker: sube primero los episodios." "warn"; return }
+    # Cada uno con el programa predeterminado de Windows, igual que el torrent suelto y que el
+    # Explorador al abrir varios. Leer el ejecutable del registro y pasarle todos fallaba en
+    # Windows 11 (la elección está en UserChoiceLatest y la webapp necesita sus --app-id):
+    # se abrían en el navegador en vez de en la webapp de VueTorrent.
     try {
-        $exe = Get-HdzAppTorrent
-        if ($exe) { Start-Process -FilePath $exe -ArgumentList @($rutas | ForEach-Object { '"' + $_ + '"' }) }
-        else { foreach ($r in $rutas) { Start-Process -FilePath $r } }
+        foreach ($r in $rutas) { Start-Process -FilePath $r }
         Set-SubidaEstado "🌱  Abiertos $($rutas.Count) torrents para sembrar." "ok"
     } catch { Set-SubidaEstado "No pude abrir los torrents: $($_.Exception.Message)" "warn" }
 }
@@ -7102,7 +7097,9 @@ $ui.btnTabProyAIzq.Add_Click({ $ui.scrTabsProyA.ScrollToHorizontalOffset([Math]:
 $ui.btnTabProyADer.Add_Click({ $ui.scrTabsProyA.ScrollToHorizontalOffset($ui.scrTabsProyA.HorizontalOffset + 240) })
 $ui.btnTabProySIzq.Add_Click({ $ui.scrTabsProyS.ScrollToHorizontalOffset([Math]::Max(0, $ui.scrTabsProyS.HorizontalOffset - 240)) })
 $ui.btnTabProySDer.Add_Click({ $ui.scrTabsProyS.ScrollToHorizontalOffset($ui.scrTabsProyS.HorizontalOffset + 240) })
-foreach ($scr in @($ui.scrTabsProy, $ui.scrTabsProyA, $ui.scrTabsProyS)) { $scr.Add_SizeChanged({ Update-FlechasTabsProy }) }
+$ui.btnTabGenIzq.Add_Click({ $ui.scrTabsGen.ScrollToHorizontalOffset([Math]::Max(0, $ui.scrTabsGen.HorizontalOffset - 240)) })
+$ui.btnTabGenDer.Add_Click({ $ui.scrTabsGen.ScrollToHorizontalOffset($ui.scrTabsGen.HorizontalOffset + 240) })
+foreach ($scr in @($ui.scrTabsGen, $ui.scrTabsProy, $ui.scrTabsProyA, $ui.scrTabsProyS)) { $scr.Add_SizeChanged({ Update-FlechasTabsProy }) }
 foreach ($pan in @($ui.panTabsGenInner, $ui.panTabsProy, $ui.panTabsProyA, $ui.panTabsProyS)) { $pan.Add_SizeChanged({ Update-FlechasTabsProy }) }
 # Asas de redimensión de los campos de texto (arrastrar la esquina cambia el alto).
 # Acumulamos sobre el Height actual (no ActualHeight) para que el arrastre sea estable.
