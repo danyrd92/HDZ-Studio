@@ -1160,10 +1160,18 @@ $xaml = @'
                 <WrapPanel x:Name="chModoLote" Margin="0,11,0,-8"/>
               </StackPanel>
             </Border>
-            <!-- Barra de pestañas de General (una por película), visible en «Cada archivo distinto». -->
+            <!-- «Cada archivo distinto»: cada apartado muestra una cabecera plegable por archivo
+                 (HDZ-Design.ps1, Update-HdzAcordeonArchivos). Aquí arriba solo queda la casilla que
+                 copia lo elegido en el primer archivo al resto. La tira de pestañas antigua sigue
+                 construyéndose (la usan la web y los tests) pero va siempre oculta. -->
             <StackPanel x:Name="panTabsGen" Visibility="Collapsed">
-              <TextBlock Style="{StaticResource D}" Margin="2,0,0,8" Text="Cada pestaña es una película distinta del lote. Debajo verás y ajustarás SU vídeo (o pareja híbrida), sus originales, sufijo, torrent, carpeta de salida y episodio. El nombre de la pestaña es el archivo."/>
-              <Grid>
+              <Border Style="{StaticResource Card}">
+                <StackPanel>
+                  <CheckBox x:Name="swAplicarPrimero" Style="{StaticResource Switch}" Content="Aplicar a todos los archivos lo elegido en el primero"/>
+                  <TextBlock Style="{StaticResource D}" Margin="0,6,0,0" Text="Cada archivo conserva su título, año y si es serie. Lo demás (origen, audio, subtítulos, torrent, capturas, originales y sufijo) se copia del archivo 1 mientras esté activada."/>
+                </StackPanel>
+              </Border>
+              <Grid Visibility="Collapsed">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <Button x:Name="btnTabGenIzq" Style="{StaticResource GhostMini}" Grid.Column="0" Content="◀" Margin="0,0,3,0" VerticalAlignment="Bottom" Visibility="Collapsed"/>
                 <ScrollViewer x:Name="scrTabsGen" Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Bottom">
@@ -2042,7 +2050,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "cardAudioTracks","panAudioTracks","bdgAudioTracks","cardSubTracks","panSubTracks","bdgSubTracks",
           "hdrUndAudio","chevUndAudio","bodyUndAudio","hdrUndSub","chevUndSub","bodyUndSub",
           "swProyecto","panProyectoDatos","txtTitulo","txtAno","swSerie",
-          "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer",
+          "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer","swAplicarPrimero",
           "panProyTabs","panTabsProy","scrTabsProy","btnTabProyIzq","btnTabProyDer","cardCapturasProy","chCapturasProy",
           "panProyTabsA","panTabsProyA","scrTabsProyA","btnTabProyAIzq","btnTabProyADer",
           "panProyTabsS","panTabsProyS","scrTabsProyS","btnTabProySIzq","btnTabProySDer",
@@ -4028,6 +4036,8 @@ function Construir-TabBarProy {
         }
     }
     Update-FlechasTabsProy
+    # Las cabeceras plegables por archivo de cada apartado (HDZ-Design.ps1) siguen a la misma lista.
+    if (Get-Command Update-HdzAcordeonArchivos -ErrorAction SilentlyContinue) { Update-HdzAcordeonArchivos }
 }
 function Cambiar-TabProy($idx) {
     if ($idx -eq $script:tabProyActual -or $idx -lt 0 -or $idx -ge @($script:tabsProy).Count) { return }
@@ -4035,6 +4045,9 @@ function Cambiar-TabProy($idx) {
         $script:tabsProy[$script:tabProyActual].Estado = Snapshot-Proyecto
         $script:tabsProy[$script:tabProyActual].Decisiones = Snapshot-DecisionesTab
     }
+    # Con «Aplicar a todos lo del primero», lo recién tocado en el archivo 1 llega al resto antes de
+    # mostrar otro: así el destino ya enseña los valores copiados.
+    if (Test-SincroPrimero) { Copiar-PrimeroAlResto -SinRestaurar }
     $script:tabProyActual = $idx
     Restore-Proyecto $script:tabsProy[$idx].Estado
     Aplicar-TabActiva          # reconstruye las tarjetas de audio/subs de esta peli y aplica sus decisiones
@@ -4053,6 +4066,10 @@ function Reconstruir-TabsProy {
     }
     $previos = @{}
     foreach ($t in @($script:tabsProy)) { if ($t.Principal) { $previos[$t.Principal] = $t } }
+    # Otra lista de películas (nuevo análisis): sus cabeceras por archivo vuelven a salir plegadas.
+    $firmaAntes = (@($script:tabsProy) | ForEach-Object { "$($_.Principal)" }) -join '|'
+    $firmaAhora = (@($script:gruposProy) | ForEach-Object { "$($_.Principal)" }) -join '|'
+    if ($firmaAntes -ne $firmaAhora) { $script:acordeonAbierto = $false }
     $nuevas = @()
     foreach ($g in @($script:gruposProy)) {
         if ($previos.ContainsKey($g.Principal)) {
@@ -4086,6 +4103,7 @@ function Reconstruir-TabsProy {
             $script:tabsProy[$i].Decisiones = Snapshot-DecisionesTab
         }
     }
+    if (Test-SincroPrimero) { Copiar-PrimeroAlResto -SinRestaurar }
     Restore-Proyecto $script:tabsProy[$script:tabProyActual].Estado
     Aplicar-TabActiva          # deja en pantalla las tarjetas de la pestaña activa
     Construir-TabBarProy
@@ -4297,6 +4315,109 @@ function Aplicar-TabActiva {
     Construir-Adaptacion $scope
     Restore-DecisionesTab $tab.Decisiones
 }
+# --- «Aplicar a todos los archivos lo elegido en el primero» (casilla swAplicarPrimero) ---
+# Mientras está activada, lo del archivo 1 se copia al resto al cambiar de archivo, al reanalizar y
+# antes de montar. Cada archivo conserva su identificación (título, año, serie). Las decisiones de
+# pistas se guardan por «archivo|id», así que no se copian tal cual: se traducen por idioma/códec.
+$script:acordeonAbierto = $false
+function Test-SincroPrimero {
+    [bool]($ui.swAplicarPrimero -and $ui.swAplicarPrimero.IsChecked -and
+           (Get-ChipValor "modoLote") -eq "HETEROGENEO" -and @($script:tabsProy).Count -ge 2)
+}
+function Get-ScopeTabProy($i) {
+    $nombres = @($script:tabsProy[$i].Archivos)
+    @($script:ultimoScan | Where-Object { $nombres -contains $_.Nombre })
+}
+# Firma de una pista que vale para cualquier archivo: idioma, formato y tipo, más el orden entre las
+# iguales («la 2.ª castellana DD+ 5.1»). Devuelve @{ firma = fila } de las filas pintadas ahora.
+function Get-FirmasFilasPista($tipo) {
+    $vistas = @{}; $res = [ordered]@{}
+    foreach ($r in @((Get-HdzTrackState $tipo).Rows)) {
+        $p = $r.Pista
+        $base = if ($tipo -eq 'Sub') { "$(Get-IdiomaPistaGui $p 'Sub')|$(Get-HdzFormatoSubGui $p.Codec)|$($r.TipoSub)" }
+                else { "$(Get-IdiomaPistaGui $p 'Audio')|$($p.Codec)|$($p.Profile)|$($p.Channels)" }
+        $n = if ($vistas.ContainsKey($base)) { $vistas[$base] + 1 } else { 1 }
+        $vistas[$base] = $n; $res["$base#$n"] = $r
+    }
+    $res
+}
+# Lee del archivo 1 (con sus tarjetas ya construidas) lo que se puede llevar a otro archivo.
+function Get-DecisionesComunes {
+    $fuera = @{}
+    foreach ($tipo in @('Audio', 'Sub')) {
+        $f = Get-FirmasFilasPista $tipo
+        $fuera[$tipo] = @($f.Keys | Where-Object { -not $f[$_].Choice.IsChecked })
+    }
+    @{ D = (Snapshot-DecisionesTab); Fuera = $fuera; Conv = @(Leer-ConversionesActuales)
+       SubLangsTodos = @($script:chipsIdiomas | ForEach-Object { "$($_.Tag)" }) }
+}
+# Aplica lo común sobre las tarjetas YA construidas de otro archivo. Lo que el archivo 1 no tenía
+# (un idioma que solo existe aquí) se queda como estaba.
+function Aplicar-DecisionesComunes($c) {
+    $d = $c.D
+    if ($d.DefAudio)     { Set-ChipValor "defAudio" $d.DefAudio }
+    if ($d.ExtraerPGS)   { Set-ChipValor "extraerPGS" $d.ExtraerPGS }
+    if ($d.ConservarPGS) { Set-ChipValor "conservarPGS" $d.ConservarPGS }
+    if ($d.Filtro)       { Set-ChipValor "filtro" $d.Filtro; Actualizar-Filtro; $script:filtroSubPrevio = Get-ChipValor "filtro" }
+    if ($d.Filtro -eq "PERSONALIZADA") {
+        foreach ($tb in $script:chipsIdiomas) { if (@($c.SubLangsTodos) -contains "$($tb.Tag)") { $tb.IsChecked = (@($d.FiltroLangs) -contains "$($tb.Tag)") } }
+    }
+    foreach ($tb in $script:chipsIdiomasAudio) {
+        if (@($d.AudioLangsTodos) -contains "$($tb.Tag)") { $tb.IsChecked = (@($d.AudioLangs) -contains "$($tb.Tag)") }
+    }
+    if ($d.SubsUnicos) {
+        foreach ($r in @($script:subsUnicosRows)) {
+            $k = "$($r.Cod)|$($r.Fmt)"
+            if (-not $d.SubsUnicos.ContainsKey($k)) { continue }
+            if ($d.SubsUnicos[$k] -eq "Forzado") { $r.RbForzado.IsChecked = $true }
+            elseif ($r.RbForzado.Parent -is [System.Windows.Controls.Panel]) { $r.RbForzado.Parent.Children[0].IsChecked = $true }
+        }
+    }
+    foreach ($tipo in @('Audio', 'Sub')) {
+        $f = Get-FirmasFilasPista $tipo
+        foreach ($k in @($f.Keys)) { Set-HdzTrackSelected $tipo $f[$k] (-not (@($c.Fuera[$tipo]) -contains $k)) }
+    }
+    # Conversiones: la misma pista de origen (idioma, códec y canales) en este archivo.
+    $convs = @()
+    foreach ($cv in @($c.Conv)) {
+        $op = @($script:convTrackOpts | Where-Object { "$($_.Lang)" -eq "$($cv.Lang)" -and "$($_.Codec)" -eq "$($cv.CodecOrigen)" -and [int]$_.Channels -eq [int]$cv.CanalesOrigen } | Select-Object -First 1)
+        if ($op) { $convs += @{ SelectionKey = $op[0].V; Dest = $cv.Dest; MantenerOriginal = $cv.MantenerOriginal } }
+    }
+    Reconstruir-FilasConv $convs
+}
+# Copia el archivo 1 al resto. -SinRestaurar: quien llama va a mostrar otro archivo justo después.
+function Copiar-PrimeroAlResto([switch]$SinRestaurar) {
+    $n = @($script:tabsProy).Count
+    if ($n -lt 2) { return }
+    $act = $script:tabProyActual
+    if ($act -ge 0 -and $act -lt $n) {
+        $script:tabsProy[$act].Estado = Snapshot-Proyecto
+        $script:tabsProy[$act].Decisiones = Snapshot-DecisionesTab
+    }
+    $t0 = $script:tabsProy[0]
+    Construir-Adaptacion (Get-ScopeTabProy 0); Restore-DecisionesTab $t0.Decisiones
+    $comun = Get-DecisionesComunes
+    for ($i = 1; $i -lt $n; $i++) {
+        $t = $script:tabsProy[$i]
+        $est = $t0.Estado.Clone()
+        foreach ($k in @('Titulo', 'Ano', 'EsSerie')) { $est[$k] = $t.Estado[$k] }
+        $t.Estado = $est
+        Construir-Adaptacion (Get-ScopeTabProy $i); Restore-DecisionesTab $t.Decisiones
+        Aplicar-DecisionesComunes $comun
+        $t.Decisiones = Snapshot-DecisionesTab
+    }
+    if ($SinRestaurar -or $act -lt 0 -or $act -ge $n) { return }
+    Restore-Proyecto $script:tabsProy[$act].Estado
+    Aplicar-TabActiva
+}
+function Cambiar-SincroPrimero {
+    if (Test-SincroPrimero) {
+        Copiar-PrimeroAlResto
+        Set-Estado "Lo elegido en el archivo 1 se aplica a los $(@($script:tabsProy).Count - 1) restantes (cada uno conserva su título, año y serie)." "ok"
+    }
+    Construir-TabBarProy
+}
+$ui.swAplicarPrimero.Add_Click({ Cambiar-SincroPrimero })
 # Muestra/oculta la barra de pestañas según el modo de lote.
 function Actualizar-ModoLote {
     if (-not $ui -or -not $ui.panProyTabs) { return }
@@ -4312,6 +4433,7 @@ function Actualizar-ModoLote {
     # pestaña; en homogéneo es un único valor que se envía como NumCapturas global.
     if ($het) { Reconstruir-TabsProy } else { Construir-ListadoLote }   # homogéneo: lista completa sin filtrar
     Update-FlechasTabsProy
+    if (Get-Command Update-HdzAcordeonArchivos -ErrorAction SilentlyContinue) { Update-HdzAcordeonArchivos }   # homogéneo: sin cabeceras por archivo
     # Cambiar de modo cambia la agrupación: descarta el registro de lanzadas y refresca los botones
     # (en homogéneo se vuelve a un único «Iniciar montaje»; en heterogéneo salen «Procesar esta» + «Todas»).
     $script:gruposLanzados = @{}
@@ -8422,6 +8544,7 @@ function Iniciar-Montaje($scope) {
             $script:tabsProy[$script:tabProyActual].Estado = Snapshot-Proyecto
             $script:tabsProy[$script:tabProyActual].Decisiones = Snapshot-DecisionesTab
         }
+        if (Test-SincroPrimero) { Copiar-PrimeroAlResto }   # lo último del archivo 1 también cuenta
         for ($i = 0; $i -lt @($script:tabsProy).Count; $i++) {
             if ([string]::IsNullOrWhiteSpace("$($script:tabsProy[$i].Estado.Titulo)")) {
                 $ui.navProyecto.IsChecked = $true
@@ -8650,6 +8773,7 @@ function Iniciar-Montaje($scope) {
             $script:tabsProy[$script:tabProyActual].Estado = Snapshot-Proyecto
             $script:tabsProy[$script:tabProyActual].Decisiones = Snapshot-DecisionesTab
         }
+        if (Test-SincroPrimero) { Copiar-PrimeroAlResto }
         $mapaProy = [ordered]@{}
         $mapaGen  = [ordered]@{}   # Originales/Sufijo/Torrent POR PELÍCULA (pestañas de General)
         foreach ($tb in @($script:tabsProy)) {
@@ -9195,6 +9319,7 @@ function Reset-Todo {
     $script:gruposLote = @(); $script:gruposRender = $null; $script:clavesHibRender = @()
     $script:videosElegidos = @()
     $script:gruposProy = @(); $script:tabsProy = @(); $script:tabProyActual = -1
+    $script:acordeonAbierto = $false; if ($ui.swAplicarPrimero) { $ui.swAplicarPrimero.IsChecked = $false }
     $script:gruposLanzados = @{}; $script:episodiosMap = @{}; $script:salidaMap = @{}
     $script:epTextboxes = @{}; $script:salidaBtns = @{}
     $ui.panListado.Children.Clear()

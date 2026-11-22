@@ -276,4 +276,89 @@ function Initialize-HdzWorkspace {
  }
  $script:workspaceScroll=[Windows.LogicalTreeHelper]::GetParent([Windows.LogicalTreeHelper]::GetParent($ui.panCrear))
  $script:workspaceReady=$true;Set-HdzWorkspaceStage 'general'
+ Initialize-HdzAcordeonArchivos
+}
+
+# «Cada archivo distinto»: en cada apartado, una cabecera plegable por archivo. Los controles siguen
+# siendo únicos (los del archivo activo, $script:tabProyActual): desplegar un archivo lo activa con
+# Cambiar-TabProy y el cuerpo del apartado se coloca justo bajo su cabecera; las de los archivos
+# anteriores quedan encima y las de los siguientes debajo. Lo común a todos (modo de vídeo, remezcla,
+# modo de lote, carpetas de salida) se queda fuera, siempre visible.
+function Initialize-HdzAcordeonArchivos {
+ $script:acordeones=@()
+ $fijos=@{general=@($ui.cardModoVideo,$ui.cardRemezcla,$ui.cardModoLote);entrega=@((Get-HdzCard $ui.txtSalidaArchivo))}
+ foreach($key in @('general','proyecto','audio','entrega')){
+  $body=$script:workspaceStages[$key].body;if($body -isnot [Windows.Controls.Panel]){continue}
+  $wrap=@($body.Children|Where-Object {$_ -is [Windows.Controls.WrapPanel]})[0];if(-not $wrap){continue}
+  $fijo=[Windows.Controls.StackPanel]::new()
+  foreach($card in @($fijos[$key])){if($card -and $wrap.Children.Contains($card)){[void]$wrap.Children.Remove($card);$card.ClearValue([Windows.FrameworkElement]::WidthProperty);[void]$fijo.Children.Add($card)}}
+  if($fijo.Children.Count){[void](New-HdzWorkspaceColumns $fijo)}
+  $arriba=[Windows.Controls.StackPanel]::new();$abajo=[Windows.Controls.StackPanel]::new()
+  $cuerpo=[Windows.Controls.Border]::new()
+  $position=$body.Children.IndexOf($wrap);[void]$body.Children.Remove($wrap);$cuerpo.Child=$wrap
+  # Fuentes: lo común va antes que los archivos; Entrega: las carpetas de salida, al final (como antes).
+  $orden=if($key -eq 'entrega'){@($fijo,$abajo,$cuerpo,$arriba)}else{@($abajo,$cuerpo,$arriba,$fijo)}
+  foreach($part in $orden){$body.Children.Insert($position,$part)}
+  if($wrap.Tag -is [hashtable]){Update-HdzWorkspaceColumns $wrap}
+  $script:acordeones+=@{Key=$key;Arriba=$arriba;Cuerpo=$cuerpo;Abajo=$abajo}
+ }
+ Update-HdzAcordeonArchivos
+}
+function New-HdzCabeceraArchivo($i,[bool]$abierto,[bool]$bloqueado,[bool]$sincro) {
+ $tab=$script:tabsProy[$i];$nombre="$($tab.Principal)";if(-not $nombre){$nombre="Archivo $($i+1)"}
+ $frame=[Windows.Controls.Border]::new();$frame.CornerRadius='10';$frame.BorderThickness='1';$frame.Padding='14,10';$frame.Margin='0,0,0,8';$frame.ToolTip=$nombre
+ $frame.Background=if($abierto){$win.Resources['AccentSoftBrush']}else{$win.Resources['CardBrush']}
+ $frame.BorderBrush=if($abierto){$win.Resources['AccentHoverBrush']}else{$win.Resources['CardBorderBrush']}
+ $grid=[Windows.Controls.Grid]::new()
+ foreach($width in @('28','*','Auto')){$c=[Windows.Controls.ColumnDefinition]::new();$c.Width=[Windows.GridLengthConverter]::new().ConvertFromString($width);[void]$grid.ColumnDefinitions.Add($c)}
+ $chevron=New-HdzProductText $(if($bloqueado){'='}elseif($abierto){'▾'}else{'▸'}) 18 'SubBrush';$chevron.VerticalAlignment='Center';$chevron.TextWrapping='NoWrap'
+ $title=New-HdzProductText "$($i+1). $nombre" 14 'TextBrush';$title.FontWeight='SemiBold';$title.TextWrapping='NoWrap';$title.TextTrimming='CharacterEllipsis';$title.VerticalAlignment='Center'
+ $titulo=if($i -eq $script:tabProyActual){"$($ui.txtTitulo.Text)".Trim()}else{"$($tab.Estado.Titulo)".Trim()}
+ $ano=if($i -eq $script:tabProyActual){"$($ui.txtAno.Text)".Trim()}else{"$($tab.Estado.Ano)".Trim()}
+ $resumen=if($bloqueado){'Usa lo elegido en el archivo 1'}else{"$titulo · $ano".Trim(' ','·')}
+ if($sincro -and $i -eq 0 -and -not $bloqueado){$resumen=(@($resumen,'se aplica al resto')|Where-Object {$_}) -join ' — '}
+ $summary=New-HdzProductText $resumen 12 'SubBrush';$summary.TextWrapping='NoWrap';$summary.TextTrimming='CharacterEllipsis';$summary.MaxWidth=320;$summary.Margin='16,0,0,0';$summary.VerticalAlignment='Center'
+ [Windows.Controls.Grid]::SetColumn($title,1);[Windows.Controls.Grid]::SetColumn($summary,2)
+ foreach($part in @($chevron,$title,$summary)){[void]$grid.Children.Add($part)}
+ $frame.Child=$grid
+ if($bloqueado){$frame.Opacity=.6;return $frame}
+ $frame.Cursor='Hand';$frame.Focusable=$true;$frame.Tag=$i;$frame.FocusVisualStyle=$win.Resources['HdzKeyboardFocus']
+ [Windows.Automation.AutomationProperties]::SetName($frame,"$($i+1). $nombre")
+ $frame.Add_MouseEnter({param($sender) if($sender.Tag -ne $script:tabProyActual -or -not $script:acordeonAbierto){$sender.BorderBrush=$win.Resources['AccentHoverBrush']}})
+ $frame.Add_MouseLeave({param($sender) if($sender.Tag -ne $script:tabProyActual -or -not $script:acordeonAbierto){$sender.BorderBrush=$win.Resources['CardBorderBrush']}})
+ $frame.Add_MouseLeftButtonUp({param($sender) Switch-HdzArchivoAcordeon ([int]$sender.Tag)})
+ $frame.Add_KeyDown({param($sender,$e) if($e.Key -in @('Enter','Space')){Switch-HdzArchivoAcordeon ([int]$sender.Tag);$e.Handled=$true}})
+ return $frame
+}
+function Switch-HdzArchivoAcordeon($i) {
+ if($i -eq $script:tabProyActual){$script:acordeonAbierto=-not $script:acordeonAbierto;Update-HdzAcordeonArchivos;return}
+ $script:acordeonAbierto=$true
+ Cambiar-TabProy $i
+}
+function Update-HdzAcordeonArchivos {
+ if(-not $script:acordeones){return}
+ $n=@($script:tabsProy).Count;$act=$script:tabProyActual
+ $activo=((Get-ChipValor 'modoLote') -eq 'HETEROGENEO') -and $n -ge 2
+ $sincro=$activo -and [bool]$ui.swAplicarPrimero.IsChecked
+ if($ui.panTabsGen){$ui.panTabsGen.Visibility=if($activo){'Visible'}else{'Collapsed'}}
+ foreach($acc in $script:acordeones){
+  $acc.Arriba.Children.Clear();$acc.Abajo.Children.Clear()
+  if(-not $activo){
+   $acc.Cuerpo.Visibility='Visible';$acc.Cuerpo.BorderThickness='0';$acc.Cuerpo.Padding='0';$acc.Cuerpo.Margin='0'
+   continue
+  }
+  # Con la casilla activada, en Audio y Entrega solo se edita el archivo 1 (lo demás se copia de él).
+  # En Fuentes e Identidad los demás siguen abiertos: su lista de vídeos y su título son propios.
+  $bloqueaResto=$sincro -and $acc.Key -in @('audio','entrega')
+  $abierto=$script:acordeonAbierto -and $act -ge 0 -and $act -lt $n -and -not ($bloqueaResto -and $act -gt 0)
+  for($i=0;$i -lt $n;$i++){
+   $header=New-HdzCabeceraArchivo $i ($abierto -and $i -eq $act) ($bloqueaResto -and $i -gt 0) $sincro
+   if($abierto -and $i -gt $act){[void]$acc.Abajo.Children.Add($header)}else{[void]$acc.Arriba.Children.Add($header)}
+  }
+  $acc.Cuerpo.Visibility=if($abierto){'Visible'}else{'Collapsed'}
+  $acc.Cuerpo.BorderThickness='2,0,0,0';$acc.Cuerpo.BorderBrush=$win.Resources['AccentHoverBrush'];$acc.Cuerpo.Padding='16,6,0,0';$acc.Cuerpo.Margin='8,0,0,12'
+ }
+ # Identidad de los archivos 2+ con la casilla activada: el título y el año se editan; el origen viene del 1.
+ $origen=Get-HdzCard $ui.chOrigen
+ if($origen){$copiado=$sincro -and $act -gt 0;$origen.IsEnabled=-not $copiado;$origen.Opacity=if($copiado){.55}else{1};$origen.ToolTip=if($copiado){'Copiado del archivo 1 (desactiva «Aplicar a todos…» para cambiarlo aquí)'}else{$null}}
 }

@@ -48,6 +48,7 @@ if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoP
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-FiltroFilas.ps1');if($LASTEXITCODE -ne 0){throw 'Falló sincronizar los chips de idioma/tipo con las pistas'}
 & node (Join-Path $PSScriptRoot 'test_web_sub_tracks.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la selección de subtítulos web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Interface.ps1');if($LASTEXITCODE -ne 0){throw 'Falló la nueva distribución WPF'}
+& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-AcordeonArchivos.ps1');if($LASTEXITCODE -ne 0){throw 'Falló las opciones plegables por archivo o aplicar el primero al resto'}
 & node (Join-Path $PSScriptRoot 'test_web_interface.cjs');if($LASTEXITCODE -ne 0){throw 'Falló la nueva distribución web'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Design.ps1');if($LASTEXITCODE -ne 0){throw 'Falló el diseño compartido WPF'}
 & node (Join-Path $PSScriptRoot 'test_workspace_visual.cjs');if($LASTEXITCODE -ne 0){throw 'Falló el espacio de trabajo visual'}

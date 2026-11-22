@@ -17,7 +17,8 @@ try {
   $ui["hdrUnd$k"].RaiseEvent($clic);Assert ($ui["bodyUnd$k"].Visibility -eq 'Collapsed') "El selector por pista ($k) no se vuelve a contraer"
  }
  Set-HdzWorkspaceStage 'entrega'
- $deliveryChildren=$script:workspaceStages.entrega.body.Children[0].Children
+ # El cuerpo de Entrega va dentro de su bloque por archivo (cabeceras plegables de «Cada archivo distinto»).
+ $deliveryChildren=@($script:acordeones|Where-Object Key -eq 'entrega')[0].Cuerpo.Child.Children
  Assert ($deliveryChildren[0].Text -eq 'Entrega') 'La entrega no aparece primero'
  Assert (@($deliveryChildren | Where-Object Text -eq 'Salida y originales').Count -eq 1) 'Falta la salida en Entrega'
  foreach($mode in @('NO','INDIVIDUAL','PACK','AMBOS','NO')){
