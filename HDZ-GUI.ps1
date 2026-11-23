@@ -407,7 +407,8 @@ foreach ($culture in [Globalization.CultureInfo]::GetCultures([Globalization.Cul
 $plataformasGui = @("NF — Netflix","AMZN — Amazon Prime","DSNP — Disney+","MVSTP — Movistar+",
     "SKST — SkyShowtime","FLMN — Filmin","ATVP — Apple TV+","iT — iTunes","HMAX — HBO Max",
     "RTVP — RTVE Play","RKTN — Rakuten")
-$formatosGui = @("UHDFull","BDFull","UHDRemux","BDRemux","UHDRip","BDRip","MHD","Remastered")
+# Nuevos siempre AL FINAL: las pestañas guardan el formato por posición (FmtIdx).
+$formatosGui = @("UHDFull","BDFull","UHDRemux","BDRemux","UHDRip","BDRip","MHD","Remastered","DVDFull","BD25")
 
 # Mismo normalizador de agrupación que usa HDZnew.ps1 para detectar parejas híbridas
 $normalizadorAgrupacion = '(?i)[\._\s\-\(\)]+(Dolby[\._\s\-]Vision|DolbyVision|HDR10\+|HDR10|HDR|DV|2160p|1080p|UHD|WEB[\._\s\-]?DL|Apple[\._\s\-]?TV|iTunes|Disney\+?|Atmos|TrueHD|DTS[\._\s\-]?HD[\._\s\-]?MA|DTS[\._\s\-]?HD|DTS[\._\s\-]?X|DTS|E[\._\s\-]?AC[\._\s\-]?3|EAC3|AC3|DDP\+?|DD\+|DDP|DD|AAC|FLAC|MA|HRA)(?=[\._\s\-\(\)]|$)'
@@ -2128,6 +2129,27 @@ function Init-Combo($cmb, $opciones, $indiceDefecto = 0) {
 function Get-ComboValor($cmb) {
     if ($cmb.SelectedIndex -lt 0) { return $null }
     return $cmb.Tag[$cmb.SelectedIndex].V
+}
+# Tipo del tracker (type_id de HDZERO) a partir del nombre del release. Cubre todas las etiquetas
+# que pone Identidad → Origen (WEB-DL/WEBRip y los formatos físicos) y las de nombres ajenos.
+# IDs comprobados contra la API de hdzero.org el 23/11/2026 (el 14 «Rips AV1» se eliminó).
+# Devuelve $null si el nombre no lo deja claro (el combo se queda como esté).
+function Get-HdzTipoPorNombre([string]$nombre) {
+    if ($nombre -match "(?i)\bUHD ?Full\b|\bFull ?UHD\b")        { return 3 }
+    if ($nombre -match "(?i)\bBD ?Full\b|\bFull ?Blu-?Ray\b")    { return 1 }
+    if ($nombre -match "(?i)\bDVD ?Full\b|\bDVD[59]\b")          { return 15 }
+    if ($nombre -match "(?i)\bBD25\b")                           { return 16 }
+    if ($nombre -match "(?i)\bCustom ?UHD\b|\bUHD ?Custom\b")    { return 4 }
+    if ($nombre -match "(?i)\bCustom ?BD\b|\bBD ?Custom\b")      { return 8 }
+    if ($nombre -match "(?i)WEB-?DL")                            { return 6 }
+    if ($nombre -match "(?i)WEB-?Rip")                           { return 17 }
+    if ($nombre -match "(?i)\bRemastered\b")                     { return 9 }
+    if ($nombre -match "(?i)\bDVD ?Remux\b|\bDVDRip\b")          { return 13 }
+    if ($nombre -match "(?i)Remux")                              { return $(if ($nombre -match "(?i)UHD|2160") { 5 } else { 2 }) }
+    if ($nombre -match "(?i)\bUHD ?Rip\b")                       { return 10 }
+    if ($nombre -match "(?i)BDRip|BRRip")                        { return 7 }
+    if ($nombre -match "(?i)\bMHD\b|\bMicro ?HD\b")              { return 11 }
+    return $null
 }
 function Set-ComboValor($cmb, $valor) {
     for ($i = 0; $i -lt $cmb.Tag.Count; $i++) {
@@ -5167,7 +5189,8 @@ $catsHDZ = @(
 $tiposHDZ = @(
     @{T="WEB-DL"; V=6}, @{T="Full UHD"; V=3}, @{T="Custom UHD"; V=4}, @{T="UHDRemux"; V=5},
     @{T="Full BluRay"; V=1}, @{T="Custom BD"; V=8}, @{T="BDRemux"; V=2}, @{T="Remastered"; V=9},
-    @{T="BDrip"; V=7}, @{T="UHDRip"; V=10}, @{T="MicroHD"; V=11}, @{T="DVDRemux"; V=13}, @{T="Rips AV1"; V=14}
+    @{T="BDrip"; V=7}, @{T="UHDRip"; V=10}, @{T="MicroHD"; V=11}, @{T="DVDRemux"; V=13}, @{T="WEBRip"; V=17},
+    @{T="DVD"; V=15}, @{T="BD25"; V=16}
 )
 $resolucionesHDZ = @(
     @{T="2160p"; V=2}, @{T="1080p"; V=3}, @{T="4320p"; V=1}, @{T="1080i"; V=4}, @{T="720p"; V=5},
@@ -5339,6 +5362,7 @@ function Aplicar-DatosDiscoSubida($Datos) {
     $ui.upHDR10.IsChecked = [bool]($Datos.HDR10 -or $Datos.HDR10P)
     if ("$($Datos.Resolucion)" -eq '2160p') { Set-ComboValor $ui.upTipo 3 }
     elseif ("$($Datos.Resolucion)" -match '^(1080|720)') { Set-ComboValor $ui.upTipo 1 }
+    elseif ("$($Datos.Resolucion)" -match '^(576|480)') { Set-ComboValor $ui.upTipo 15 }
     Actualizar-TipoCategoria
 }
 
@@ -6627,13 +6651,10 @@ function Cargar-TorrentParaSubir($rutaTorrent, $videoHint = $null, $origenHint =
     if ($esSerie -and $nombre -match "(?i)\bS(\d{1,3})(?:E(\d{1,4}))?") { $esPackTorrent = -not $Matches[2] }
     if (-not $conservarPanel) {
         Set-ComboValor $ui.upCategoria $(if ($esSerie) { 2 } else { 1 })
-        if ($nombre -match "(?i)\bUHD ?Full\b|\bFull ?UHD\b") { Set-ComboValor $ui.upTipo 3 }
-        elseif ($nombre -match "(?i)\bBD ?Full\b|\bFull ?Blu-?Ray\b") { Set-ComboValor $ui.upTipo 1 }
-        elseif (Test-HdzEsDisco $nombre) { }   # disco completo: el tipo ya salió de sus datos técnicos
-        elseif ($nombre -match "(?i)WEB-?DL")      { Set-ComboValor $ui.upTipo 6 }
-        elseif ($nombre -match "(?i)WEB-?Rip") { Set-ComboValor $ui.upTipo 6 }
-        elseif ($nombre -match "(?i)Remux")    { Set-ComboValor $ui.upTipo $(if ($nombre -match "(?i)UHD|2160") {5} else {2}) }
-        elseif ($nombre -match "(?i)BDRip|BRRip") { Set-ComboValor $ui.upTipo 7 }
+        $tipoNombre = Get-HdzTipoPorNombre $nombre
+        # Disco completo sin etiqueta Full/BD25 en el nombre: el tipo ya salió de sus datos técnicos.
+        if ((Test-HdzEsDisco $nombre) -and $tipoNombre -notin @(1, 3, 15, 16)) { }
+        elseif ($tipoNombre) { Set-ComboValor $ui.upTipo $tipoNombre }
         Actualizar-TipoCategoria
         if ($esSerie -and $nombre -match "(?i)\bS(\d{1,3})(?:E(\d{1,4}))?") {
             $ui.upTemporada.Text = [int]$Matches[1]
@@ -7517,9 +7538,7 @@ function Start-CrearTorrentAsync($tipo, $ruta) {
         $esSerieF = ($nombreFuente -match "(?i)\bS\d{1,3}(E\d{1,4})?\b")
         Set-ComboValor $ui.upCategoria $(if ($esSerieF) { 2 } else { 1 })
         if ($discoPrep) { }   # el tipo (Full UHD / Full BluRay) ya salió de los datos del disco
-        elseif ($nombreFuente -match "(?i)WEB-?DL|WEB-?Rip") { Set-ComboValor $ui.upTipo 6 }
-        elseif ($nombreFuente -match "(?i)Remux")        { Set-ComboValor $ui.upTipo $(if ($nombreFuente -match "(?i)UHD|2160") {5} else {2}) }
-        elseif ($nombreFuente -match "(?i)BDRip|BRRip")  { Set-ComboValor $ui.upTipo 7 }
+        elseif ($tipoFuente = Get-HdzTipoPorNombre $nombreFuente) { Set-ComboValor $ui.upTipo $tipoFuente }
         Actualizar-TipoCategoria
         if ($esSerieF -and $nombreFuente -match "(?i)\bS(\d{1,3})(?:E(\d{1,4}))?") {
             $ui.upTemporada.Text = [int]$Matches[1]

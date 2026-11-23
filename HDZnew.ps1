@@ -475,7 +475,9 @@ $opcFormatosFisicos = @(
     @{Nombre="UHDRip";     Valor="UHDRip"},
     @{Nombre="BDRip";      Valor="BDRip"},
     @{Nombre="MicroHD";    Valor="MHD"},
-    @{Nombre="Remastered"; Valor="Remastered"}
+    @{Nombre="Remastered"; Valor="Remastered"},
+    @{Nombre="DVDFull";    Valor="DVDFull"},
+    @{Nombre="BD25";       Valor="BD25"}
 )
 
 # Cache global de mediainfo (D5): clave = path absoluto, valor = objeto JSON parseado
