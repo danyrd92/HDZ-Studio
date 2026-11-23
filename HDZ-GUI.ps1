@@ -1168,7 +1168,7 @@ $xaml = @'
               <Border Style="{StaticResource Card}">
                 <StackPanel>
                   <CheckBox x:Name="swAplicarPrimero" Style="{StaticResource Switch}" Content="Aplicar a todos los archivos lo elegido en el primero"/>
-                  <TextBlock Style="{StaticResource D}" Margin="0,6,0,0" Text="Cada archivo conserva su título, año y si es serie. Lo demás (origen, audio, subtítulos, torrent, capturas, originales y sufijo) se copia del archivo 1 mientras esté activada."/>
+                  <TextBlock Style="{StaticResource D}" Margin="0,6,0,0" Text="Cada archivo conserva su título, año y si es serie. Lo demás (origen, audio, subtítulos, torrent, capturas, originales, sufijo y carpetas de salida) se copia del archivo 1 mientras esté activada."/>
                 </StackPanel>
               </Border>
               <Grid Visibility="Collapsed">
@@ -3956,7 +3956,24 @@ function Nuevo-EstadoProy {
     $capDef = Get-ChipValor "capturasProy"; if ($null -eq $capDef) { $capDef = 6 }
     @{ Titulo=""; Ano=""; EsSerie=$false; Origen="WEB"; WebTipo="WEB-DL"
        PlatIdx=0; PlatOtra=""; FmtIdx=0; FmtOtro=""; Etiquetas=""; Capturas=$capDef
-       Originales=(Get-ChipValor "originales"); Sufijo=(Get-ChipValor "sufijo"); Torrent=(Get-ChipValor "torrent"); EtqIdioma=(Get-ChipValor "etqIdioma") }
+       Originales=(Get-ChipValor "originales"); Sufijo=(Get-ChipValor "sufijo"); Torrent=(Get-ModoTorrentPorArchivo (Get-ChipValor "torrent")); EtqIdioma=(Get-ChipValor "etqIdioma")
+       SalidaArchivo="$($ui.txtSalidaArchivo.Text)"; SalidaTorrent="$($ui.txtSalidaTorrent.Text)" }
+}
+# En «Cada archivo distinto» no hay lote que empaquetar: «Pack del lote» y «Ambos» pasan a «Uno por archivo».
+function Get-ModoTorrentPorArchivo($modo) {
+    if ("$modo" -in @('PACK', 'AMBOS')) { 'INDIVIDUAL' } else { $modo }
+}
+# Oculta «Pack del lote» y «Ambos» en «Cada archivo distinto» y corrige la elección si era una de ellas.
+function Actualizar-OpcionesTorrentLote {
+    if (-not $script:gruposChips -or -not $script:gruposChips['torrent']) { return }
+    $het = ((Get-ChipValor "modoLote") -eq "HETEROGENEO")
+    foreach ($e in $script:gruposChips['torrent']) {
+        if ("$($e.Valor)" -in @('PACK', 'AMBOS')) { $e.Radio.Visibility = if ($het) { 'Collapsed' } else { 'Visible' } }
+    }
+    if ($het) {
+        $v = Get-ChipValor "torrent"; $nuevo = Get-ModoTorrentPorArchivo $v
+        if ("$nuevo" -ne "$v") { Set-ChipValor "torrent" $nuevo }
+    }
 }
 function Snapshot-Proyecto {
     @{
@@ -3968,6 +3985,8 @@ function Snapshot-Proyecto {
         # Ajustes de General que en «Cada archivo distinto» son propios de cada película.
         Originales = (Get-ChipValor "originales"); Sufijo = (Get-ChipValor "sufijo"); Torrent = (Get-ChipValor "torrent")
         EtqIdioma = (Get-ChipValor "etqIdioma")
+        # Carpetas de salida del MKV y del .torrent: también propias de cada película.
+        SalidaArchivo = "$($ui.txtSalidaArchivo.Text)"; SalidaTorrent = "$($ui.txtSalidaTorrent.Text)"
     }
 }
 function Restore-Proyecto($s) {
@@ -3983,7 +4002,9 @@ function Restore-Proyecto($s) {
     if ($null -ne $s.Originales) { Set-ChipValor "originales" $s.Originales }
     if ($null -ne $s.Sufijo)     { Set-ChipValor "sufijo"     $s.Sufijo }
     if ($null -ne $s.EtqIdioma)  { Set-ChipValor "etqIdioma"  $s.EtqIdioma }
-    if ($null -ne $s.Torrent)    { Set-ChipValor "torrent"    $s.Torrent }
+    if ($null -ne $s.Torrent)    { Set-ChipValor "torrent"    (Get-ModoTorrentPorArchivo $s.Torrent) }
+    if ($null -ne $s.SalidaArchivo) { $ui.txtSalidaArchivo.Text = "$($s.SalidaArchivo)" }
+    if ($null -ne $s.SalidaTorrent) { $ui.txtSalidaTorrent.Text = "$($s.SalidaTorrent)" }
     Actualizar-Proyecto   # ajusta visibilidad WEB/Físico según el origen restaurado
 }
 # Las 3 barras de pestañas (Proyecto, Audio, Subtítulos) comparten estado y se dibujan iguales.
@@ -4428,6 +4449,7 @@ function Actualizar-ModoLote {
     # sub-menú) quedan siempre ocultas para no duplicar la tira. La lógica de cambio de pestaña
     # sigue igual: todas comparten $script:tabsProy y solo cambia cuál se dibuja.
     if ($ui.panTabsGen) { $ui.panTabsGen.Visibility = $visTabs }
+    Actualizar-OpcionesTorrentLote   # sin lote no hay «Pack del lote» ni «Ambos»
     foreach ($p in @($ui.panProyTabs, $ui.panProyTabsA, $ui.panProyTabsS)) { if ($p) { $p.Visibility = "Collapsed" } }
     # Capturas: la tarjeta vive SIEMPRE en Proyecto (no se oculta). En heterogéneo el valor es por
     # pestaña; en homogéneo es un único valor que se envía como NumCapturas global.
@@ -8807,7 +8829,18 @@ function Iniciar-Montaje($scope) {
             if ($null -ne $e.Originales) { $gen.AccionOriginales = "$($e.Originales)"; $gen.BorrarOriginales = ("$($e.Originales)" -eq "BORRAR") }
             if ($null -ne $e.Sufijo)     { $gen.SufijoHDZ = $e.Sufijo }
             if ($null -ne $e.EtqIdioma)  { $gen.EtiquetaIdioma = "$($e.EtqIdioma)" }
-            if ($null -ne $e.Torrent)    { $gen.ModoTorrent = "$($e.Torrent)" }
+            if ($null -ne $e.Torrent)    { $gen.ModoTorrent = (Get-ModoTorrentPorArchivo "$($e.Torrent)") }
+            # Carpetas de salida (MKV y .torrent) propias de esta película. La de un vídeo concreto
+            # elegida en la lista de Fuentes (CarpetaSalidaPorArchivo ya relleno) manda sobre esta.
+            foreach ($par in @(@('SalidaArchivo', 'CarpetaSalidaPorArchivo'), @('SalidaTorrent', 'CarpetaTorrentPorArchivo'))) {
+                $carpetaE = "$($e[$par[0]])".Trim()
+                if (-not $carpetaE) { continue }
+                if (-not $cfg.Contains($par[1])) { $cfg[$par[1]] = [ordered]@{} }
+                foreach ($arch in @($tb.Archivos)) {
+                    $nombre = if ($arch.Name) { $arch.Name } else { Split-Path $arch -Leaf }
+                    if (-not $cfg[$par[1]].Contains($nombre)) { $cfg[$par[1]][$nombre] = $carpetaE }
+                }
+            }
             if ($gen.Count -gt 0) { 
                 foreach ($arch in @($tb.Archivos)) { 
                     $nombre = if ($arch.Name) { $arch.Name } else { Split-Path $arch -Leaf }
@@ -8817,6 +8850,10 @@ function Iniciar-Montaje($scope) {
         }
         if ($mapaProy.Count -gt 0) { $cfg.ProyectoPorArchivo = $mapaProy }
         if ($mapaGen.Count -gt 0)  { $cfg.GeneralPorArchivo = $mapaGen }
+        # Las carpetas globales eran las de la película activa: sin quitarlas, una película sin
+        # carpeta propia acabaría en la de otra. Sin carpeta, cada una se queda junto a su origen.
+        foreach ($k in @('CarpetaSalida', 'CarpetaTorrent')) { if ($cfg.Contains($k)) { $cfg.Remove($k) } }
+        if ($cfg.Contains('ModoTorrent')) { $cfg.ModoTorrent = Get-ModoTorrentPorArchivo "$($cfg.ModoTorrent)" }
 
         # Decisiones de audio/subtítulos POR ARCHIVO (audio por defecto, filtro, PGS) + conversiones
         # de audio por película + pistas und (de TODAS las pestañas) + subs únicos. Reemplazan a las globales.

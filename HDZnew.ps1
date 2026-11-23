@@ -5229,7 +5229,14 @@ foreach ($grupo in $grupos) {
                 Set-ProgresoGui2 0 "Hasheando torrent: $nomTorr"
                 # Si el MKV aún está en el disco de trabajo, el .torrent va ya a la carpeta de salida
                 # (donde lo dejaba antes, junto al MKV).
-                $carpetaTorrentArch = if ($carpetaTorrentGui) { $carpetaTorrentGui } elseif ($moverAlFinal) { $carpetaSalidaArch } else { "" }
+                # «Cada archivo distinto»: cada película puede llevar su propia carpeta de .torrent.
+                $carpetaTorrentEste = $carpetaTorrentGui
+                $ctMap = Get-CfgGui "CarpetaTorrentPorArchivo"
+                if ($ctMap -and ($ctMap.PSObject.Properties.Name -contains $archivoPrincipal.Name)) {
+                    $ctVal = "$($ctMap.$($archivoPrincipal.Name))".Trim()
+                    if ($ctVal) { $carpetaTorrentEste = $ctVal; try { [void][System.IO.Directory]::CreateDirectory($ctVal) } catch {} }
+                }
+                $carpetaTorrentArch = if ($carpetaTorrentEste) { $carpetaTorrentEste } elseif ($moverAlFinal) { $carpetaSalidaArch } else { "" }
                 $rutaTorrentFinal = New-TorrentArchivo $archivoFinalDestino $torrentAnnounce "" $carpetaTorrentArch {
                     param($pct) Set-ProgresoGui2 $pct "Hasheando torrent ($pct%)"
                 }

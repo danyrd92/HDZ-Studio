@@ -283,10 +283,11 @@ function Initialize-HdzWorkspace {
 # siendo únicos (los del archivo activo, $script:tabProyActual): desplegar un archivo lo activa con
 # Cambiar-TabProy y el cuerpo del apartado se coloca justo bajo su cabecera; las de los archivos
 # anteriores quedan encima y las de los siguientes debajo. Lo común a todos (modo de vídeo, remezcla,
-# modo de lote, carpetas de salida) se queda fuera, siempre visible.
+# modo de lote) se queda fuera, siempre visible.
 function Initialize-HdzAcordeonArchivos {
  $script:acordeones=@()
- $fijos=@{general=@($ui.cardModoVideo,$ui.cardRemezcla,$ui.cardModoLote);entrega=@((Get-HdzCard $ui.txtSalidaArchivo))}
+ # Las carpetas de salida (MKV y .torrent) son propias de cada archivo: van dentro de su bloque de Entrega.
+ $fijos=@{general=@($ui.cardModoVideo,$ui.cardRemezcla,$ui.cardModoLote)}
  foreach($key in @('general','proyecto','audio','entrega')){
   $body=$script:workspaceStages[$key].body;if($body -isnot [Windows.Controls.Panel]){continue}
   $wrap=@($body.Children|Where-Object {$_ -is [Windows.Controls.WrapPanel]})[0];if(-not $wrap){continue}
