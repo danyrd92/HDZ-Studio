@@ -15,6 +15,9 @@ $cases=@(
     @(3840,2160,'Progressive','', '2160p',2), @(4096,1716,'Progressive','', '2160p',2),
     @(7680,4320,'Progressive','', '4320p',1), @(2560,1440,'Progressive','', '1440p',10),
     @(160,90,'Progressive','', '90p',10), @(0,0,'','', '',$null),
+    @(1916,814,'Progressive','', '1080p',3), @(1904,800,'Progressive','', '1080p',3),
+    @(1276,534,'Progressive','', '720p',5), @(3836,1606,'Progressive','', '2160p',2),
+    @(1366,768,'Progressive','', '768p',10),
     @(720,480,'Progressive','tt', '480p',8), @(720,480,'','unknown', '480p',8)
 )
 foreach($case in $cases){

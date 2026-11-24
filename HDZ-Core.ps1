@@ -26,14 +26,15 @@ function Add-HdzAudioBitrateToName([string]$Name, $Track) {
 
 function Get-HdzVideoResolution($Video) {
     # MediaInfo y ffprobe: misma clasificación en montaje, escritorio, web y subida.
-    # La anchura reconoce formatos panorámicos recortados (1920x800 = clase 1080).
+    # La anchura reconoce formatos panorámicos recortados (1920x800 = clase 1080),
+    # también con los laterales recortados unos píxeles (1916x814, 1904x800, 1276x534).
     # No se infiere HD a partir de un umbral de altura ni de un nombre de archivo.
     $height = 0; $width = 0
     if (-not $Video -or -not [int]::TryParse("$($Video.Height)", [ref]$height) -or $height -le 0) { return '' }
     [void][int]::TryParse("$($Video.Width)", [ref]$width)
     $lines = if ($height -eq 1088) { 1080 } else { $height }
-    foreach ($format in @(@{Widths=@(7680,8192);Lines=4320},@{Widths=@(3840,4096);Lines=2160},@{Widths=@(1920,2048);Lines=1080},@{Widths=@(1280);Lines=720})) {
-        if ($width -in $format.Widths -and $height -le $format.Lines -and $height -ge ($format.Lines / 2)) {
+    foreach ($format in @(@{Min=7200;Max=8192;Lines=4320},@{Min=3600;Max=4096;Lines=2160},@{Min=1800;Max=2048;Lines=1080},@{Min=1200;Max=1280;Lines=720})) {
+        if ($width -ge $format.Min -and $width -le $format.Max -and $height -le $format.Lines -and $height -ge ($format.Lines / 2)) {
             $lines = $format.Lines; break
         }
     }
