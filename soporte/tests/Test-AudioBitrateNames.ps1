@@ -21,8 +21,26 @@ foreach($case in $bitrateCases){Assert ((Get-HdzAudioBitrateLabel $case[0]) -eq 
 Assert ((Add-HdzAudioBitrateToName 'Castellano DD+ 5.1 Atmos' @{BitRate=768000}) -eq 'Castellano DD+ 5.1 Atmos @ 768 kb/s') 'Pierde idioma, formato o Atmos'
 Assert ((Add-HdzAudioBitrateToName 'Inglés AAC 2.0 @ 999 kb/s' @{BitRate=128000}) -eq 'Inglés AAC 2.0 @ 128 kb/s') 'Duplica un bitrate anterior'
 Assert ((Add-HdzAudioBitrateToName 'Francés FLAC 2.0 @ bitrate no disponible' @{BitRate=500000}) -eq 'Francés FLAC 2.0 @ 500 kb/s') 'No reemplaza el marcador sin datos'
+# Conversión: nunca más bitrate que el original.
+$convCases=@(
+    @(1024,@{bit_rate='768000'},'eac3',768), @(1024,@{bit_rate='1509000'},'eac3',1024),
+    @(1024,@{bit_rate='1509000';tags=@{BPS='3500000'}},'eac3',1024),
+    @(1024,@{bit_rate='1509000';tags=@{BPS='640000'}},'eac3',640),
+    @(1024,@{tags=@{'BPS-eng'='448000'}},'eac3',448),
+    @(640,@{bit_rate='600000'},'ac3',576), @(640,@{bit_rate='768000'},'ac3',640),
+    @(256,@{bit_rate='128000'},'aac',128), @(1024,@{},'eac3',1024), @(1024,$null,'eac3',1024),
+    @(1024,@{bit_rate='N/A'},'eac3',1024)
+)
+foreach($case in $convCases){$got=Get-HdzAudioConversionBitrateK $case[0] $case[1] $case[2];Assert ($got -eq $case[3]) "Bitrate de conversión $got, esperado $($case[3]): $($case[1]|ConvertTo-Json -Compress)"}
 $bitrateTestRoot=Join-Path $env:TEMP ('hdz_bitrate_'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($bitrateTestRoot)
+$dtsRoot=Join-Path $env:TEMP ('hdz_dts768_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($dtsRoot)
+$dtsSource=Join-Path $dtsRoot 'dts768.mkv'
+& "$bitrateAppRoot/bin/ffmpeg.exe" -v error -f lavfi -i 'sine=frequency=440:duration=3' -ac 6 -c:a dca -strict -2 -b:a 768k $dtsSource
+Assert ($LASTEXITCODE -eq 0) 'No se pudo crear el DTS de prueba'
+$dtsStream=@((& "$bitrateAppRoot/bin/ffprobe.exe" -v error -show_streams -of json $dtsSource | Out-String | ConvertFrom-Json).streams)[0]
+Remove-Item -LiteralPath $dtsRoot -Recurse -Force
+Assert ((Get-HdzAudioConversionBitrateK 1024 $dtsStream 'eac3') -eq 768) 'Un DTS 768 se convertiría a más de 768k'
 $bitrateSource=Join-Path $bitrateTestRoot 'Source.mkv'
 $bitrateExternal=Join-Path $bitrateTestRoot 'bonus_eng.eac3'
 & "$bitrateAppRoot/bin/ffmpeg.exe" -v error -f lavfi -i 'color=c=blue:s=160x90:r=24:d=3' -f lavfi -i 'sine=frequency=440:duration=3' -map 0:v -map 1:a -map 1:a -map 1:a -c:v libx264 -preset ultrafast -c:a:0 ac3 -b:a:0 192k -ac:a:0 2 -c:a:1 aac -b:a:1 64k -c:a:2 flac -metadata:s:a:0 language=spa -metadata:s:a:0 title='Castellano viejo @ 999 kb/s' -metadata:s:a:1 language=eng -metadata:s:a:2 language=fra -shortest $bitrateSource

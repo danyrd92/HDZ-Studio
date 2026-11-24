@@ -2872,13 +2872,17 @@ function Invoke-ConversionDTSMultiidioma($origenesPistas, $modo = "SIEMPRE", $me
         $salidaArgs = @('-map', "0:$($conv.Index)")
         # adelay inserta silencio al inicio para reproducir el retardo original (todos los canales).
         if ($delayMs -gt 0) { $salidaArgs += @('-af', "adelay=${delayMs}:all=1") }
-        $salidaArgs += @('-c:a', 'eac3', '-b:a', '1024k', '-y', $audioEAC3_temp)
+        # Bitrate: 1024k como máximo y nunca más que el DTS de origen (DTS 768 -> DD+ 768).
+        $streamOrigen = $null
+        try { $streamOrigen = @((ffprobe -v error -select_streams "$($conv.Index)" -show_entries stream=bit_rate:stream_tags=BPS,BPS-eng -of json $conv.RutaArchivo 2>$null | Out-String | ConvertFrom-Json).streams)[0] } catch {}
+        $brEac3 = Get-HdzAudioConversionBitrateK 1024 $streamOrigen 'eac3'
+        $salidaArgs += @('-c:a', 'eac3', '-b:a', "${brEac3}k", '-y', $audioEAC3_temp)
         $conv | Add-Member -NotePropertyName Salida -NotePropertyValue $audioEAC3_temp -Force
         $conv | Add-Member -NotePropertyName SalidaArgs -NotePropertyValue $salidaArgs -Force
 
         Write-Host "   -> Extrayendo DTS '$($conv.Lang)' (Index $($conv.Index)) a $($audioEAC3_temp | Split-Path -Leaf)..." -ForegroundColor Gray
         if ($delayMs -gt 0) { Write-Host "      (delay de origen: ${delayMs} ms, se preserva en el EAC3)" -ForegroundColor DarkGray }
-        Write-DiagPaso "  ffmpeg DTS->EAC3 preparado: lang=$($conv.Lang) delay=${delayMs}ms"
+        Write-DiagPaso "  ffmpeg DTS->EAC3 preparado: lang=$($conv.Lang) delay=${delayMs}ms bitrate=${brEac3}k"
     }
     $generados = @()
     foreach ($porArchivo in @($aConvertir | Group-Object RutaArchivo)) {
@@ -2981,7 +2985,9 @@ function Invoke-ConversionAudioManual($conversiones, $archivoPrincipal) {
         $mkvAudioId = [int]$mkvAudios[$audioOrdinal].id
         $cod  = "$($c.CodecDestino)".ToLower()
         $ch   = [int]$c.CanalesDestino
-        $br   = [int]$c.BitrateK
+        $brPedido = [int]$c.BitrateK
+        $br   = Get-HdzAudioConversionBitrateK $brPedido $sourceTrack[0] $cod
+        if ($br -ne $brPedido) { Write-DiagPaso "  conv pista ${idx}: bitrate ${brPedido}k -> ${br}k (no supera el original)" }
         $lang = if ([string]::IsNullOrWhiteSpace("$($c.Lang)")) { "und" } else { "$($c.Lang)" }
         if (-not $fmtMediainfo.ContainsKey($cod)) {
             throw "Códec de destino no soportado: '$cod'. No se sustituye el audio original."

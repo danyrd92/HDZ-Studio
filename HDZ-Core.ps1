@@ -18,6 +18,33 @@ function Get-HdzAudioBitrateLabel($Track) {
     return $kbps.ToString('0', [Globalization.CultureInfo]::InvariantCulture) + ' kb/s'
 }
 
+function Get-HdzAudioConversionBitrateK([int]$RequestedK, $SourceStream, [string]$Codec) {
+    # Una conversión nunca puede tener más bitrate que su origen (p. ej. DTS 768 -> DD+ 768,
+    # no 1024). $SourceStream = stream de ffprobe -show_streams (JSON). Se prefiere la
+    # estadística BPS del MKV (promedio real de la pista; en DTS-HD MA el bit_rate de ffprobe
+    # es solo el del núcleo) y, si no hay, bit_rate. Sin dato fiable se respeta lo pedido.
+    $bps = 0.0
+    if ($SourceStream) {
+        $tags = $SourceStream.tags
+        $candidates = @()
+        if ($tags) { $candidates += @($tags.BPS, $tags.'BPS-eng') }
+        $candidates += $SourceStream.bit_rate
+        foreach ($candidate in $candidates) {
+            $value = 0.0
+            if ([double]::TryParse(("$candidate" -replace '\s', ''), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$value) -and [double]::IsFinite($value) -and $value -gt 0) { $bps = $value; break }
+        }
+    }
+    $target = $RequestedK
+    if ($bps -gt 0) { $target = [Math]::Min($RequestedK, [int][Math]::Floor($bps / 1000)) }
+    if ("$Codec".ToLower() -eq 'ac3') {
+        # AC-3 solo admite bitrates de la tabla estándar: se baja al inmediato inferior.
+        $ac3Rates = @(32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640)
+        $allowed = @($ac3Rates | Where-Object { $_ -le $target })
+        $target = if ($allowed.Count) { $allowed[-1] } else { 32 }
+    }
+    return [Math]::Max(32, $target)
+}
+
 function Add-HdzAudioBitrateToName([string]$Name, $Track) {
     # Idempotente, también si se vuelve a aplicar el nombre a un resultado previo.
     $baseName = $Name -replace '(?i)\s+@\s+(?:\d+(?:[.,]\d+)?\s+kb/s|bitrate no disponible)\s*$', ''
