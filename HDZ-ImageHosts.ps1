@@ -3,7 +3,7 @@
 function ConvertTo-HdzImageUrl([string]$Value) {
     $u=$null
     if (-not [Uri]::TryCreate($Value,[UriKind]::Absolute,[ref]$u) -or $u.Scheme -ne 'https' -or $u.UserInfo -or -not $u.IsDefaultPort -or $Value -match '[\[\]\x00-\x20]') { throw 'El servidor devolvió un enlace de imagen no válido.' }
-    $allowed=@('imgbox.com','freeimage.host','iili.io','imgbb.com','ibb.co','pixhost.to','pixhost.cc')
+    $allowed=@('imgbox.com','imgbb.com','ibb.co')
     if (-not @($allowed|Where-Object { $u.DnsSafeHost -eq $_ -or $u.DnsSafeHost.EndsWith('.'+$_) }).Count) { throw 'El servidor devolvió un dominio de imagen no reconocido.' }
     return $u.AbsoluteUri
 }
@@ -11,7 +11,7 @@ function ConvertTo-HdzImageUrl([string]$Value) {
 function Assert-HdzDirectImageLink($Item) {
     $Item.Full=ConvertTo-HdzImageUrl "$($Item.Full)"
     $uri=[Uri]$Item.Full
-    if($uri.AbsolutePath -notmatch '(?i)\.(png|jpe?g)$' -or ($uri.Host -match '(^|\.)pixhost\.(to|cc)$' -and $uri.AbsolutePath -like '/show/*')) {
+    if($uri.AbsolutePath -notmatch '(?i)\.(png|jpe?g)$') {
         throw 'El servidor no devolvió un enlace directo al original PNG o JPEG.'
     }
 }
@@ -80,14 +80,6 @@ function Invoke-HdzHostUpload([string]$Provider,[string]$Path,$Settings,[string]
             if(-not $first -or $first.Error){throw "imgbox: $($first.Error)"}
             foreach($k in @('Full','Thumb','Page')){$item[$k]="$($first[$k])"}
         }
-        'FREEIMAGE' {
-            # Clave pública del servicio, no una credencial del usuario.
-            $form=@{key='6d207e02198a847aa98d0a2a901485a5';action='upload';format='json';source=(Get-Item -LiteralPath $Path -Force)}
-            $r=Invoke-RestMethod 'https://freeimage.host/api/1/upload' -Method Post -Form $form -TimeoutSec 60 -ErrorAction Stop
-            if("$($r.status_code)" -ne '200'){throw "freeimage: estado $($r.status_code)"}
-            $item.Full="$($r.image.url)"; $item.Page="$($r.image.url_viewer)"
-            $item.Thumb=if($r.image.medium.url){"$($r.image.medium.url)"}else{"$($r.image.thumb.url)"}
-        }
         'IMGBB' {
             if(-not $Settings.ImgbbKey){throw 'imgbb: falta la clave API.'}
             # La clave viaja en el cuerpo, no en la URL ni en los mensajes de error.
@@ -96,19 +88,6 @@ function Invoke-HdzHostUpload([string]$Provider,[string]$Path,$Settings,[string]
             if(-not $r.success){throw 'imgbb no aceptó la imagen.'}
             $item.Full="$($r.data.url)"; $item.Page="$($r.data.url_viewer)"
             $item.Thumb=if($r.data.medium.url){"$($r.data.medium.url)"}else{"$($r.data.thumb.url)"}
-        }
-        'PIXHOST' {
-            if((Get-Item -LiteralPath $Path -Force).Length -gt 10MB){throw 'Pixhost admite imágenes de hasta 10 MB; no se reducirá el original.'}
-            $form=@{img=(Get-Item -LiteralPath $Path -Force);content_type='0';max_th_size='350';optimize_for_web='0'}
-            $r=Invoke-RestMethod 'https://api.pixhost.to/images' -Method Post -Form $form -Headers @{Accept='application/json'} -TimeoutSec 60 -ErrorAction Stop
-            $item.Page=ConvertTo-HdzImageUrl "$($r.show_url)"; $item.Thumb="$($r.th_url)"
-            # La API publica página y miniatura. Resolver la imagen desde la página,
-            # sin inventar direcciones del CDN ni activar optimización con pérdida.
-            $html=(Invoke-WebRequest $item.Page -TimeoutSec 25 -ErrorAction Stop).Content
-            $tag=[regex]::Match($html,'(?is)<img\b[^>]*\bid=["'']image["''][^>]*>')
-            $src=[regex]::Match($tag.Value,'(?i)\bsrc=["'']([^"'']+)["'']')
-            if(-not $src.Success){throw 'Pixhost no devolvió el enlace de la imagen original.'}
-            $item.Full=ConvertTo-HdzImageUrl ([Net.WebUtility]::HtmlDecode($src.Groups[1].Value))
         }
         default {throw 'Servidor de imágenes desconocido.'}
     }
@@ -125,10 +104,13 @@ function Get-HdzUploadError($ErrorRecord,$Settings) {
     return $text.Substring(0,[Math]::Min($text.Length,300))
 }
 function Invoke-HdzImageUploadBatch {
-    param([string[]]$Paths,[string]$Preferred='FREEIMAGE',$Settings,[string]$Title='HD ZERO',$Sync=$null,$Gallery=$null,[string]$CacheDirectory,[scriptblock]$OnProgress)
+    param([string[]]$Paths,[string]$Preferred='IMGBOX',$Settings,[string]$Title='HD ZERO',$Sync=$null,$Gallery=$null,[string]$CacheDirectory,[scriptblock]$OnProgress)
     $ErrorActionPreference='Stop'
     if(@($Paths).Count -eq 0){throw 'No hay imágenes seleccionadas para subir.'}
-    $providers=@('FREEIMAGE','IMGBOX','PIXHOST','IMGBB')
+    # Solo servidores que el proxy de imágenes del tracker (wsrv.nl) muestra: imgbox e imgbb.
+    # freeimage.host (iili.io) y Pixhost se retiraron en 1.52; una preferencia antigua pasa a imgbox.
+    $providers=@('IMGBOX','IMGBB')
+    if($Preferred -in @('FREEIMAGE','PIXHOST')){$Preferred='IMGBOX'}
     if($Preferred -notin $providers){throw 'Servidor preferido no reconocido.'}
     $order=@(@($Preferred)+$providers|Select-Object -Unique)
     if(-not $Settings.ImgbbKey){$order=@($order|Where-Object {$_ -ne 'IMGBB'})}

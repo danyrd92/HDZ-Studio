@@ -20,12 +20,17 @@ try {
     $imageResult=Send-Imagenes @($missing)
     Assert ($imageResult.Error -and $imageResult.Items.Count -eq 1 -and $imageResult.Items[0].Ruta -eq $missing) 'El lote previo al tracker perdió el error o la ruta'
     Assert (-not $script:networkBusy -and -not $script:subSync -and $ui.panSubProgreso.Visibility -eq 'Collapsed') 'La subida dejó la interfaz bloqueada'
+    # Servidores de imágenes: solo imgbox (por defecto) e imgbb; un ajuste antiguo no los cambia.
+    Assert ((@($script:gruposChips['hostImg'] | ForEach-Object Valor) -join ',') -eq 'IMGBOX,IMGBB') 'Servidores de imágenes inesperados'
+    # El primero (imgbox) es el que queda marcado sin ajuste guardado; aquí puede haber uno real.
+    $hostActual=Get-ChipValor 'hostImg'; Assert ($hostActual -in @('IMGBOX','IMGBB')) "Servidor de imágenes inválido: $hostActual"
+    Set-ChipValor 'hostImg' 'FREEIMAGE'; Assert ((Get-ChipValor 'hostImg') -eq $hostActual) 'Un ajuste con freeimage cambió el servidor'
     $imageSync=[hashtable]::Synchronized(@{Fin=$false;Done=0;Total=1})
-    & $subidaWorker @($missing) 'PIXHOST' '' $imageSync '' '' 'fixture' $null $script:imageHostModulePath
+    & $subidaWorker @($missing) 'IMGBOX' '' $imageSync '' '' 'fixture' $null $script:imageHostModulePath
     Assert ($imageSync.Fin -and $imageSync.Error -and $imageSync.Items.Count -eq 1) 'El worker del escritorio/web no completó el error'
     . (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'HDZ-CapturasContexto.ps1')
     $imageSync=[hashtable]::Synchronized(@{Fin=$false;Done=0;Total=1})
-    & $script:hdzContextUploadWorker @($missing) 'PIXHOST' '' '' '' 'fixture' $script:hdzContextImageModule $imageSync
+    & $script:hdzContextUploadWorker @($missing) 'IMGBOX' '' '' '' 'fixture' $script:hdzContextImageModule $imageSync
     Assert ($imageSync.Fin -and $imageSync.Error -and $imageSync.Items.Count -eq 1) 'El worker del menú contextual no completó el error'
     # Dos fuentes con el mismo índice de audio: deben seguir siendo opciones distintas.
     $ui.swRemezcla.IsChecked=$true

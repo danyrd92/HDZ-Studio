@@ -163,7 +163,7 @@ function Initialize-HdzInterface {
         'Opciones'='Etiquetas y opciones del tracker';
         'Tipo'='Tipo de release';
         'Si no hay capturas junto al vídeo, créalas aquí (📷). Marca las que quieras y pulsa «Subir y añadir»: se suben como PNG y se insertan como miniaturas enlazadas al original. Clic en una miniatura para verla a tamaño completo.'='Crea o añade capturas, selecciónalas y pulsa «Subir y añadir». Se usan enlaces directos a tamaño completo con [img=350]…[/img], en filas de cinco.';
-        'Elige tu servidor preferido. Si falla, se probarán automáticamente los demás. freeimage, imgbox y Pixhost no necesitan clave; imgbb solo se usará si tiene clave. Se conserva la imagen original y una miniatura proporcional enlazada.'='Elige el servidor preferido. Si falla, se prueban los demás. imgbb requiere clave. Se enlaza la imagen original, sin envoltorios [url].';
+        'Elige tu servidor preferido. Si falla, se probará automáticamente el otro. imgbox no necesita clave; imgbb solo se usará si tiene clave. Se conserva la imagen original y una miniatura proporcional enlazada.'='Elige el servidor preferido. Si falla, se prueba el otro. imgbb requiere clave. Se enlaza la imagen original, sin envoltorios [url].';
         'Las opciones se adaptan a lo detectado en tus vídeos. Todo se decide aquí: el montaje corre sin preguntar nada en consola.'='Configura aquí el montaje. El OCR de PGS requiere Subtitle Edit y confirmar en el PC.';
         'El título y el año se usan para nombrar el resultado. El título es obligatorio: el montaje no pregunta nada en consola.'='El título y el año se usan para nombrar el resultado. Cada trabajo conserva su propia identificación.';
     }

@@ -9,7 +9,7 @@ foreach($name in @('Get-CapturaBbcode','Get-HdzLogoPersonalizadoUrl','Add-HdzIma
 . (Join-Path $root 'HDZ-CapturasContexto.ps1')
 function Assert($condition,$message){if(-not $condition){throw $message}}
 function Actualizar-ContadorCapturas {}
-$full='https://iili.io/example.png';$thumb='https://iili.io/example.md.png';$page='https://freeimage.host/i/example'
+$full='https://images2.imgbox.com/ab/cd/example.png';$thumb='https://thumbs2.imgbox.com/ab/cd/example_t.png';$page='https://imgbox.com/example'
 $expected="[img=350]$full[/img]"
 $script:imageHostMeta=@{};$script:imageHostMeta[$full]=@{Thumb=$thumb;Page=$page}
 Assert ((Get-CapturaBbcode $full) -eq $expected) 'El escritorio/web no usa solo la imagen original'

@@ -52,7 +52,8 @@ try {
     $request = Get-Content -LiteralPath $InputFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $rutas = @($request.Rutas | ForEach-Object { "$_" } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $hostType = "$($request.Host)".Trim().ToUpperInvariant()
-    if ($hostType -notin @('FREEIMAGE','IMGBB','IMGBOX','PIXHOST')) { throw 'Host de imágenes no válido.' }
+    if ($hostType -in @('FREEIMAGE','PIXHOST')) { $hostType = 'IMGBOX' }   # retirados en 1.52
+    if ($hostType -notin @('IMGBB','IMGBOX')) { throw 'Host de imágenes no válido.' }
     if ($rutas.Count -eq 0) { throw 'No hay capturas seleccionadas para subir.' }
 
     $state.Total = $rutas.Count

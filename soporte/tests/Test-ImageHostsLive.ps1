@@ -1,5 +1,5 @@
 # Prueba manual: publica únicamente una imagen sintética en los hosts indicados.
-param([string[]]$Providers=@('FREEIMAGE','IMGBOX','PIXHOST'))
+param([string[]]$Providers=@('IMGBOX'))
 $ErrorActionPreference='Stop'
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 . (Join-Path $root 'HDZ-ImageHosts.ps1')

@@ -7,7 +7,7 @@
 
 function Get-HdzContextUploadSettings {
     $r = [ordered]@{
-        HostImg    = 'FREEIMAGE'
+        HostImg    = 'IMGBOX'
         ImgbbKey   = ''
         ImgboxUser = ''
         ImgboxPass = ''
@@ -18,7 +18,7 @@ function Get-HdzContextUploadSettings {
         if (-not (Test-Path -LiteralPath $ruta -PathType Leaf)) { return [pscustomobject]$r }
         $aj = Get-Content -LiteralPath $ruta -Raw -Encoding UTF8 | ConvertFrom-Json
         $tipoHost = "$($aj.HostImg)".Trim().ToUpperInvariant()
-        if ($tipoHost -in @('FREEIMAGE','IMGBB','IMGBOX','PIXHOST')) { $r.HostImg = $tipoHost }
+        if ($tipoHost -in @('IMGBB','IMGBOX')) { $r.HostImg = $tipoHost }
         $r.ImgbbKey = "$($aj.ImgbbKey)".Trim()
         $r.ImgboxUser = "$($aj.ImgboxUser)".Trim()
         if (-not [string]::IsNullOrWhiteSpace("$($aj.ImgboxPass)")) {
@@ -374,10 +374,8 @@ function Show-HdzCaptureGrid {
     $lblVideo.Text = [System.IO.Path]::GetFileName($VideoPath)
     $lblTotal.Text = "$($safeCaptures.Count) imagen(es)"
     $hostOptions = @(
-        @{ V = 'FREEIMAGE'; T = 'freeimage.host · original' },
-        @{ V = 'IMGBB';     T = 'imgbb · original' },
         @{ V = 'IMGBOX';    T = 'imgbox · original' },
-        @{ V = 'PIXHOST';   T = 'Pixhost · original · hasta 10 MB' }
+        @{ V = 'IMGBB';     T = 'imgbb · original' }
     )
     $uiState = [hashtable]::Synchronized(@{
         Host = $cfg.HostImg
@@ -482,9 +480,7 @@ function Show-HdzCaptureGrid {
         $pendientes = @($seleccionadas | Where-Object { -not $_.Subida })
         $hostText = switch ($uiState.Host) {
             'IMGBB'  { if ($cfg.ImgbbKey) { 'imgbb · original' } else { 'imgbb · falta la clave en Ajustes' } }
-            'IMGBOX' { 'imgbox · original' }
-            'PIXHOST' { 'Pixhost · original' }
-            default  { 'freeimage.host · original' }
+            default  { 'imgbox · original' }
         }
         $lblSeleccion.Text = "$($seleccionadas.Count) de $($rows.Count) seleccionada(s) · $($pendientes.Count) pendiente(s)"
         $lblHost.Text = $hostText

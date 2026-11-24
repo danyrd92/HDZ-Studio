@@ -1853,7 +1853,7 @@ $xaml = @'
             <Border Style="{StaticResource Card}">
               <StackPanel>
                 <TextBlock Style="{StaticResource H}" Text="Host de imágenes"/>
-                <TextBlock Style="{StaticResource D}" Text="Elige tu servidor preferido. Si falla, se probarán automáticamente los demás. freeimage, imgbox y Pixhost no necesitan clave; imgbb solo se usará si tiene clave. Se conserva la imagen original y una miniatura proporcional enlazada."/>
+                <TextBlock Style="{StaticResource D}" Text="Elige tu servidor preferido. Si falla, se probará automáticamente el otro. imgbox no necesita clave; imgbb solo se usará si tiene clave. Se conserva la imagen original y una miniatura proporcional enlazada."/>
                 <WrapPanel x:Name="chHostImg" Margin="0,11,0,0"/>
                 <StackPanel x:Name="panImgbbKey" Visibility="Collapsed">
                   <TextBlock Style="{StaticResource Lbl}" Text="Clave API de imgbb"/>
@@ -5259,10 +5259,9 @@ function Actualizar-PanelHost {
     if ($ui.panImgboxCuenta) { $ui.panImgboxCuenta.Visibility = if ($h -eq "IMGBOX") { "Visible" } else { "Collapsed" } }
 }
 Add-ChipGroup $ui.chHostImg "hostImg" @(
-    @{T="freeimage.host (rectangular 350 px)"; V="FREEIMAGE"},
-    @{T="imgbb (rectangular 350 px, con clave)"; V="IMGBB"},
+    # Solo servidores que el tracker muestra a través de su proxy de imágenes (wsrv.nl).
     @{T="imgbox (rectangular 350 px)"; V="IMGBOX"},
-    @{T="Pixhost (350 px, hasta 10 MB)"; V="PIXHOST"}
+    @{T="imgbb (rectangular 350 px, con clave)"; V="IMGBB"}
 ) 0 { Actualizar-PanelHost }
 
 # Estado de la subida

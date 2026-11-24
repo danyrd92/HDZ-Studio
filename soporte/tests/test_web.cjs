@@ -37,7 +37,8 @@ const state={online:true,responsive:true,data:{protocol:2,session:'synthetic-ses
   assert(await page.locator('#seasonFolders').innerText().then(x=>x.includes('Temporada 2')),'Extra season is missing');
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);
   assert(!overflow,'Mobile layout overflows');
-  assert.equal(await page.locator('[data-group="hostImg"] [data-v="PIXHOST"]').count(),1,'Missing alternate host setting');
+  assert.equal(await page.locator('[data-group="hostImg"] [data-v="IMGBB"]').count(),1,'Missing alternate host setting');
+  assert.equal(await page.locator('[data-group="hostImg"] [data-v="FREEIMAGE"], [data-group="hostImg"] [data-v="PIXHOST"]').count(),0,'Retired image hosts still offered');
   // "Ver" must open the active torrent in THIS browser, never send ver_web to the PC.
   const pcCommands=[];
   page.on('request',r=>{if(new URL(r.url()).pathname==='/api/cmd')pcCommands.push(r.postData())});
@@ -69,9 +70,9 @@ const state={online:true,responsive:true,data:{protocol:2,session:'synthetic-ses
   await page.evaluate(s=>{render(s);go('crear')},state);
   console.log('TRACKER_LINK_OK — local browser, active upload, no PC command, reset and URL validation.');
   const uploadState=structuredClone(state);
-  uploadState.data.tareas=[{titulo:'Imágenes',fase:'Subiendo 2/20 · PIXHOST (intento 1/2)',pct:5}];
+  uploadState.data.tareas=[{titulo:'Imágenes',fase:'Subiendo 2/20 · IMGBB (intento 1/2)',pct:5}];
   await page.evaluate(s=>render(s),uploadState);
-  assert((await page.locator('#auxProg').innerText()).includes('PIXHOST'),'Fallback provider/progress missing on mobile');
+  assert((await page.locator('#auxProg').innerText()).includes('IMGBB'),'Fallback provider/progress missing on mobile');
   const png=path.join(process.env.TEMP,'hdz_web_mobile_audit.png');await page.screenshot({path:png,fullPage:true});
   await page.setViewportSize({width:1280,height:850});await page.waitForTimeout(100);
   for(const width of [390,1280]){
