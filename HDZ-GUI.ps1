@@ -404,9 +404,15 @@ foreach ($culture in [Globalization.CultureInfo]::GetCultures([Globalization.Cul
     if (-not $nombresIdioma.ContainsKey($codigo)) { $nombresIdioma[$codigo] = $culture.DisplayName }
 }
 
-$plataformasGui = @("NF — Netflix","AMZN — Amazon Prime","DSNP — Disney+","MVSTP — Movistar+",
-    "SKST — SkyShowtime","FLMN — Filmin","ATVP — Apple TV+","iT — iTunes","HMAX — HBO Max",
-    "RTVP — RTVE Play","RKTN — Rakuten")
+# Índice 0 = «Sin plataforma» (el nombre queda «… 1080p WEB-DL …»). Las pestañas guardan la
+# plataforma por posición solo en memoria; el valor por defecto es Netflix (índice 1).
+$plataformasGui = @("Sin plataforma (no indicar)","NF — Netflix","AMZN — Amazon Prime","DSNP — Disney+",
+    "MVSTP — Movistar+","SKST — SkyShowtime","FLMN — Filmin","ATVP — Apple TV+","iT — iTunes",
+    "HMAX — HBO Max","RTVP — RTVE Play","RKTN — Rakuten","MAX — Max","ATRP — Atresplayer","MITE — Mitele",
+    "PLTV — Pluto TV","3CAT — 3Cat","EITB — EITB Nahieran","PCOK — Peacock","PMTP — Paramount+","HULU — Hulu",
+    "STAN — Stan","CRAV — Crave","STZ — Starz","SHO — Showtime","AMC — AMC+","DSCP — Discovery+",
+    "CR — Crunchyroll","MUBI — MUBI","PLAY — Google Play","MA — Movies Anywhere","iP — BBC iPlayer",
+    "VIKI — Rakuten Viki","ROKU — Roku","TUBI — Tubi")
 # Nuevos siempre AL FINAL: las pestañas guardan el formato por posición (FmtIdx).
 $formatosGui = @("UHDFull","BDFull","UHDRemux","BDRemux","UHDRip","BDRip","MHD","Remastered","DVDFull","BD25")
 
@@ -2158,6 +2164,7 @@ function Set-ComboValor($cmb, $valor) {
 }
 function Get-CodigoPlataforma($texto) {
     $t = "$texto".Trim()
+    if ($t -match "^Sin plataforma") { return "" }
     if ($t -match "^(\S+)\s+—") { return $Matches[1] }
     return $t
 }
@@ -2171,14 +2178,40 @@ $script:platDefs = @(
     @{ Cod='NF';    Alias=@('NETFLIX');                                                      Ambig=@('NF') }
     @{ Cod='AMZN';  Alias=@('AMAZON PRIME VIDEO','AMAZON PRIME','PRIME VIDEO','AMAZON','AMZN'); Ambig=@('AMZ') }
     @{ Cod='DSNP';  Alias=@('DISNEY PLUS','DISNEY+','DISNEY','DSNP');                         Ambig=@('DSP') }
-    @{ Cod='HMAX';  Alias=@('HBO MAX','HBOMAX','HBO','HMAX');                                 Ambig=@('MAX') }
+    @{ Cod='HMAX';  Alias=@('HBO MAX','HBOMAX','HBO','HMAX');                                 Ambig=@() }
     @{ Cod='ATVP';  Alias=@('APPLE TV PLUS','APPLE TV+','APPLE TV','APPLETV','ATVP');         Ambig=@('ATV') }
     @{ Cod='iT';    Alias=@('ITUNES','APPLE ITUNES');                                         Ambig=@('IT') }
     @{ Cod='SKST';  Alias=@('SKY SHOWTIME','SKYSHOWTIME','SKST');                             Ambig=@('SKY') }
     @{ Cod='FLMN';  Alias=@('FILMIN','FLMN');                                                 Ambig=@() }
     @{ Cod='MVSTP'; Alias=@('MOVISTAR PLUS','MOVISTAR+','MOVISTAR','MVSTP');                  Ambig=@('M+') }
     @{ Cod='RTVP';  Alias=@('RTVE PLAY','RTVE','RTVP');                                       Ambig=@() }
+    # Antes que RKTN: «Rakuten Viki» también contiene «Rakuten».
+    @{ Cod='VIKI';  Alias=@('RAKUTEN VIKI','VIKI');                                           Ambig=@() }
     @{ Cod='RKTN';  Alias=@('RAKUTEN TV','RAKUTEN','RKTN');                                   Ambig=@() }
+    # «MAX» a secas es ambiguo («Mad Max»): solo cuenta justo antes de WEB-DL.
+    @{ Cod='MAX';   Alias=@();                                                               Ambig=@('MAX') }
+    @{ Cod='ATRP';  Alias=@('ATRESPLAYER PREMIUM','ATRESPLAYER','ATRP');                      Ambig=@() }
+    @{ Cod='MITE';  Alias=@('MITELE PLUS','MITELE');                                          Ambig=@('MITE') }
+    @{ Cod='PLTV';  Alias=@('PLUTO TV','PLUTOTV','PLTV');                                     Ambig=@() }
+    @{ Cod='3CAT';  Alias=@('3CAT');                                                         Ambig=@('TV3') }
+    @{ Cod='EITB';  Alias=@('EITB NAHIERAN','EITB');                                          Ambig=@() }
+    @{ Cod='PCOK';  Alias=@('PEACOCK','PCOK');                                                Ambig=@() }
+    @{ Cod='PMTP';  Alias=@('PARAMOUNT PLUS','PARAMOUNT+','PARAMOUNT','PMTP');                Ambig=@() }
+    @{ Cod='HULU';  Alias=@('HULU');                                                         Ambig=@() }
+    @{ Cod='STAN';  Alias=@();                                                               Ambig=@('STAN') }
+    @{ Cod='CRAV';  Alias=@('CRAV');                                                         Ambig=@('CRAVE') }
+    @{ Cod='STZ';   Alias=@('STARZ','STZ');                                                   Ambig=@() }
+    # Detrás de SKST: «Sky Showtime» también contiene «Showtime».
+    @{ Cod='SHO';   Alias=@('SHOWTIME');                                                     Ambig=@('SHO') }
+    @{ Cod='AMC';   Alias=@('AMC PLUS','AMC+');                                               Ambig=@('AMC') }
+    @{ Cod='DSCP';  Alias=@('DISCOVERY PLUS','DISCOVERY+','DSCP');                            Ambig=@() }
+    @{ Cod='CR';    Alias=@('CRUNCHYROLL');                                                  Ambig=@('CR') }
+    @{ Cod='MUBI';  Alias=@('MUBI');                                                         Ambig=@() }
+    @{ Cod='PLAY';  Alias=@('GOOGLE PLAY');                                                  Ambig=@('PLAY') }
+    @{ Cod='MA';    Alias=@('MOVIES ANYWHERE');                                              Ambig=@('MA') }
+    @{ Cod='iP';    Alias=@('BBC IPLAYER','IPLAYER');                                         Ambig=@('IP') }
+    @{ Cod='ROKU';  Alias=@('ROKU');                                                         Ambig=@() }
+    @{ Cod='TUBI';  Alias=@('TUBI');                                                         Ambig=@() }
 )
 # Convierte un alias (posiblemente multipalabra) en un regex de palabra completa con separadores
 # flexibles entre palabras (espacio/punto/guion/guion bajo). Ej.: "HBO MAX" -> \bHBO[._ -]+MAX\b.
@@ -2194,13 +2227,16 @@ function ConvertTo-RegexAlias($a) {
 function Detectar-Plataforma($base) {
     $txt = "$base".ToUpperInvariant()
     # 1) Token (incluida "+") inmediatamente antes de WEB-DL/WEBRip.
-    if ($txt -match '([A-Z0-9\+]{2,18})[\s\.\-_]+WEB[\s\.\-_]?(?:DL|RIP)\b') {
-        $cand = "$($Matches[1])"
-        foreach ($d in $script:platDefs) {
+    #    Se prueban primero las DOS palabras previas juntas («Sky.Showtime» = SKST, no Showtime).
+    if ($txt -match '(?:([A-Z0-9\+]{2,18})[\s\.\-_]+)?([A-Z0-9\+]{2,18})[\s\.\-_]+WEB[\s\.\-_]?(?:DL|RIP)\b') {
+        $cands = @()
+        if ($Matches[1]) { $cands += "$($Matches[1])$($Matches[2])" }
+        $cands += "$($Matches[2])"
+        foreach ($cand in $cands) { foreach ($d in $script:platDefs) {
             foreach ($a in (@($d.Alias) + @($d.Ambig))) {
                 if ($cand -eq ($a -replace '\s+', '')) { return $d.Cod }   # compara sin espacios (HBOMAX = HBO MAX)
             }
-        }
+        } }
     }
     # 2) Búsqueda de alias inequívocos en la zona de etiquetas (de la resolución en adelante; si no
     #    hay resolución reconocible, en todo el nombre).
@@ -2502,7 +2538,7 @@ Add-ChipGroup $ui.chConservarPGS "conservarPGS" @(
 
 Reconstruir-ChipsIdiomas
 Reconstruir-ChipsTiposSub
-Init-Combo $ui.cmbPlataforma (@($plataformasGui | ForEach-Object { @{T=$_; V=(Get-CodigoPlataforma $_)} }))
+Init-Combo $ui.cmbPlataforma (@($plataformasGui | ForEach-Object { @{T=$_; V=(Get-CodigoPlataforma $_)} })) 1
 Init-Combo $ui.cmbFormato    (@($formatosGui    | ForEach-Object { @{T=$_; V=$_} })) 2
 
 # =========================================================================
@@ -3977,7 +4013,7 @@ function Nuevo-EstadoProy {
     # Capturas por defecto = el valor global del panel General (chip «capturas»), para no sorprender.
     $capDef = Get-ChipValor "capturasProy"; if ($null -eq $capDef) { $capDef = 6 }
     @{ Titulo=""; Ano=""; EsSerie=$false; Origen="WEB"; WebTipo="WEB-DL"
-       PlatIdx=0; PlatOtra=""; FmtIdx=0; FmtOtro=""; Etiquetas=""; Capturas=$capDef
+       PlatIdx=1; PlatOtra=""; FmtIdx=0; FmtOtro=""; Etiquetas=""; Capturas=$capDef
        Originales=(Get-ChipValor "originales"); Sufijo=(Get-ChipValor "sufijo"); Torrent=(Get-ModoTorrentPorArchivo (Get-ChipValor "torrent")); EtqIdioma=(Get-ChipValor "etqIdioma")
        SalidaArchivo="$($ui.txtSalidaArchivo.Text)"; SalidaTorrent="$($ui.txtSalidaTorrent.Text)" }
 }
@@ -9409,7 +9445,7 @@ function Reset-Todo {
     $script:tituloAutoVal = ""; $script:anoAutoVal = ""; $script:serieAutoVal = $null; $script:carpetaIdentificada = ""
     $ui.txtPlataformaOtra.Text = ""; $ui.txtFormatoOtro.Text = ""; $ui.txtEtiquetas.Text = ""
     $ui.txtTemporadaEp.Text = ""; $ui.txtPrimerEp.Text = ""
-    if ($ui.cmbPlataforma.Items.Count -gt 0) { $ui.cmbPlataforma.SelectedIndex = 0 }
+    if ($ui.cmbPlataforma.Items.Count -gt 1) { $ui.cmbPlataforma.SelectedIndex = 1 }
     if ($ui.cmbFormato.Items.Count -gt 0) { $ui.cmbFormato.SelectedIndex = 0 }
     Set-ComboValor $ui.cmbNumCapturas 6
     Set-ComboValor $ui.cmbEpsPorVideo 1
