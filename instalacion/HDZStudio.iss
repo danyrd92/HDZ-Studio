@@ -16,7 +16,7 @@
 ; ============================================================
 
 #define AppName "HDZ Studio"
-#define AppVer  "1.52"
+#define AppVer  "1.53"
 #ifndef StageRoot
   #error "Usa Preparar-Release.ps1 y compila con /DStageRoot=ruta_del_paquete_verificado"
 #endif
