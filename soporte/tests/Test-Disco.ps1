@@ -90,6 +90,45 @@ Assert ($ta2.Titulo -eq 'Avatar 3 jupk' -and -not $ta2.Anio) "Título suelto: '$
 Assert (Test-HdzEsDisco 'C:\x\Peli.ISO') 'No reconoce .ISO'
 Assert (-not (Test-HdzEsDisco 'C:\x\Peli.mkv')) 'Toma un MKV por disco'
 
+# --- 3b. Idiomas del .clpi y preferencia por el castellano -----------------
+# .clpi mínimo: cabecera HDMV, ProgramInfo en el byte 40 y una pista por elemento de $Pistas
+# (@{ Pid; Tipo; Idioma }). Solo lleva lo que lee Read-HdzClpiIdiomas.
+function New-TestClpi($Pistas) {
+    $b = [Collections.Generic.List[byte]]::new()
+    $b.AddRange([Text.Encoding]::ASCII.GetBytes('HDMV0200'))
+    $b.AddRange([byte[]](0, 0, 0, 0)); $b.AddRange([byte[]](0, 0, 0, 40))
+    while ($b.Count -lt 40) { $b.Add(0) }
+    $b.AddRange([byte[]](0, 0, 0, 0, 0, 1)); $b.AddRange([byte[]](0, 0, 0, 0, 0x01, 0x00)); $b.Add([byte]@($Pistas).Count); $b.Add(0)
+    foreach ($p in $Pistas) {
+        $b.Add([byte](($p.Pid -shr 8) -band 0xFF)); $b.Add([byte]($p.Pid -band 0xFF))
+        if ($p.Tipo -eq 0x1B) { $b.AddRange([byte[]](5, 0x1B, 0x61, 0, 0, 0)) }
+        elseif ($p.Tipo -eq 0x90) { $b.AddRange([byte[]](4, 0x90)); $b.AddRange([Text.Encoding]::ASCII.GetBytes($p.Idioma)) }
+        else { $b.AddRange([byte[]](5, [byte]$p.Tipo, 0x61)); $b.AddRange([Text.Encoding]::ASCII.GetBytes($p.Idioma)) }
+    }
+    return $b.ToArray()
+}
+$clpi = New-TestClpi @(
+    @{ Pid = 0x1011; Tipo = 0x1B }
+    @{ Pid = 0x1100; Tipo = 0x86; Idioma = 'eng' }
+    @{ Pid = 0x1101; Tipo = 0x81; Idioma = 'cat' }
+    @{ Pid = 0x1102; Tipo = 0x84; Idioma = 'spa' }
+    @{ Pid = 0x1200; Tipo = 0x90; Idioma = 'spa' }
+)
+$idi = Read-HdzClpiIdiomas $clpi
+Assert ($idi[0x1100] -eq 'eng' -and $idi[0x1101] -eq 'cat' -and $idi[0x1102] -eq 'spa' -and $idi[0x1200] -eq 'spa' -and -not $idi.ContainsKey(0x1011)) "Idiomas del .clpi: $(($idi.GetEnumerator() | % { '{0:X}={1}' -f $_.Key, $_.Value }) -join ' ')"
+Assert ((Read-HdzClpiIdiomas ([byte[]](1, 2, 3))).Count -eq 0) 'Un .clpi roto debe dar cero idiomas, no un error'
+Assert ((Get-HdzDiscoPesoIdioma 'cat') -eq 2 -and (Get-HdzDiscoPesoIdioma 'catalan') -eq 2) 'El catalán no es latino'
+Assert ((Get-HdzDiscoPesoIdioma 'spa') -eq 0 -and (Get-HdzDiscoPesoIdioma 'Spanish') -eq 0) 'Castellano'
+# El castellano manda aunque no sea la primera pista ni la de más calidad.
+$probeFalso = [pscustomobject]@{ format = [pscustomobject]@{ duration = '100' }; streams = @(
+    [pscustomobject]@{ index = 0; codec_type = 'video'; codec_name = 'h264'; width = 1920; height = 1080 }
+    [pscustomobject]@{ index = 1; codec_type = 'audio'; codec_name = 'truehd'; profile = ''; channels = 8; tags = [pscustomobject]@{ language = 'eng' } }
+    [pscustomobject]@{ index = 2; codec_type = 'audio'; codec_name = 'ac3'; profile = ''; channels = 6; tags = [pscustomobject]@{ language = 'cat' } }
+    [pscustomobject]@{ index = 3; codec_type = 'audio'; codec_name = 'dts'; profile = 'DTS-HD MA'; channels = 2; tags = [pscustomobject]@{ language = 'spa' } }
+) }
+$dp = ConvertFrom-HdzDiscoProbe $probeFalso
+Assert ($dp.Audio -eq 'DTS-HD MA' -and $dp.AudioCanales -eq '2.0' -and $dp.AudioIdioma -eq 'spa') "Audio elegido: $($dp.Audio) $($dp.AudioCanales) $($dp.AudioIdioma)"
+
 # --- 4. ISOs sintéticos (UDF, como los de los discos reales) --------------
 Add-Type -TypeDefinition @'
 using System; using System.IO; using System.Runtime.InteropServices; using System.Runtime.InteropServices.ComTypes;
@@ -119,8 +158,13 @@ try {
     # directa falla y se usa el respaldo: montar y tomar el .m2ts más grande.
     $bd = Join-Path $testRoot 'bd'
     [void][IO.Directory]::CreateDirectory((Join-Path $bd 'BDMV\STREAM'))
-    & ffmpeg -v error -f lavfi -i 'testsrc2=s=320x180:r=24:d=60' -f lavfi -i 'sine=frequency=440:duration=60' -c:v libx264 -preset ultrafast -c:a ac3 -ac 6 -f mpegts (Join-Path $bd 'BDMV\STREAM\00001.m2ts')
+    # Película con dos audios y PIDs de Blu-ray: inglés DD 2.0 primero y castellano DD+ 5.1 después.
+    # Los idiomas van solo en el .clpi, como en un disco real.
+    & ffmpeg -v error -f lavfi -i 'testsrc2=s=320x180:r=24:d=60' -f lavfi -i 'sine=frequency=440:duration=60' -f lavfi -i 'sine=frequency=660:duration=60' -map 0:v -map 1:a -map 2:a -c:v libx264 -preset ultrafast -c:a:0 ac3 -ac:a:0 2 -c:a:1 eac3 -ac:a:1 6 -streamid 0:0x1011 -streamid 1:0x1100 -streamid 2:0x1101 -f mpegts (Join-Path $bd 'BDMV\STREAM\00001.m2ts')
     Assert ($LASTEXITCODE -eq 0) 'No se pudo crear la película del Blu-ray sintético'
+    [void][IO.Directory]::CreateDirectory((Join-Path $bd 'BDMV\CLIPINF'))
+    [IO.File]::WriteAllBytes((Join-Path $bd 'BDMV\CLIPINF\00001.clpi'), (New-TestClpi @(
+        @{ Pid = 0x1011; Tipo = 0x1B }, @{ Pid = 0x1100; Tipo = 0x81; Idioma = 'eng' }, @{ Pid = 0x1101; Tipo = 0x84; Idioma = 'spa' })))
     & ffmpeg -v error -f lavfi -i 'color=c=black:s=320x180:r=24:d=4' -c:v libx264 -preset ultrafast -f mpegts (Join-Path $bd 'BDMV\STREAM\00002.m2ts')
     Assert ($LASTEXITCODE -eq 0) 'No se pudo crear el extra del Blu-ray sintético'
     $isoBd = Join-Path $testRoot 'Avatar 3 jupk.iso'
@@ -132,7 +176,7 @@ try {
         Assert ($disco.Entrada -like '*00001.m2ts') "No eligió la película principal: $($disco.Entrada)"
         Assert ($disco.Etiqueta -eq 'TEST_BD') "Etiqueta del volumen: '$($disco.Etiqueta)'"
         $datos = Get-HdzDiscoDatos $disco
-        Assert ($datos.Codec -eq 'AVC' -and $datos.Audio -eq 'DD' -and $datos.AudioCanales -eq '5.1') "Datos ffprobe: $($datos.Codec) $($datos.Audio) $($datos.AudioCanales)"
+        Assert ($datos.Codec -eq 'AVC' -and $datos.Audio -eq 'DD+' -and $datos.AudioCanales -eq '5.1' -and $datos.AudioIdioma -eq 'spa') "Datos ffprobe (debe ganar el castellano del .clpi): $($datos.Codec) $($datos.Audio) $($datos.AudioCanales) $($datos.AudioIdioma)"
         Assert (-not $datos.HDR10 -and -not $datos.DV) 'HDR falso en un SDR'
         Assert ($datos.Duracion -gt 50) "Duración: $($datos.Duracion)"
     } finally { Close-HdzDisco $disco }

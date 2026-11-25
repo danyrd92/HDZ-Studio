@@ -172,7 +172,8 @@ function Get-HdzDiscoCanales([int]$Canales) {
 function Get-HdzDiscoPesoIdioma([string]$Idioma) {
     $i = "$Idioma".Trim().ToLowerInvariant()
     if ($i -match '^(spa|es|esp|spanish|castellano|español|espanol)$') { return 0 }
-    if ($i -match 'latin|lat') { return 1 }
+    # Ojo: «catalan» contiene «lat»; solo cuenta como latino «lat» suelto, «latin…» o es-419.
+    if ($i -match '^lat$|latin|^es-419$') { return 1 }
     return 2
 }
 
@@ -234,10 +235,91 @@ function ConvertFrom-HdzDiscoProbe($Probe) {
     return [pscustomobject]$d
 }
 
+# Idiomas de las pistas de un .clpi (BDMV\CLIPINF): PID -> código ISO 639-2 («spa», «cat»…).
+# Un .m2ts no lleva idiomas; el disco los guarda en el .clpi del mismo número.
+function Read-HdzClpiIdiomas([byte[]]$Bytes) {
+    $idiomas = @{}
+    if (-not $Bytes -or $Bytes.Length -lt 20) { return $idiomas }
+    try {
+        $u32 = { param($o) ([uint32]$Bytes[$o] -shl 24) -bor ([uint32]$Bytes[$o + 1] -shl 16) -bor ([uint32]$Bytes[$o + 2] -shl 8) -bor [uint32]$Bytes[$o + 3] }
+        $u16 = { param($o) ([int]$Bytes[$o] -shl 8) -bor [int]$Bytes[$o + 1] }
+        if ([Text.Encoding]::ASCII.GetString($Bytes, 0, 4) -ne 'HDMV') { return $idiomas }
+        $p = [int](& $u32 12)          # ProgramInfo_start_address
+        $p += 5                         # length (4) + reservado (1)
+        $numProg = $Bytes[$p]; $p++
+        for ($g = 0; $g -lt $numProg; $g++) {
+            $p += 6                     # SPN_program_sequence_start (4) + program_map_PID (2)
+            $numStreams = $Bytes[$p]; $p += 2   # number_of_streams + number_of_groups
+            for ($s = 0; $s -lt $numStreams; $s++) {
+                $pidPista = & $u16 $p; $p += 2
+                $len = $Bytes[$p]; $p++
+                $ini = $p
+                $tipo = $Bytes[$p]
+                $off = -1
+                if ($tipo -in 0x03, 0x04, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0xA1, 0xA2) { $off = 2 }   # audio: tipo + formato/frecuencia
+                elseif ($tipo -in 0x90, 0x91) { $off = 1 }                                                     # PG / IG
+                elseif ($tipo -eq 0x92) { $off = 2 }                                                           # texto: tipo + juego de caracteres
+                if ($off -ge 0 -and $off + 3 -le $len) {
+                    $lang = [Text.Encoding]::ASCII.GetString($Bytes, $ini + $off, 3)
+                    if ($lang -match '^[a-z]{3}$') { $idiomas[$pidPista] = $lang }
+                }
+                $p = $ini + $len
+            }
+        }
+    } catch {}
+    return $idiomas
+}
+
+# ffprobe sobre el .m2ts más grande de un Blu-ray, con los idiomas de su .clpi puestos en
+# tags.language. Si el ISO no está montado, lo monta un momento y lo desmonta al terminar
+# (un ISO que ya tenía montado el usuario se deja como estaba). Devuelve $null si no puede.
+function Get-HdzDiscoProbeM2ts($Disco) {
+    $raiz = $null; $montadoAqui = $false; $iso = "$($Disco.Iso)"
+    try {
+        if ($Disco.Unidad) { $raiz = "$($Disco.Unidad)" }
+        elseif ($iso -and (Test-Path -LiteralPath $iso -PathType Leaf)) {
+            $raiz = Get-HdzDiscoUnidad $iso
+            if (-not $raiz) {
+                Mount-DiskImage -ImagePath $iso -StorageType ISO -ErrorAction Stop | Out-Null
+                $montadoAqui = $true
+                for ($i = 0; $i -lt 40 -and -not $raiz; $i++) {
+                    $raiz = Get-HdzDiscoUnidad $iso
+                    if (-not $raiz) { Start-Sleep -Milliseconds 250 }
+                }
+            }
+        }
+        if (-not $raiz) { return $null }
+        $m2ts = @(Get-ChildItem -LiteralPath (Join-Path $raiz 'BDMV\STREAM') -File -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Extension -match '(?i)^\.(m2ts|mts)$' } | Sort-Object Length -Descending | Select-Object -First 1)
+        if ($m2ts.Count -eq 0) { return $null }
+        # DTS-HD MA y TrueHD necesitan algo más de análisis que el de serie para dar bien los canales.
+        $probe = Invoke-HdzDiscoProbe @('-analyzeduration', '20M', '-probesize', '50M') $m2ts[0].FullName
+        if (-not $probe) { return $null }
+        $clpi = Join-Path $raiz ('BDMV\CLIPINF\' + $m2ts[0].BaseName + '.clpi')
+        $idiomas = @{}
+        if (Test-Path -LiteralPath $clpi -PathType Leaf) { $idiomas = Read-HdzClpiIdiomas ([IO.File]::ReadAllBytes($clpi)) }
+        foreach ($st in @($probe.streams)) {
+            $pidPista = 0
+            try { $pidPista = [Convert]::ToInt32("$($st.id)", 16) } catch { continue }
+            if (-not $idiomas.ContainsKey($pidPista)) { continue }
+            if (-not $st.tags) { $st | Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]@{}) -Force }
+            $st.tags | Add-Member -NotePropertyName language -NotePropertyValue $idiomas[$pidPista] -Force
+        }
+        return $probe
+    } catch { return $null }
+    finally {
+        if ($montadoAqui) { try { Dismount-DiskImage -ImagePath $iso -ErrorAction Stop | Out-Null } catch {} }
+    }
+}
+
 function Get-HdzDiscoDatos {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Disco)
-    $probe = Invoke-HdzDiscoProbe @($Disco.ArgsEntrada) "$($Disco.Entrada)"
+    # Blu-ray: los datos del nombre salen SOLO del .m2ts más grande (la película). La playlist
+    # puede empezar con un clip corto (logo, aviso) en estéreo, y ffprobe se quedaría con sus canales.
+    $probe = $null
+    if ("$($Disco.Tipo)" -eq 'bluray') { $probe = Get-HdzDiscoProbeM2ts $Disco }
+    if (-not $probe) { $probe = Invoke-HdzDiscoProbe @($Disco.ArgsEntrada) "$($Disco.Entrada)" }
     $datos = ConvertFrom-HdzDiscoProbe $probe
     $datos.Etiqueta = "$($Disco.Etiqueta)"
     return $datos
