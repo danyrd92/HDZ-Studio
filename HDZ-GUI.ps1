@@ -5521,7 +5521,7 @@ function Preparar-DiscoParaTorrent([string]$RutaIso) {
             if ([int]$tmdb.AnioR -gt 0) { $anio = "$($tmdb.AnioR)" }
         }
     }
-    $propuesto = Get-HdzDiscoNombre -Titulo $titulo -Anio $anio -Datos $datos
+    $propuesto = Get-HdzDiscoNombre -Titulo $titulo -Anio $anio -Datos $datos -Sufijo:([bool](Get-ChipValor "sufijo"))
     $fuente = switch ("$($datos.Fuente)") { 'bdinfo' { "el BDInfo ($(Split-Path $bd.Ruta -Leaf))" } 'ffprobe' { 'el propio disco' } default { 'el nombre del archivo' } }
     $detalle = "Datos técnicos leídos de $fuente." +
         $(if ($tmdb) { " Título y año de TMDB: $($tmdb.Titulo) ($($tmdb.Fecha))." } elseif ($tmdbErr) { " $tmdbErr." } elseif ($ui.cfgTmdbKey.Text) { ' TMDB no encontró el título: corrígelo a mano.' } else { ' Sin clave de TMDB: revisa el título y el año.' }) +

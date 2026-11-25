@@ -445,7 +445,7 @@ function Get-HdzDiscoMarca($Datos, [string]$Tipo = '') {
 # tracker: puede llevar «:», que Windows no admite en un archivo (ver ConvertTo-HdzNombreArchivo).
 function Get-HdzDiscoNombre {
     [CmdletBinding()]
-    param([string]$Titulo, [string]$Anio, $Datos, [string]$Tipo = '')
+    param([string]$Titulo, [string]$Anio, $Datos, [string]$Tipo = '', [switch]$Sufijo)
     $partes = New-Object System.Collections.Generic.List[string]
     $t = "$Titulo".Trim()
     if ($t) { $partes.Add($(if ("$Anio".Trim()) { "$t ($("$Anio".Trim()))" } else { $t })) }
@@ -455,7 +455,10 @@ function Get-HdzDiscoNombre {
     if ($Datos.HDR10P) { $partes.Add('HDR10+') } elseif ($Datos.HDR10) { $partes.Add('HDR10') } elseif ($Datos.HLG) { $partes.Add('HLG') }
     if ($Datos.Codec) { $partes.Add("$($Datos.Codec)") }
     if ($Datos.Audio) { $partes.Add((@("$($Datos.Audio)", "$($Datos.AudioCanales)") | Where-Object { $_ }) -join ' ') }
-    return (($partes | Where-Object { $_ }) -join ' ')
+    $nombre = (($partes | Where-Object { $_ }) -join ' ')
+    # Mismo sufijo que el resto de releases (casilla «Sufijo -HDZ» de General).
+    if ($Sufijo -and $nombre) { $nombre += '-HDZ' }
+    return $nombre
 }
 
 # Nombre válido de archivo para Windows: «Avatar: Fuego y ceniza» -> «Avatar - Fuego y ceniza».

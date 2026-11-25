@@ -75,6 +75,11 @@ Assert (-not $d2.HDR10 -and -not $d2.DV) 'Quick Summary: HDR falso'
 Assert ($d2.Audio -eq 'DTS-HD MA' -and $d2.AudioCanales -eq '7.1') "Quick Summary: audio '$($d2.Audio) $($d2.AudioCanales)'"
 $n2 = Get-HdzDiscoNombre -Titulo 'La película' -Anio '2020' -Datos $d2
 Assert ($n2 -eq 'La película (2020) BDFull 1080p AVC DTS-HD MA 7.1') "Nombre BD: '$n2'"
+$n2s = Get-HdzDiscoNombre -Titulo 'La película' -Anio '2020' -Datos $d2 -Sufijo
+Assert ($n2s -eq 'La película (2020) BDFull 1080p AVC DTS-HD MA 7.1-HDZ') "Nombre BD con sufijo: '$n2s'"
+Assert ((ConvertTo-HdzNombreArchivo $n2s) -eq $n2s) 'El sufijo -HDZ no debe tocarse al pasar a nombre de archivo'
+$taS = Get-HdzDiscoTituloDesdeArchivo "$n2s.iso"
+Assert ($taS.Titulo -eq 'La película' -and $taS.Anio -eq '2020') "Título desde ISO con sufijo: '$($taS.Titulo)' '$($taS.Anio)'"
 Assert ((ConvertFrom-HdzBdinfo '').Resolucion -eq '') 'BDInfo vacío'
 
 # --- 3. Título desde el nombre del ISO -----------------------------------
