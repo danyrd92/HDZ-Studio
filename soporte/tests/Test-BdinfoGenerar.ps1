@@ -89,6 +89,42 @@ Assert ($principal -match 'PELICULA' -and $principal -match 'QUICK SUMMARY' -and
 Assert ($principal -notmatch 'TRAMPA_LARGA|EXTRA') 'Coló otras playlists en el informe'
 Assert ((Select-HdzBdinfoPrincipal $informe) -eq $informe.TrimEnd()) 'Un informe de una sola playlist no debe cambiar'
 
+# --- 1c. Playlist trampa que repite un clip: su «Size:» supera al disco, pero cuenta cada clip una vez ---
+$filasTrampa=(1..240|ForEach-Object{'00022.M2TS      0:01:05.565     0:00:59.893     146,534,400     19,586'}) -join "`n"
+$repetida=@"
+Disc Title:     Child's Play 2
+Disc Size:      22,708,030,981 bytes
+
+********************
+PLAYLIST: 00020.MPLS
+********************
+Name:                   00020.MPLS
+Length:                 4:01:39.815 (h:m:s.ms)
+Size:                   35,475,216,384 bytes
+TRAMPA_REPETIDA
+FILES:
+
+Name            Time In         Length          Size            Total Bitrate
+----            -------         ------          ----            -------------
+00021.M2TS      0:00:00.000     0:01:05.565     160,425,984     19,587
+$filasTrampa
+
+********************
+PLAYLIST: 00800.MPLS
+********************
+Name:                   00800.MPLS
+Length:                 1:24:39.000 (h:m:s.ms)
+Size:                   20,100,000,000 bytes
+PELICULA_REAL
+FILES:
+
+Name            Time In         Length          Size            Total Bitrate
+----            -------         ------          ----            -------------
+00055.M2TS      0:00:00.000     1:24:39.000     20,100,000,000  31,650
+"@
+$principal2=Select-HdzBdinfoPrincipal $repetida
+Assert ($principal2 -match 'PELICULA_REAL' -and $principal2 -notmatch 'TRAMPA_REPETIDA') 'Eligió la playlist trampa que repite el mismo clip'
+
 # --- 2. Informe junto al ISO ---
 $isoDir=Join-Path $temp 'Disco con espacios & símbolos';[void][IO.Directory]::CreateDirectory($isoDir)
 $iso=Join-Path $isoDir 'Peli (2012) BDFull.iso';[IO.File]::WriteAllBytes($iso,[byte[]](1..64))

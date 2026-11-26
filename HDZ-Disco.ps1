@@ -440,9 +440,28 @@ function Read-HdzBdinfoProgreso([string]$Linea) {
     return [pscustomobject]@{ Pct = [Math]::Max(0.0, [Math]::Min(100.0, $pct)); Restante = $m.Groups[2].Value }
 }
 
+# Bytes de una playlist contando cada clip (.M2TS) UNA sola vez, según su tabla FILES. Las playlists
+# trampa repiten el mismo clip cientos de veces (Child's Play 2: 00022.M2TS ×240 = «35 GB» en un disco
+# de 22 GB); su «Size:» las haría ganar. Sin tabla FILES (informes recortados) se usa «Size:».
+function Get-HdzBdinfoBytesPlaylist([string]$Seccion) {
+    $clips = @{}
+    foreach ($m in [regex]::Matches($Seccion, '(?m)^\s*(\d{5}\.M2TS)\s+[\d:.]+\s+[\d:.]+\s+([\d,.]+)\s')) {
+        $b = [long]0
+        [void][long]::TryParse(($m.Groups[2].Value -replace '[,.]', ''), [ref]$b)
+        $n = $m.Groups[1].Value.ToUpperInvariant()
+        if (-not $clips.ContainsKey($n) -or $b -gt $clips[$n]) { $clips[$n] = $b }
+    }
+    if ($clips.Count -gt 0) { return [long]($clips.Values | Measure-Object -Sum).Sum }
+    $s = [regex]::Match($Seccion, '(?m)^Size:\s+([\d,.]+)\s*bytes')
+    $bytes = [long]0
+    if ($s.Success) { [void][long]::TryParse(($s.Groups[1].Value -replace '[,.]', ''), [ref]$bytes) }
+    return $bytes
+}
+
 # BDInfo informa de TODAS las playlists del disco (menús, extras, playlists trampa: 500 KB o más).
-# Para la ficha solo vale la de la película: la de MAYOR TAMAÑO. La más larga no sirve: hay discos con
-# playlists de ofuscación más largas que la película. Devuelve la cabecera del disco + esa playlist
+# Para la ficha solo vale la de la película: la de MAYOR TAMAÑO REAL (clips distintos, ver
+# Get-HdzBdinfoBytesPlaylist). La más larga no sirve: hay discos con playlists de ofuscación más
+# largas que la película. Devuelve la cabecera del disco + esa playlist
 # (informe completo, pegado para foros y resumen rápido). Un informe de una sola playlist queda igual.
 function Select-HdzBdinfoPrincipal([string]$Texto) {
     $partes = [regex]::Split("$Texto", '(?m)^\*{5,}[ 	]*?
@@ -450,9 +469,7 @@ function Select-HdzBdinfoPrincipal([string]$Texto) {
     if ($partes.Count -lt 3) { return "$Texto".TrimEnd() }
     $mejor = $null; $mayor = [long]-1
     foreach ($sec in @($partes | Select-Object -Skip 1)) {
-        $m = [regex]::Match($sec, '(?m)^Size:\s+([\d,.]+)\s*bytes')
-        $bytes = [long]0
-        if ($m.Success) { [void][long]::TryParse(($m.Groups[1].Value -replace '[,.]', ''), [ref]$bytes) }
+        $bytes = Get-HdzBdinfoBytesPlaylist $sec
         if ($bytes -gt $mayor) { $mayor = $bytes; $mejor = $sec }
     }
     $sep = '*' * 20
