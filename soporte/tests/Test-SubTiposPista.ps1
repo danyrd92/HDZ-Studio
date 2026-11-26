@@ -68,9 +68,22 @@ try {
     Assert ($rowEnE2.TipoSub -eq 'Forzados' -and (Get-ComboValor $rowEnE2.ComboTipo) -eq 'Forzados') 'La orden de la web no cambia el tipo'
     $state=Componer-EstadoAgente|ConvertFrom-Json
     Assert (@($state.subTracks|Where-Object{$_.tipo -eq 'Forzados'}).Count -eq 1) 'La web no recibe el tipo de cada subtítulo'
-    # El castellano de E02 se queda en latino; el de E01 se corrige a mano a castellano.
-    $script:idiomasManuales["$($esExt.Ruta)|0|Sub"]='es'
-    Actualizar-IdiomasManuales
+    # Con varios archivos la lista de pistas (y cada archivo) arranca plegada; los controles «de todos»
+    # quedan a la vista. Lo que abre el usuario se mantiene al reconstruir la lista.
+    Assert ($ui.bodySubTracks.Visibility -ne 'Visible' -and $ui.bodyAudioTracks.Visibility -ne 'Visible') 'Las listas de pistas deben empezar plegadas con varios archivos'
+    Assert (@($ui.panSubBulk.Children).Count -eq 1) 'Faltan los controles «de todos» a la vista'
+    $grupos=@($ui.panSubTracks.Children|Where-Object{$_ -is [Windows.Controls.StackPanel]})
+    Assert ($grupos.Count -eq 2 -and @($grupos|Where-Object{$_.Visibility -eq 'Visible'}).Count -eq 0) 'Cada archivo debe ser un grupo plegado'
+    $script:pistasAbiertas['Sub']=$true
+    # Español de todos a castellano (web, sin archivo) y luego E02 de vuelta a latino (web, una pista).
+    Aplicar-ComandoAgente ([pscustomobject]@{type='set_sub_espanol';value='es';_id='subtipos-web-2';session=$script:agSession})
+    Assert (@($script:subTrackRows|Where-Object{(Get-IdiomaPistaGui $_.Pista 'Sub') -eq 'es-419'}).Count -eq 0) 'Español de todos no deja todo en castellano'
+    Assert ($ui.bodySubTracks.Visibility -eq 'Visible') 'Al reconstruir se cierra la lista que el usuario abrió'
+    $rowEsE2=@($script:subTrackRows|Where-Object{$_.Archivo -like '*S01E02.es.srt'})[0]
+    Assert ($rowEsE2.ComboEspanol -and (Get-ComboValor $rowEsE2.ComboEspanol) -eq 'es') 'La fila en español no tiene su desplegable castellano/latino'
+    Aplicar-ComandoAgente ([pscustomobject]@{type='set_sub_espanol';archivo=$rowEsE2.Archivo;id=$rowEsE2.Id;value='es-419';_id='subtipos-web-3';session=$script:agSession})
+    $state=Componer-EstadoAgente|ConvertFrom-Json
+    Assert (@($state.subTracks|Where-Object{$_.idioma -eq 'es-419'}).Count -eq 1) "La web no refleja castellano/latino por pista: $(@($state.subTracks|ForEach-Object idioma) -join ',')"
     Assert ((@($script:subTrackRows|Where-Object{$_.Archivo -like '*S01E02.en.srt'})[0]).TipoSub -eq 'Forzados') 'Al reconstruir la lista se pierde el tipo elegido'
     # --- Montaje ---
     $ui.txtTitulo.Text='Synthetic Tipos'; $ui.txtAno.Text='2026'; $ui.swSerie.IsChecked=$true
@@ -84,7 +97,8 @@ try {
     $job=$script:testJobsMontaje[0]
     $config=$job.CfgJson|ConvertFrom-Json
     Assert (@($config.TiposSubsPistas).Count -ge 5) "Faltan tipos por pista en la configuración: $(@($config.TiposSubsPistas).Count)"
-    Assert (@($config.IdiomasUndPistas|Where-Object{$_.Archivo -like '*S01E02.es.srt' -and $_.Idioma -eq 'es-419'}).Count -eq 1) 'No se envía el latino detectado'
+    Assert (@($config.IdiomasUndPistas|Where-Object{$_.Archivo -like '*S01E02.es.srt' -and $_.Idioma -eq 'es-419'}).Count -eq 1) 'No se envía el latino de E02'
+    Assert (@($config.IdiomasUndPistas|Where-Object{$_.Archivo -like '*S01E01.es.srt' -and $_.Idioma -eq 'es'}).Count -eq 1) 'No se envía el castellano de E01'
     $config | Add-Member -NotePropertyName NumCapturas -NotePropertyValue 0 -Force
     $config | Add-Member -NotePropertyName ModoTorrent -NotePropertyValue 'NO' -Force
     $config | Add-Member -NotePropertyName CarpetaProcesados -NotePropertyValue '' -Force
@@ -108,7 +122,7 @@ try {
     Assert ($t1 -match 'Castellano Completos[^|]*\|es') "E01: el interno castellano completo: $t1"
     Assert ($t1 -match 'Ingl[eé]s Completos') "E01: inglés completos: $t1"
     Assert ($pistas['E02'].Count -eq 2) "E02 debe llevar 2 subs: $t2"
-    Assert ($t2 -match 'Latino Completos[^|]*\|es-419') "E02: el .es.srt latino detectado, completos (cambio en bloque): $t2"
+    Assert ($t2 -match 'Latino Completos[^|]*\|es-419') "E02: el .es.srt devuelto a latino en su fila, completos (cambio en bloque): $t2"
     Assert ($t2 -match 'Ingl[eé]s Forzados[^|]*\|en[^|]*\|False\|True') "E02: inglés forzado elegido desde la web: $t2"
     Write-Host "SUB_TIPOS_PISTA_OK — tipo e idioma detectados, cambio en bloque, uno a uno y desde la web; motor respeta la elección. Prueba: $testRoot"
 } finally {

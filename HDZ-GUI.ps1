@@ -1464,8 +1464,17 @@ $xaml = @'
                   <WrapPanel x:Name="wrapIdiomasAudio" Grid.Column="1" Margin="0,0,0,-8"/>
                   <TextBlock x:Name="bdgFiltroAudio" Style="{StaticResource Bdg}" Grid.Column="2" VerticalAlignment="Top" Margin="12,8,0,0"/>
                 </Grid>
-                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,6,0,0">
-                  <StackPanel x:Name="panAudioTracks"/>
+                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,8,0,0">
+                  <StackPanel>
+                    <Grid x:Name="hdrAudioTracks" Background="Transparent" Cursor="Hand" ToolTip="Mostrar / ocultar las pistas de cada archivo">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock x:Name="lblAudioTracksSec" Style="{StaticResource Lbl}" Text="Pistas de cada archivo" VerticalAlignment="Center"/>
+                      <TextBlock x:Name="chevAudioTracks" Grid.Column="1" Text="▸" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="8,0,2,0"/>
+                    </Grid>
+                    <StackPanel x:Name="bodyAudioTracks" Visibility="Collapsed" Margin="0,6,0,0">
+                      <StackPanel x:Name="panAudioTracks"/>
+                    </StackPanel>
+                  </StackPanel>
                 </Border>
               </StackPanel>
             </Border>
@@ -1571,8 +1580,18 @@ $xaml = @'
                   <TextBlock Style="{StaticResource Lbl}" Grid.Row="2" Text="Tipos" Margin="0,7,0,0"/>
                   <WrapPanel x:Name="wrapTiposSub" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,-8"/>
                 </Grid>
-                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,6,0,0">
-                  <StackPanel x:Name="panSubTracks"/>
+                <StackPanel x:Name="panSubBulk" Margin="0,12,0,0"/>
+                <Border BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,8,0,0">
+                  <StackPanel>
+                    <Grid x:Name="hdrSubTracks" Background="Transparent" Cursor="Hand" ToolTip="Mostrar / ocultar las pistas de cada archivo">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock x:Name="lblSubTracksSec" Style="{StaticResource Lbl}" Text="Pistas de cada archivo" VerticalAlignment="Center"/>
+                      <TextBlock x:Name="chevSubTracks" Grid.Column="1" Text="▸" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="8,0,2,0"/>
+                    </Grid>
+                    <StackPanel x:Name="bodySubTracks" Visibility="Collapsed" Margin="0,6,0,0">
+                      <StackPanel x:Name="panSubTracks"/>
+                    </StackPanel>
+                  </StackPanel>
                 </Border>
               </StackPanel>
             </Border>
@@ -2081,6 +2100,7 @@ $refs = @("txtCarpeta","btnExaminar","btnElegirVideos","btnAnadirTemporada","lbl
           "cardModoLote","cardFiltroAudio","wrapIdiomasAudio","cardConvAudio","panConvFilas","btnConvAdd","cardDefAudio","cardUndAudio","cardUndSub",
           "cardFiltro","cardSubsUnicos","cardPGS","phAudio","phSubs","panUndAudio","panUndSub",
           "cardAudioTracks","panAudioTracks","bdgAudioTracks","cardSubTracks","panSubTracks","bdgSubTracks",
+          "hdrAudioTracks","chevAudioTracks","bodyAudioTracks","lblAudioTracksSec","hdrSubTracks","chevSubTracks","bodySubTracks","lblSubTracksSec","panSubBulk",
           "hdrUndAudio","chevUndAudio","bodyUndAudio","hdrUndSub","chevUndSub","bodyUndSub",
           "swProyecto","panProyectoDatos","txtTitulo","txtAno","swSerie",
           "panTabsGen","panTabsGenInner","scrTabsGen","btnTabGenIzq","btnTabGenDer","swAplicarPrimero",
@@ -3140,8 +3160,8 @@ function Initialize-HdzAudioTracks {
     $script:subTracksExcluded=@{};$script:subTrackRows=@()
 }
 function Get-HdzTrackState($tipo) {
-    if($tipo -eq 'Sub'){@{Map=$script:subTracksExcluded;Rows=@($script:subTrackRows);Panel=$ui.panSubTracks;Card=$ui.cardSubTracks;Badge='bdgSubTracks';Nombre='subtítulos'}}
-    else{@{Map=$script:audioTracksExcluded;Rows=@($script:audioTrackRows);Panel=$ui.panAudioTracks;Card=$ui.cardAudioTracks;Badge='bdgAudioTracks';Nombre='pistas'}}
+    if($tipo -eq 'Sub'){@{Map=$script:subTracksExcluded;Rows=@($script:subTrackRows);Panel=$ui.panSubTracks;Card=$ui.cardSubTracks;Badge='bdgSubTracks';Nombre='subtítulos';Body=$ui.bodySubTracks;Chev=$ui.chevSubTracks;Lbl=$ui.lblSubTracksSec}}
+    else{@{Map=$script:audioTracksExcluded;Rows=@($script:audioTrackRows);Panel=$ui.panAudioTracks;Card=$ui.cardAudioTracks;Badge='bdgAudioTracks';Nombre='pistas';Body=$ui.bodyAudioTracks;Chev=$ui.chevAudioTracks;Lbl=$ui.lblAudioTracksSec}}
 }
 function Update-HdzTrackBadge($tipo) {
     $st=Get-HdzTrackState $tipo;$total=$st.Rows.Count
@@ -3180,18 +3200,44 @@ function New-HdzTrackRow($tipo,$key,$source,$id,$index,$cols,$etiqueta) {
 }
 # Pinta las filas; con varios archivos (remezcla, lote) agrupa bajo el nombre de cada uno.
 function Get-HdzGrupoFila($row) { if($row.PSObject.Properties.Name -contains 'Video' -and $row.Video){"$($row.Video)"}else{"$($row.Archivo)"} }
+# Qué secciones/archivos de las listas de pistas ha abierto el usuario (sobrevive a las reconstrucciones
+# de la lista al corregir idiomas o tipos). Clave "<Audio|Sub>" o "<Audio|Sub>|<vídeo>" -> $true/$false.
+$script:pistasAbiertas=@{}
+function Set-HdzPlegado($chev,$body,[bool]$abierto) {
+    $body.Visibility=if($abierto){'Visible'}else{'Collapsed'}
+    $chev.Text=if($abierto){'▾'}else{'▸'}
+}
+# Pinta las filas. Con varios archivos (lote, serie, remezcla) la lista arranca plegada y cada archivo
+# es a su vez un grupo plegable; con uno solo, la lista se ve directamente.
 function Add-HdzTrackRows($tipo,$rows) {
     $st=Get-HdzTrackState $tipo
     $st.Panel.Children.Clear()
-    $files=@($rows|ForEach-Object {Get-HdzGrupoFila $_}|Select-Object -Unique);$last=$null
-    foreach($row in @($rows)){
-        $grupo=Get-HdzGrupoFila $row
-        if($files.Count -gt 1 -and $grupo -ne $last){
-            $hdr=[Windows.Controls.TextBlock]::new();$hdr.Text=Split-Path $grupo -Leaf;$hdr.Foreground=$win.Resources['SubBrush'];$hdr.FontSize=11.5;$hdr.FontWeight='SemiBold'
-            $hdr.Margin=$(if($null -eq $last){'0,4,0,2'}else{'0,10,0,2'});$hdr.TextTrimming='CharacterEllipsis';$hdr.ToolTip=$grupo;[void]$st.Panel.Children.Add($hdr)
-            $last=$grupo
-        }
-        [void]$st.Panel.Children.Add($(if($row.PSObject.Properties.Name -contains 'Element' -and $row.Element){$row.Element}else{$row.Choice}))
+    $files=@($rows|ForEach-Object {Get-HdzGrupoFila $_}|Select-Object -Unique)
+    if($st.Body){
+        $abierta=if($script:pistasAbiertas.ContainsKey($tipo)){[bool]$script:pistasAbiertas[$tipo]}else{$files.Count -le 1}
+        Set-HdzPlegado $st.Chev $st.Body $abierta
+        $st.Lbl.Text=if($files.Count -gt 1){"Pistas de cada archivo ($($files.Count) archivos, $(@($rows).Count) $($st.Nombre))"}else{"Pistas del archivo ($(@($rows).Count) $($st.Nombre))"}
+    }
+    $elemento={param($row) if($row.PSObject.Properties.Name -contains 'Element' -and $row.Element){$row.Element}else{$row.Choice}}
+    if($files.Count -le 1){foreach($row in @($rows)){[void]$st.Panel.Children.Add((& $elemento $row))};return}
+    foreach($grupo in $files){
+        $deGrupo=@($rows|Where-Object {(Get-HdzGrupoFila $_) -eq $grupo})
+        $hdr=[Windows.Controls.Grid]::new();$hdr.Background=[Windows.Media.Brushes]::Transparent;$hdr.Cursor='Hand';$hdr.Margin='0,4,0,2';$hdr.ToolTip=$grupo
+        $c1=[Windows.Controls.ColumnDefinition]::new();$c2=[Windows.Controls.ColumnDefinition]::new();$c2.Width=[Windows.GridLength]::Auto;$c3=[Windows.Controls.ColumnDefinition]::new();$c3.Width=[Windows.GridLength]::Auto
+        [void]$hdr.ColumnDefinitions.Add($c1);[void]$hdr.ColumnDefinitions.Add($c2);[void]$hdr.ColumnDefinitions.Add($c3)
+        $t=[Windows.Controls.TextBlock]::new();$t.Text=Split-Path $grupo -Leaf;$t.Foreground=$win.Resources['SubBrush'];$t.FontSize=11.5;$t.FontWeight='SemiBold';$t.TextTrimming='CharacterEllipsis';$t.VerticalAlignment='Center'
+        [void]$hdr.Children.Add($t)
+        $n=[Windows.Controls.TextBlock]::new();$n.Text="$($deGrupo.Count) $($st.Nombre)";$n.Foreground=$win.Resources['MutedBrush'];$n.FontSize=11.5;$n.Margin='12,0,0,0';$n.VerticalAlignment='Center'
+        [Windows.Controls.Grid]::SetColumn($n,1);[void]$hdr.Children.Add($n)
+        $chev=[Windows.Controls.TextBlock]::new();$chev.FontSize=15;$chev.FontWeight='Bold';$chev.Foreground=$win.Resources['TextBrush'];$chev.Margin='8,0,2,0';$chev.VerticalAlignment='Center'
+        [Windows.Controls.Grid]::SetColumn($chev,2);[void]$hdr.Children.Add($chev)
+        $body=[Windows.Controls.StackPanel]::new();$body.Margin='0,0,0,4'
+        foreach($row in $deGrupo){[void]$body.Children.Add((& $elemento $row))}
+        $clave="$tipo|$grupo"
+        Set-HdzPlegado $chev $body ([bool]$script:pistasAbiertas[$clave])
+        $hdr.Tag=@{Chev=$chev;Body=$body;Clave=$clave}
+        $hdr.Add_MouseLeftButtonUp({param($sender) $g=$sender.Tag;$abrir=$g.Body.Visibility -ne 'Visible';Set-HdzPlegado $g.Chev $g.Body $abrir;$script:pistasAbiertas[$g.Clave]=$abrir})
+        [void]$st.Panel.Children.Add($hdr);[void]$st.Panel.Children.Add($body)
     }
 }
 function Build-HdzAudioTracks($scope) {
@@ -3225,41 +3271,66 @@ function Build-HdzSubTracks($scope) {
         $col3=if($sub.Externo){"$(if($sub.SufijoExterno){$sub.SufijoExterno}else{$sub.Nombre})"}else{"$($sub.Title)"}
         $label=if($sub.Externo){"$(Split-Path $file.Ruta -Leaf) · externo $($sub.Nombre) · $(NombreIdioma $language) · $formato · $tipoSub"}else{"$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato · $tipoSub"}
         if($sub.Title){$label+=" · $($sub.Title)"}
-        $row=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @($col0,(NombreIdioma $language),$formato,$col3) $label
+        $colIdioma=if($language -in @('es','es-419')){'Español'}else{NombreIdioma $language}   # castellano/latino va en su desplegable
+        $row=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @($col0,$colIdioma,$formato,$col3) $label
         $row|Add-Member Pista $sub;$row|Add-Member TipoSub $tipoSub
         $row|Add-Member Video "$($file.Ruta)"   # un .srt suelto se agrupa bajo su vídeo
         $row|Add-Member Element (New-HdzFilaTipoSub $row)
         $rows+=$row
     }}
     $script:subTrackRows=$rows;Add-HdzTrackRows 'Sub' $rows
-    if($rows.Count -gt 1){
-        # Cambiar el tipo de todos a la vez (cada fila se puede cambiar después por separado).
-        $g=[Windows.Controls.Grid]::new();$g.Margin='0,2,0,6'
-        $c1=[Windows.Controls.ColumnDefinition]::new();$c2=[Windows.Controls.ColumnDefinition]::new();$c2.Width=[Windows.GridLength]::new(170)
-        [void]$g.ColumnDefinitions.Add($c1);[void]$g.ColumnDefinitions.Add($c2)
-        $t=[Windows.Controls.TextBlock]::new();$t.Text='Tipo de todos los subtítulos de abajo:';$t.VerticalAlignment='Center';$t.FontStyle=[Windows.FontStyles]::Italic;$t.Foreground=$win.Resources['SubBrush']
-        [void]$g.Children.Add($t)
-        $cmbTodos=[Windows.Controls.ComboBox]::new();$cmbTodos.Style=$win.Resources['Combo'];$cmbTodos.Margin='8,1,0,1';[Windows.Controls.Grid]::SetColumn($cmbTodos,1)
-        Init-Combo $cmbTodos (@(@{T='— elegir —';V=''})+$opcionesTipoSub)
-        $cmbTodos.Add_SelectionChanged({param($sender)
-            $v=Get-ComboValor $sender;if(-not $v){return}
-            foreach($r in @($script:subTrackRows)){Set-HdzTipoSubFila $r $v}
-            $sender.SelectedIndex=0
-        })
-        [void]$g.Children.Add($cmbTodos)
-        $ui.panSubTracks.Children.Insert(0,$g)
+    # Controles «de todos» (siempre a la vista, aunque la lista esté plegada): tipo de todos los
+    # subtítulos y variante de todos los que están en español. Después se corrige fila a fila.
+    $ui.panSubBulk.Children.Clear()
+    $hayEspanol=@($rows|Where-Object {(Get-IdiomaPistaGui $_.Pista 'Sub') -in @('es','es-419')}).Count -gt 0
+    if($rows.Count -gt 1 -or $hayEspanol){
+        $g=[Windows.Controls.Grid]::new()
+        foreach($w in @(72,170,0,170)){$cd=[Windows.Controls.ColumnDefinition]::new();if($w -eq 0){$cd.Width=[Windows.GridLength]::new(1,[Windows.GridUnitType]::Star)}else{$cd.Width=[Windows.GridLength]::new($w)};[void]$g.ColumnDefinitions.Add($cd)}
+        $ponerLbl={param($texto,$col) $t=[Windows.Controls.TextBlock]::new();$t.Text=$texto;$t.Style=$win.Resources['Lbl'];$t.VerticalAlignment='Center';$t.Margin='0,0,8,0';[Windows.Controls.Grid]::SetColumn($t,$col);[void]$g.Children.Add($t)}
+        if($rows.Count -gt 1){
+            & $ponerLbl 'Tipo' 0
+            $cmbTodos=[Windows.Controls.ComboBox]::new();$cmbTodos.Style=$win.Resources['Combo'];$cmbTodos.ToolTip='Cambia el tipo de todos los subtítulos; luego puedes corregir alguno en la lista.';[Windows.Controls.Grid]::SetColumn($cmbTodos,1)
+            Init-Combo $cmbTodos (@(@{T='Todos a…';V=''})+$opcionesTipoSub)
+            $cmbTodos.Add_SelectionChanged({param($sender)
+                $v=Get-ComboValor $sender;if(-not $v){return}
+                foreach($r in @($script:subTrackRows)){Set-HdzTipoSubFila $r $v}
+                $sender.SelectedIndex=0
+            })
+            [void]$g.Children.Add($cmbTodos)
+        }
+        if($hayEspanol){
+            $t2=[Windows.Controls.TextBlock]::new();$t2.Text='Español de todos';$t2.Style=$win.Resources['Lbl'];$t2.VerticalAlignment='Center';$t2.HorizontalAlignment='Right';$t2.Margin='16,0,8,0';[Windows.Controls.Grid]::SetColumn($t2,2);[void]$g.Children.Add($t2)
+            $cmbEsp=[Windows.Controls.ComboBox]::new();$cmbEsp.Style=$win.Resources['Combo'];$cmbEsp.ToolTip='Marca como castellano o latino todos los subtítulos en español; luego puedes corregir alguno en la lista.';[Windows.Controls.Grid]::SetColumn($cmbEsp,3)
+            Init-Combo $cmbEsp (@(@{T='Todos a…';V=''})+$opcionesEspanolSub)
+            $cmbEsp.Add_SelectionChanged({param($sender) $v=Get-ComboValor $sender;if(-not $v){return};Set-HdzEspanolSubs @($script:subTrackRows) $v})
+            [void]$g.Children.Add($cmbEsp)
+        }
+        [void]$ui.panSubBulk.Children.Add($g)
     }
     $ui.cardSubTracks.Visibility=if($rows.Count -or $ui.cardFiltro.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
     Update-HdzTrackBadge 'Sub'
 }
-# Fila de la lista de subtítulos: casilla (incluir o no) + desplegable de tipo.
+$opcionesEspanolSub = @(@{T='Castellano'; V='es'}, @{T='Latino'; V='es-419'})
+# Fila de la lista de subtítulos: casilla (incluir o no) + castellano/latino (solo si está en español)
+# + desplegable de tipo.
 function New-HdzFilaTipoSub($row) {
     $g=[Windows.Controls.Grid]::new()
-    $c1=[Windows.Controls.ColumnDefinition]::new();$c2=[Windows.Controls.ColumnDefinition]::new();$c2.Width=[Windows.GridLength]::new(170)
-    [void]$g.ColumnDefinitions.Add($c1);[void]$g.ColumnDefinitions.Add($c2)
+    foreach($w in @(0,130,170)){$cd=[Windows.Controls.ColumnDefinition]::new();if($w -eq 0){$cd.Width=[Windows.GridLength]::new(1,[Windows.GridUnitType]::Star)}else{$cd.Width=[Windows.GridLength]::new($w)};[void]$g.ColumnDefinitions.Add($cd)}
     [void]$g.Children.Add($row.Choice)
+    $idioma=Get-IdiomaPistaGui $row.Pista 'Sub'
+    if($idioma -in @('es','es-419')){
+        $cmbEsp=[Windows.Controls.ComboBox]::new();$cmbEsp.Style=$win.Resources['Combo'];$cmbEsp.VerticalAlignment='Center';$cmbEsp.Margin='8,1,0,1'
+        [Windows.Controls.Grid]::SetColumn($cmbEsp,1)
+        Init-Combo $cmbEsp $opcionesEspanolSub
+        Set-ComboValor $cmbEsp $idioma
+        $cmbEsp.ToolTip=if($row.Pista.LangAuto){"Detectado por el texto$(if($row.Pista.LangFuente -eq 'temporada'){' de la temporada'}). Cámbialo si no es correcto."}else{'Según la etiqueta del archivo o de la pista.'}
+        $cmbEsp.DataContext=$row
+        $cmbEsp.Add_SelectionChanged({param($sender) $v=Get-ComboValor $sender; if($v -and $v -ne (Get-IdiomaPistaGui $sender.DataContext.Pista 'Sub')){Set-HdzEspanolSubs @($sender.DataContext) $v}})
+        [void]$g.Children.Add($cmbEsp)
+        $row|Add-Member ComboEspanol $cmbEsp -Force
+    }
     $cmb=[Windows.Controls.ComboBox]::new();$cmb.Style=$win.Resources['Combo'];$cmb.VerticalAlignment='Center';$cmb.Margin='8,1,0,1'
-    [Windows.Controls.Grid]::SetColumn($cmb,1)
+    [Windows.Controls.Grid]::SetColumn($cmb,2)
     Init-Combo $cmb $opcionesTipoSub
     Set-ComboValor $cmb $row.TipoSub
     $cmb.ToolTip=Get-OrigenTipoSubGui $row.Pista
@@ -3268,6 +3339,21 @@ function New-HdzFilaTipoSub($row) {
     [void]$g.Children.Add($cmb)
     $row|Add-Member ComboTipo $cmb
     return $g
+}
+# Castellano / latino de una o varias filas en español (fila, «de todos», web). Se guarda como
+# corrección de idioma por pista (la misma que «Corregir idioma») y se reconstruyen filtros y listas.
+function Set-HdzEspanolSubs($rows,[string]$codigo) {
+    if($codigo -notin @('es','es-419')){return}
+    $cambio=$false
+    foreach($row in @($rows)){
+        if(-not $row -or -not $row.Pista){continue}
+        if((Get-IdiomaPistaGui $row.Pista 'Sub') -notin @('es','es-419')){continue}
+        $script:idiomasManuales["$($row.Archivo)|$($row.Id)|Sub"]=$codigo;$cambio=$true
+        # El desplegable de «Corregir idioma» de esa pista también: al reconstruir se restaura desde él.
+        foreach($u in @($script:undRows|Where-Object{$_.Tipo -eq 'Sub' -and "$($_.Archivo)" -eq "$($row.Archivo)" -and "$($_.Id)" -eq "$($row.Id)"})){Set-ComboValor $u.Combo $codigo}
+    }
+    $script:timerIdiomasManuales.Stop()
+    if($cambio){Actualizar-IdiomasManuales}
 }
 # Punto único para cambiar el tipo de una pista (desplegable, «todos», web).
 function Set-HdzTipoSubFila($row,[string]$tipo) {
@@ -3933,7 +4019,7 @@ function Aplicar-Analisis($filas) {
                 $etiq = if ($s.Externo) { "$($f.Nombre)  —  externo $($s.Nombre) · detectado: $detIdioma" } else { "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $detIdioma" }
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
                 $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
-                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+                $pistasUndSub += @{ Archivo = $(if ($s.Ruta) { "$($s.Ruta)" } else { $f.Ruta }); Id = $id; Etiqueta = $etiq }   # un .srt suelto se corrige por su propia ruta
             if ($c -ne 'und') {
                 if (-not $idiomasSubs.Contains($c)) { $idiomasSubs[$c] = 0 }
                 $idiomasSubs[$c] = $idiomasSubs[$c] + 1
@@ -4440,7 +4526,7 @@ function Construir-Adaptacion($selScope) {
                 $etiq = if ($s.Externo) { "$($f.Nombre)  —  externo $($s.Nombre) · detectado: $detIdioma" } else { "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $detIdioma" }
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
                 $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
-                $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
+                $pistasUndSub += @{ Archivo = $(if ($s.Ruta) { "$($s.Ruta)" } else { $f.Ruta }); Id = $id; Etiqueta = $etiq }   # un .srt suelto se corrige por su propia ruta
             if ($c -ne 'und') {
                 if (-not $idiomasSubs.Contains($c)) { $idiomasSubs[$c] = 0 }
                 $idiomasSubs[$c] = $idiomasSubs[$c] + 1
@@ -4919,6 +5005,12 @@ Wire-SeccionColapsable $ui.secHdrSubs     $ui.secChevSubs     $ui.panSubs
 # Selectores de idioma pista a pista: arrancan contraídos (ocupan mucho con lotes grandes).
 Wire-SeccionColapsable $ui.hdrUndAudio    $ui.chevUndAudio    $ui.bodyUndAudio
 Wire-SeccionColapsable $ui.hdrUndSub      $ui.chevUndSub      $ui.bodyUndSub
+# Listas de pistas: la sección recuerda si el usuario la abrió (las listas se reconstruyen a menudo).
+foreach($tipoSec in 'Audio','Sub'){
+    $hdrSec=$ui["hdr${tipoSec}Tracks"];if(-not $hdrSec){continue}
+    $hdrSec.Tag=$tipoSec
+    $hdrSec.Add_MouseLeftButtonUp({param($sender) $st=Get-HdzTrackState $sender.Tag;$abrir=$st.Body.Visibility -ne 'Visible';Set-HdzPlegado $st.Chev $st.Body $abrir;$script:pistasAbiertas[$sender.Tag]=$abrir})
+}
 
 # --- Menú lateral colapsable (solo iconos) ---
 $script:sidebarColapsado = $false
@@ -9571,6 +9663,7 @@ function Reset-Todo {
     try { Detener-Bdinfo } catch {}
     $script:idiomasManuales = @{}
     $script:tiposSubManuales = @{}
+    $script:pistasAbiertas = @{}
     $script:remixPresentationKey = $null
     $script:remixPresentation = @()
     if ($script:remixPairsPanel) { $script:remixPairsPanel.Children.Clear() }
@@ -10645,7 +10738,7 @@ function Componer-EstadoAgente {
         audioTracksSupported = $true
         audioTracks = @($script:audioTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
         subTracksSupported = $true
-        subTracks = @($script:subTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked;tipo="$($_.TipoSub)";origenTipo=(Get-OrigenTipoSubGui $_.Pista)}})
+        subTracks = @($script:subTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked;tipo="$($_.TipoSub)";origenTipo=(Get-OrigenTipoSubGui $_.Pista);idioma=(Get-IdiomaPistaGui $_.Pista 'Sub');video="$($_.Video)"}})
         conversionesAudioVisible = ("$($ui.cardConvAudio.Visibility)" -eq "Visible")
         defAudioVisible = ("$($ui.cardDefAudio.Visibility)" -eq "Visible")
         undAudioVisible = ("$($ui.cardUndAudio.Visibility)" -eq "Visible")
@@ -10877,6 +10970,11 @@ function Aplicar-ComandoAgente($c) {
             }
             "set_sub_track" {
                 foreach($row in @($script:subTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTrackSelected 'Sub' $row ([bool]$c.value);break}}
+            }
+            "set_sub_espanol" {
+                # Sin archivo: todos los subtítulos en español; con archivo e id: solo esa pista.
+                $filasEsp=if("$($c.archivo)"){@($script:subTrackRows|Where-Object{$_.Archivo -eq "$($c.archivo)" -and "$($_.Id)" -eq "$($c.id)"})}else{@($script:subTrackRows)}
+                Set-HdzEspanolSubs $filasEsp "$($c.value)"
             }
             "set_sub_type" {
                 foreach($row in @($script:subTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTipoSubFila $row "$($c.value)";break}}
