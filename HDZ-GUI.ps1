@@ -386,10 +386,36 @@ function ConvCanon($lang, $title = "") {
 }
 
 $script:idiomasManuales = @{}
+# Tipo de subtítulo elegido a mano por pista (clave "<ruta>|<id>" -> Completos/Forzados/SDH). Lo que no
+# está aquí usa el tipo detectado al analizar (TipoAuto).
+$script:tiposSubManuales = @{}
+function Get-TipoSubGui($pista) {
+    $id = if ($null -ne $pista.TrackId) { $pista.TrackId } else { $pista.Index }
+    $clave = "$($pista.Ruta)|$id"
+    if ($script:tiposSubManuales.ContainsKey($clave)) { return "$($script:tiposSubManuales[$clave])" }
+    if ($pista.TipoAuto) { return "$($pista.TipoAuto)" }
+    $titulo = "$($pista.Title)"
+    $tituloCompleto = ($titulo -match '(?i)completos?|complete|full') -and ($titulo -notmatch '(?i)forced|forzad')   # igual que Test-TituloSubCompleto del motor
+    if (($pista.Forced -and -not $tituloCompleto) -or $titulo -match '(?i)forced|forzad') { return 'Forzados' }
+    if ($titulo -match '(?i)\bSDH\b|\bCC\b') { return 'SDH' }
+    return 'Completos'
+}
+# Texto de ayuda: de dónde sale el tipo propuesto.
+function Get-OrigenTipoSubGui($pista) {
+    $id = if ($null -ne $pista.TrackId) { $pista.TrackId } else { $pista.Index }
+    if ($script:tiposSubManuales.ContainsKey("$($pista.Ruta)|$id")) { return 'Elegido a mano.' }
+    switch ("$($pista.TipoFuente)") {
+        'metadatos' { 'Detectado por los datos de la pista (bandera o título).' }
+        'contenido' { 'Detectado por el texto del subtítulo.' }
+        default     { 'Sin señales claras: se propone «Completos» y al montar se vuelve a comprobar.' }
+    }
+}
 function Get-IdiomaPistaGui($pista, $tipo) {
     $id = if ($null -ne $pista.TrackId) { $pista.TrackId } else { $pista.Index }
     $clave = "$($pista.Ruta)|$id|$tipo"
     if ($script:idiomasManuales.ContainsKey($clave)) { return ConvCanon $script:idiomasManuales[$clave] "" }
+    # Variante del español deducida del texto al analizar (castellano / latino).
+    if ($tipo -eq 'Sub' -and $pista.LangAuto) { return ConvCanon $pista.LangAuto "" }
     return ConvCanon $pista.Lang $pista.Title
 }
 $opcionesIdiomaUnd = @(@{T="Automático (idioma del archivo)"; V="AUTO"}, @{T="Indeterminado (und)"; V="und"}) +
@@ -2547,15 +2573,17 @@ Init-Combo $ui.cmbFormato    (@($formatosGui    | ForEach-Object { @{T=$_; V=$_}
 # El trabajo pesado (ffprobe por archivo) corre en un runspace aparte para no
 # congelar la interfaz. Devuelve filas con la información cruda de cada vídeo.
 $scanWorker = {
-    param($rutas)
+    param($rutas, $rutaCore)
     # Cada vídeo se analiza con dos procesos externos (ffprobe y mkvmerge -J) que pasan casi todo
     # el tiempo esperando al disco o a la red. Se analizan hasta 4 vídeos a la vez y el resultado
     # conserva el orden de $rutas.
     $analizarVideo = {
-        param($ruta)
+        param($ruta, $rutaCore)
+        # En un runspace nuevo (análisis en segundo plano) no están las funciones compartidas.
+        if ($rutaCore -and -not (Get-Command Get-HdzInfoTextoSub -ErrorAction SilentlyContinue)) { . $rutaCore }
         $fila = @{ Ruta = $ruta; Nombre = (Split-Path $ruta -Leaf); Error = $null; Video = $null; Audios = @(); Subs = @() }
         try {
-            $raw = & ffprobe -v error -show_streams -of json "$ruta" 2>$null | Out-String
+            $raw = & ffprobe -v error -show_streams -show_format -of json "$ruta" 2>$null | Out-String
             $json = $raw | ConvertFrom-Json
             if (-not $json -or -not $json.streams) { throw "ffprobe no devolvió datos" }
             # ffprobe y mkvmerge no siempre usan los mismos IDs (MP4/TS, por ejemplo).
@@ -2601,9 +2629,83 @@ $scanWorker = {
                     $fila.Audios += @{ Ruta = $ruta; TrackId = $trackId; Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Profile = "$($s.profile)"; Lang = $lang; Title = $title; Forced = $forced; Channels = $canales; ChannelLayout = $chLayout }
                 } elseif ($tipo -eq "subtitle") {
                     $trackId = if ($fila.Subs.Count -lt $trackIds.subtitle.Count) { $trackIds.subtitle[$fila.Subs.Count] } else { [int]$s.index }
+                    $hi = ($s.PSObject.Properties.Name -contains "disposition" -and $s.disposition -and "$($s.disposition.hearing_impaired)" -eq "1")
+                    $frames = 0
+                    if ($ident -and $ident.tracks) {
+                        $tk = @($ident.tracks | Where-Object { [int]$_.id -eq $trackId -and $_.type -eq 'subtitles' })[0]
+                        if ($tk -and $tk.properties.tag_number_of_frames) { $frames = [int]"0$($tk.properties.tag_number_of_frames)" }
+                        if ($tk -and $tk.properties.flag_hearing_impaired -eq $true) { $hi = $true }
+                    }
                     $fila.Subs += @{ Ruta = $ruta; TrackId = $trackId; Index = [int]"0$($s.index)"; Codec = "$($s.codec_name)"; Lang = $lang; Title = $title; Forced = $forced
-                                     EsPGS = ("$($s.codec_name)" -match "pgs") }
+                                     EsPGS = ("$($s.codec_name)" -match "pgs"); HearingImpaired = $hi; Frames = $frames }
                 }
+            }
+            $minutos = 0.0
+            if ($json.format -and "$($json.format.duration)") { $minutos = [double]::Parse("$($json.format.duration)", [Globalization.CultureInfo]::InvariantCulture) / 60 }
+            $fila.Minutos = $minutos
+            # Subtítulos EXTERNOS de este vídeo: los de su carpeta cuyo nombre empieza por el suyo (el
+            # vídeo con el prefijo más largo se los queda, como en el motor). Con un solo vídeo en la
+            # carpeta, también los que no llevan el nombre de ningún vídeo.
+            $dir = Split-Path $ruta -Parent
+            $miBase = [IO.Path]::GetFileNameWithoutExtension($ruta)
+            $todosDir = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue)
+            $basesDir = @($todosDir | Where-Object { $_.Extension -match '(?i)^\.(mkv|mp4|ts)$' -and $_.Name -notmatch '_FINAL' -and $_.Name -notmatch '(?i)^Ensamblaje_' } | ForEach-Object { $_.BaseName })
+            foreach ($ext in @($todosDir | Where-Object { $_.Extension -match '(?i)^\.(srt|ass|ssa|sup|idx)$' -and $_.Name -notmatch '(?i)^(.+_)?sub_\d+_[a-z]{2,3}\.sup$' } | Sort-Object Name)) {
+                $nomExt = $ext.Name
+                $dueno = @($basesDir | Where-Object { $nomExt.StartsWith("$_", [StringComparison]::OrdinalIgnoreCase) } | Sort-Object Length -Descending)[0]
+                if ($dueno -and $dueno -ne $miBase) { continue }
+                if (-not $dueno -and $basesDir.Count -gt 1) { continue }
+                $codecExt = switch -Regex ($ext.Extension) { '(?i)srt' { 'subrip' } '(?i)ass' { 'ass' } '(?i)ssa' { 'ssa' } '(?i)sup' { 'hdmv_pgs_subtitle' } default { 'dvd_subtitle' } }
+                $fila.Subs += @{ Ruta = $ext.FullName; TrackId = 0; Index = 0; Codec = $codecExt; Lang = (Get-HdzIdiomaNombreSub $nomExt); Title = ''
+                                 Forced = ($nomExt -match '(?i)(forced|forzado)'); EsPGS = $false; Externo = $true; Nombre = $nomExt
+                                 HearingImpaired = ($ext.BaseName -match '(?i)(?<![a-z])(sdh|cc|sordos)(?![a-z])'); Frames = 0
+                                 SufijoExterno = $nomExt.Substring([math]::Min($miBase.Length, $nomExt.Length)) }
+            }
+            # Tipo (completos / forzados / SDH) y variante del español de cada sub. Primero lo que dicen
+            # sus metadatos; si no dicen nada, el contenido. Los internos de texto se leen de los primeros
+            # 5 minutos del vídeo (una sola pasada de ffmpeg); los externos, enteros.
+            $muestras = @{}
+            $textosInt = @($fila.Subs | Where-Object { -not $_.Externo -and $_.Codec -match '^(subrip|ass|ssa|webvtt|mov_text|text)$' })
+            if ($textosInt.Count -gt 0 -and (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+                $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("hdz_subscan_" + [guid]::NewGuid().ToString('N'))
+                [void][IO.Directory]::CreateDirectory($tmpDir)
+                try {
+                    $argsFf = @('-nostdin', '-y', '-v', 'error', '-i', $ruta)
+                    foreach ($s in $textosInt) {
+                        $extS = if ($s.Codec -match '^(ass|ssa)$') { 'ass' } else { 'srt' }
+                        $argsFf += @('-map', "0:$($s.Index)", '-t', '300', '-c:s', $extS, (Join-Path $tmpDir "$($s.Index).$extS"))
+                    }
+                    $argsFf += @('-map', '0:v:0?', '-t', '300', '-c:v', 'copy', '-f', 'null', '-')
+                    $null = & ffmpeg @argsFf 2>&1
+                    foreach ($s in $textosInt) {
+                        $f = @(Get-ChildItem -LiteralPath $tmpDir -File -Filter "$($s.Index).*")[0]
+                        if ($f -and $f.Length -gt 0) { $muestras["$($s.Index)"] = [IO.File]::ReadAllText($f.FullName) }
+                    }
+                } catch {} finally { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+            foreach ($s in $fila.Subs) {
+                $titulo = "$($s.Title)"
+                $tituloCompleto = ($titulo -match '(?i)completos?|complete|full') -and ($titulo -notmatch '(?i)forced|forzad')
+                $tipo = $null; $fuente = ''
+                if (($s.Forced -and -not $tituloCompleto) -or $titulo -match '(?i)forced|forzad') { $tipo = 'Forzados'; $fuente = 'metadatos' }
+                elseif ($s.HearingImpaired -or $titulo -match '(?i)\bSDH\b|\bCC\b|\bHoH\b|sordos|hearing') { $tipo = 'SDH'; $fuente = 'metadatos' }
+                elseif ($s.Frames -gt 0 -and $minutos -ge 10 -and ($s.Frames / $minutos) -lt $(if ($s.EsPGS) { 2.0 } else { 1.0 })) { $tipo = 'Forzados'; $fuente = 'contenido' }
+                elseif ($tituloCompleto) { $tipo = 'Completos'; $fuente = 'metadatos' }
+                $texto = $null; $minDensidad = 0
+                if ($s.Externo -and $s.Codec -match '^(subrip|ass|ssa)$') {
+                    try { $texto = [IO.File]::ReadAllText($s.Ruta) } catch {}
+                    $minDensidad = $minutos
+                } elseif ($muestras.ContainsKey("$($s.Index)") -and -not $s.Externo) { $texto = $muestras["$($s.Index)"] }
+                $esEsp = ((ConvertTo-HdzIdiomaSubCanon $s.Lang $titulo) -eq 'es') -and ($titulo -notmatch '(?i)castellano|espa[ñn]a|spain|european|latino|latam|am[eé]rica')
+                if ($texto) {
+                    $info = Get-HdzInfoTextoSub $texto $minDensidad -EsEspanol:$esEsp
+                    $s.Analizado = $true
+                    if (-not $tipo -and $info.Tipo) { $tipo = $info.Tipo; $fuente = 'contenido' }
+                    if ($esEsp -and $info.Variante) { $s.LangAuto = $info.Variante; $s.LangFuente = 'contenido' }
+                    $s.EsEspanolDudoso = $esEsp
+                }
+                $s.TipoAuto = if ($tipo) { $tipo } else { 'Completos' }
+                $s.TipoFuente = $fuente
             }
         } catch {
             $fila.Error = "$($_.Exception.Message)"
@@ -2611,12 +2713,40 @@ $scanWorker = {
         $fila
     }
     $lista = @($rutas)
-    if ($lista.Count -le 1) { return @(foreach ($ruta in $lista) { & $analizarVideo $ruta }) }
-    $definicion = $analizarVideo.ToString()
-    $filas = @($lista | ForEach-Object -ThrottleLimit 4 -Parallel { & ([scriptblock]::Create($using:definicion)) $_ })
-    $porRuta = @{}
-    foreach ($fila in $filas) { $porRuta[$fila.Ruta] = $fila }
-    return @(foreach ($ruta in $lista) { $porRuta[$ruta] })
+    if ($lista.Count -le 1) {
+        $filas = @(foreach ($ruta in $lista) { & $analizarVideo $ruta $rutaCore })
+    } else {
+        $definicion = $analizarVideo.ToString()
+        $res = @($lista | ForEach-Object -ThrottleLimit 4 -Parallel {
+            & ([scriptblock]::Create($using:definicion)) $_ $using:rutaCore
+        })
+        $porRuta = @{}
+        foreach ($fila in $res) { $porRuta[$fila.Ruta] = $fila }
+        $filas = @(foreach ($ruta in $lista) { $porRuta[$ruta] })
+    }
+    # Variante del español en serie: un capítulo con poco texto no se decide solo, pero el resto de la
+    # temporada sí. Los subs «equivalentes» (mismo sufijo de archivo externo, o misma posición y título
+    # de pista interna) heredan la variante de la mayoría si al menos 3 decididos coinciden en un 75%.
+    $grupos = @{}
+    foreach ($f in $filas) {
+        if (-not $f) { continue }
+        $posInt = 0
+        foreach ($s in @($f.Subs)) {
+            if (-not $s.Externo) { $posInt++ }
+            if (-not $s.EsEspanolDudoso) { continue }
+            $k = if ($s.Externo) { "ext|$($s.SufijoExterno)".ToLowerInvariant() } else { "int|$posInt|$($s.Title)" }
+            if (-not $grupos.ContainsKey($k)) { $grupos[$k] = @() }
+            $grupos[$k] += $s
+        }
+    }
+    foreach ($g in $grupos.Values) {
+        $decididos = @($g | Where-Object { $_.LangAuto })
+        if ($decididos.Count -lt 3) { continue }
+        $mayoria = @($decididos | Group-Object { $_.LangAuto } | Sort-Object Count -Descending)[0]
+        if ($mayoria.Count -lt [math]::Ceiling($decididos.Count * 0.75)) { continue }
+        foreach ($s in @($g | Where-Object { -not $_.LangAuto })) { $s.LangAuto = $mayoria.Name; $s.LangFuente = 'temporada' }
+    }
+    return $filas
 }
 function Get-VideosCarpeta($carpeta) {
     return @(Get-ChildItem -LiteralPath $carpeta -File -ErrorAction SilentlyContinue |
@@ -3016,7 +3146,7 @@ function Get-HdzTrackState($tipo) {
 function Update-HdzTrackBadge($tipo) {
     $st=Get-HdzTrackState $tipo;$total=$st.Rows.Count
     if(-not $total){Set-Badge $st.Badge '';return}
-    $on=@($st.Rows|Where-Object {$_.Choice.IsChecked}).Count;$files=@($st.Rows|ForEach-Object Archivo|Select-Object -Unique).Count
+    $on=@($st.Rows|Where-Object {$_.Choice.IsChecked}).Count;$files=@($st.Rows|ForEach-Object {Get-HdzGrupoFila $_}|Select-Object -Unique).Count
     Set-Badge $st.Badge "$on de $total $($st.Nombre)$(if($files -gt 1){" · $files archivos"})" $(if($on -lt $total){'warn'}else{'muted'})
 }
 # Punto único para marcar/desmarcar (clic, orden de la web y restauración de pestaña).
@@ -3049,17 +3179,19 @@ function New-HdzTrackRow($tipo,$key,$source,$id,$index,$cols,$etiqueta) {
     return $row
 }
 # Pinta las filas; con varios archivos (remezcla, lote) agrupa bajo el nombre de cada uno.
+function Get-HdzGrupoFila($row) { if($row.PSObject.Properties.Name -contains 'Video' -and $row.Video){"$($row.Video)"}else{"$($row.Archivo)"} }
 function Add-HdzTrackRows($tipo,$rows) {
     $st=Get-HdzTrackState $tipo
     $st.Panel.Children.Clear()
-    $files=@($rows|ForEach-Object Archivo|Select-Object -Unique);$last=$null
+    $files=@($rows|ForEach-Object {Get-HdzGrupoFila $_}|Select-Object -Unique);$last=$null
     foreach($row in @($rows)){
-        if($files.Count -gt 1 -and $row.Archivo -ne $last){
-            $hdr=[Windows.Controls.TextBlock]::new();$hdr.Text=Split-Path $row.Archivo -Leaf;$hdr.Foreground=$win.Resources['SubBrush'];$hdr.FontSize=11.5;$hdr.FontWeight='SemiBold'
-            $hdr.Margin=$(if($null -eq $last){'0,4,0,2'}else{'0,10,0,2'});$hdr.TextTrimming='CharacterEllipsis';$hdr.ToolTip=$row.Archivo;[void]$st.Panel.Children.Add($hdr)
-            $last=$row.Archivo
+        $grupo=Get-HdzGrupoFila $row
+        if($files.Count -gt 1 -and $grupo -ne $last){
+            $hdr=[Windows.Controls.TextBlock]::new();$hdr.Text=Split-Path $grupo -Leaf;$hdr.Foreground=$win.Resources['SubBrush'];$hdr.FontSize=11.5;$hdr.FontWeight='SemiBold'
+            $hdr.Margin=$(if($null -eq $last){'0,4,0,2'}else{'0,10,0,2'});$hdr.TextTrimming='CharacterEllipsis';$hdr.ToolTip=$grupo;[void]$st.Panel.Children.Add($hdr)
+            $last=$grupo
         }
-        [void]$st.Panel.Children.Add($row.Choice)
+        [void]$st.Panel.Children.Add($(if($row.PSObject.Properties.Name -contains 'Element' -and $row.Element){$row.Element}else{$row.Choice}))
     }
 }
 function Build-HdzAudioTracks($scope) {
@@ -3079,6 +3211,7 @@ function Build-HdzAudioTracks($scope) {
     $ui.cardAudioTracks.Visibility=if($rows.Count -or $ui.cardFiltroAudio.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
     Update-HdzTrackBadge 'Audio'
 }
+$opcionesTipoSub = @(@{T='Completos'; V='Completos'}, @{T='Forzados'; V='Forzados'}, @{T='SDH (para sordos)'; V='SDH'})
 function Build-HdzSubTracks($scope) {
     if(-not $ui.panSubTracks){return}
     $script:subTrackRows=@();$seen=@{};$rows=@()
@@ -3087,17 +3220,80 @@ function Build-HdzSubTracks($scope) {
         $id=if($null -ne $sub.TrackId){[int]$sub.TrackId}else{[int]$sub.Index};$key="$source|$id"
         if($seen.ContainsKey($key)){continue};$seen[$key]=$true
         $language=Get-IdiomaPistaGui $sub 'Sub';$formato=Get-HdzFormatoSubGui $sub.Codec
-        $tituloCompleto=("$($sub.Title)" -match '(?i)completos?|complete|full') -and ("$($sub.Title)" -notmatch '(?i)forced|forzad')   # igual que Test-TituloSubCompleto del motor
-        $tipoSub=if(($sub.Forced -and -not $tituloCompleto) -or "$($sub.Title)" -match '(?i)forced|forzad'){'Forzados'}elseif("$($sub.Title)" -match '(?i)\bSDH\b|\bCC\b'){'SDH'}else{'Completos'}
-        if($tipoSub -eq 'Forzados'){$formato+=' · Forzado'}elseif($tipoSub -eq 'SDH'){$formato+=' · SDH'}
-        $label="$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato"
+        $tipoSub=Get-TipoSubGui $sub
+        $col0=if($sub.Externo){'ext.'}else{"#$id"}
+        $col3=if($sub.Externo){"$(if($sub.SufijoExterno){$sub.SufijoExterno}else{$sub.Nombre})"}else{"$($sub.Title)"}
+        $label=if($sub.Externo){"$(Split-Path $file.Ruta -Leaf) · externo $($sub.Nombre) · $(NombreIdioma $language) · $formato · $tipoSub"}else{"$(Split-Path $source -Leaf) · pista $id · $(NombreIdioma $language) · $formato · $tipoSub"}
         if($sub.Title){$label+=" · $($sub.Title)"}
-        $row=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @("#$id",(NombreIdioma $language),$formato,"$($sub.Title)") $label
-        $row|Add-Member Pista $sub;$row|Add-Member TipoSub $tipoSub;$rows+=$row
+        $row=New-HdzTrackRow 'Sub' $key $source $id ([int]$sub.Index) @($col0,(NombreIdioma $language),$formato,$col3) $label
+        $row|Add-Member Pista $sub;$row|Add-Member TipoSub $tipoSub
+        $row|Add-Member Video "$($file.Ruta)"   # un .srt suelto se agrupa bajo su vídeo
+        $row|Add-Member Element (New-HdzFilaTipoSub $row)
+        $rows+=$row
     }}
     $script:subTrackRows=$rows;Add-HdzTrackRows 'Sub' $rows
+    if($rows.Count -gt 1){
+        # Cambiar el tipo de todos a la vez (cada fila se puede cambiar después por separado).
+        $g=[Windows.Controls.Grid]::new();$g.Margin='0,2,0,6'
+        $c1=[Windows.Controls.ColumnDefinition]::new();$c2=[Windows.Controls.ColumnDefinition]::new();$c2.Width=[Windows.GridLength]::new(170)
+        [void]$g.ColumnDefinitions.Add($c1);[void]$g.ColumnDefinitions.Add($c2)
+        $t=[Windows.Controls.TextBlock]::new();$t.Text='Tipo de todos los subtítulos de abajo:';$t.VerticalAlignment='Center';$t.FontStyle=[Windows.FontStyles]::Italic;$t.Foreground=$win.Resources['SubBrush']
+        [void]$g.Children.Add($t)
+        $cmbTodos=[Windows.Controls.ComboBox]::new();$cmbTodos.Style=$win.Resources['Combo'];$cmbTodos.Margin='8,1,0,1';[Windows.Controls.Grid]::SetColumn($cmbTodos,1)
+        Init-Combo $cmbTodos (@(@{T='— elegir —';V=''})+$opcionesTipoSub)
+        $cmbTodos.Add_SelectionChanged({param($sender)
+            $v=Get-ComboValor $sender;if(-not $v){return}
+            foreach($r in @($script:subTrackRows)){Set-HdzTipoSubFila $r $v}
+            $sender.SelectedIndex=0
+        })
+        [void]$g.Children.Add($cmbTodos)
+        $ui.panSubTracks.Children.Insert(0,$g)
+    }
     $ui.cardSubTracks.Visibility=if($rows.Count -or $ui.cardFiltro.Visibility -eq 'Visible'){'Visible'}else{'Collapsed'}
     Update-HdzTrackBadge 'Sub'
+}
+# Fila de la lista de subtítulos: casilla (incluir o no) + desplegable de tipo.
+function New-HdzFilaTipoSub($row) {
+    $g=[Windows.Controls.Grid]::new()
+    $c1=[Windows.Controls.ColumnDefinition]::new();$c2=[Windows.Controls.ColumnDefinition]::new();$c2.Width=[Windows.GridLength]::new(170)
+    [void]$g.ColumnDefinitions.Add($c1);[void]$g.ColumnDefinitions.Add($c2)
+    [void]$g.Children.Add($row.Choice)
+    $cmb=[Windows.Controls.ComboBox]::new();$cmb.Style=$win.Resources['Combo'];$cmb.VerticalAlignment='Center';$cmb.Margin='8,1,0,1'
+    [Windows.Controls.Grid]::SetColumn($cmb,1)
+    Init-Combo $cmb $opcionesTipoSub
+    Set-ComboValor $cmb $row.TipoSub
+    $cmb.ToolTip=Get-OrigenTipoSubGui $row.Pista
+    $cmb.DataContext=$row   # Tag lo usa Init-Combo para las opciones
+    $cmb.Add_SelectionChanged({param($sender) $v=Get-ComboValor $sender; if($v -and $v -ne $sender.DataContext.TipoSub){Set-HdzTipoSubFila $sender.DataContext $v}})
+    [void]$g.Children.Add($cmb)
+    $row|Add-Member ComboTipo $cmb
+    return $g
+}
+# Punto único para cambiar el tipo de una pista (desplegable, «todos», web).
+function Set-HdzTipoSubFila($row,[string]$tipo) {
+    if($tipo -notin @('Completos','Forzados','SDH')){return}
+    $clave="$($row.Archivo)|$($row.Id)"
+    if("$($row.Pista.TipoAuto)" -eq $tipo -and "$($row.Pista.TipoFuente)"){[void]$script:tiposSubManuales.Remove($clave)}else{$script:tiposSubManuales[$clave]=$tipo}
+    $row.TipoSub=$tipo
+    if($row.ComboTipo -and (Get-ComboValor $row.ComboTipo) -ne $tipo){Set-ComboValor $row.ComboTipo $tipo}
+    if($row.ComboTipo){$row.ComboTipo.ToolTip=Get-OrigenTipoSubGui $row.Pista}
+    $row.Etiqueta=($row.Etiqueta -replace ' · (Completos|Forzados|SDH)( · |$)'," · $tipo`$2")
+    $row.Choice.ToolTip=$row.Etiqueta
+    # Si ese tipo está desmarcado en el filtro «Tipos», la pista queda fuera (igual que al pulsar el chip).
+    $chip=@($script:chipsTiposSub|Where-Object{"$($_.Tag)" -eq $tipo})[0]
+    if($chip -and -not $chip.IsChecked -and $row.Choice.IsChecked){Set-HdzTrackSelected 'Sub' $row $false}
+}
+# Tipos que viajan al motor: los elegidos a mano y los detectados con alguna señal. Los que se
+# proponen «Completos» sin señales no se envían: el motor sigue decidiendo como siempre.
+function Get-HdzTiposSubsParaMotor($filas) {
+    $res=@();$vistos=@{}
+    foreach($f in @($filas)){foreach($s in @($f.Subs)){
+        $id=if($null -ne $s.TrackId){$s.TrackId}else{$s.Index};$k="$($s.Ruta)|$id"
+        if($vistos.ContainsKey($k)){continue};$vistos[$k]=$true
+        if(-not $script:tiposSubManuales.ContainsKey($k) -and -not "$($s.TipoFuente)"){continue}
+        $res+=[ordered]@{Archivo="$($s.Ruta)";Id=$id;Tipo=(Get-TipoSubGui $s)}
+    }}
+    return ,@($res)
 }
 # Filtros → filas: al marcar/desmarcar un idioma o un tipo, las pistas a las que afecta se marcan o
 # desmarcan con él. Solo se tocan las filas de ese idioma/tipo (no se pisan otras decisiones a mano);
@@ -3733,7 +3929,8 @@ function Aplicar-Analisis($filas) {
             # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndSub[$f.Nombre] = $true
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Texto" }
-                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $(NombreIdioma (ConvCanon $s.Lang $s.Title))"
+                $detIdioma = if ($s.LangAuto) { "$(NombreIdioma (ConvCanon $s.LangAuto '')) (por el texto$(if ($s.LangFuente -eq 'temporada') { ' de la temporada' }))" } else { NombreIdioma (ConvCanon $s.Lang $s.Title) }
+                $etiq = if ($s.Externo) { "$($f.Nombre)  —  externo $($s.Nombre) · detectado: $detIdioma" } else { "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $detIdioma" }
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
                 $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
                 $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
@@ -3792,7 +3989,9 @@ function Aplicar-Analisis($filas) {
             }
         }
     }
-    $script:subsAmbiguos = @($ambiguosMap.Values)
+    # El tipo (completos / forzados / SDH) se elige ahora por pista en la lista de subtítulos, con lo
+    # detectado ya marcado: la antigua tarjeta «sub único: Completo/Forzado» no se muestra.
+    $script:subsAmbiguos = @()
 
 
     # ---- lista enriquecida: se pinta en Construir-ListadoLote (filtra por pestaña en heterogéneo) ----
@@ -4237,7 +4436,8 @@ function Construir-Adaptacion($selScope) {
             # Todas las pistas se pueden corregir, incluso si ya declaran idioma.
                 $archUndSub[$f.Nombre] = $true
                 $fmt = if ($s.EsPGS) { "PGS" } else { "Texto" }
-                $etiq = "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $(NombreIdioma (ConvCanon $s.Lang $s.Title))"
+                $detIdioma = if ($s.LangAuto) { "$(NombreIdioma (ConvCanon $s.LangAuto '')) (por el texto$(if ($s.LangFuente -eq 'temporada') { ' de la temporada' }))" } else { NombreIdioma (ConvCanon $s.Lang $s.Title) }
+                $etiq = if ($s.Externo) { "$($f.Nombre)  —  externo $($s.Nombre) · detectado: $detIdioma" } else { "$($f.Nombre)  —  pista $($s.Index) · $fmt · detectado: $detIdioma" }
                 if ($s.Title) { $etiq += " · «$($s.Title)»" }
                 $id = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
                 $pistasUndSub += @{ Archivo = $f.Ruta; Id = $id; Etiqueta = $etiq }
@@ -4290,7 +4490,9 @@ function Construir-Adaptacion($selScope) {
             }
         }
     }
-    $script:subsAmbiguos = @($ambiguosMap.Values)
+    # El tipo (completos / forzados / SDH) se elige ahora por pista en la lista de subtítulos, con lo
+    # detectado ya marcado: la antigua tarjeta «sub único: Completo/Forzado» no se muestra.
+    $script:subsAmbiguos = @()
     # Aplicación de tarjetas (idéntico criterio que Aplicar-Analisis, ámbito = $selScope)
     if ($idiomasAudio.Keys.Count -gt 1) {
         $ui.cardFiltroAudio.Visibility = "Visible"
@@ -4547,7 +4749,7 @@ function Combinar-EscaneoRemezcla($res, $folders) {
                 if ($pareja.Count -gt 1) { continue } # La validación muestra el conflicto y no deja iniciar.
                 if (-not $pareja) { continue }
                 if ([bool]$cfgFuente.Audio) { $audios += @($pareja.Audios) }
-                if ([bool]$cfgFuente.Subs)  { $subs += @($pareja.Subs) }
+                if ([bool]$cfgFuente.Subs)  { $subs += @($pareja.Subs | Where-Object { -not $_.Externo }) }   # los .srt sueltos del donante no entran en la remezcla
             }
             if ([bool]$videoCfg.Audio) { $audios = @($video.Audios) + $audios }
             if ([bool]$videoCfg.Subs)  { $subs = @($video.Subs) + $subs }
@@ -4563,7 +4765,7 @@ function Combinar-EscaneoRemezcla($res, $folders) {
         $fila = @($res | Where-Object { "$($_.Ruta)" -eq "$($cfgFuente.Archivo)" } | Select-Object -First 1)
         if (-not $fila) { continue }
         if ([bool]$cfgFuente.Audio) { $audios += @($fila.Audios) }
-        if ([bool]$cfgFuente.Subs)  { $subs += @($fila.Subs) }
+        if ([bool]$cfgFuente.Subs)  { $subs += @($fila.Subs | Where-Object { -not $_.Externo -or $cfgFuente.Video }) }
     }
     return @(@{ Ruta = $video.Ruta; Nombre = $video.Nombre; Error = $video.Error; Video = $video.Video; Audios = @($audios); Subs = @($subs) })
 }
@@ -4638,14 +4840,14 @@ function Lanzar-Escaneo {
 
     if ($script:modoTest) {
         # Sin bucle de mensajes en modo test: escaneo síncrono.
-        $res = @(& $scanWorker $rutas)
+        $res = @(& $scanWorker $rutas (Join-Path $PSScriptRoot 'HDZ-Core.ps1'))
         if ($script:remixScanActivo) { $script:remixScanCrudo = @($res); $res = @(Combinar-EscaneoRemezcla $res $script:remixScanFolders) }
         Aplicar-Analisis @($res)
         if ($script:remixScanActivo) { Construir-InfoRemezcla $script:remixScanCrudo; Construir-PistasRemezcla }
         return
     }
     $ps = [powershell]::Create()
-    [void]$ps.AddScript($scanWorker.ToString()).AddArgument($rutas)
+    [void]$ps.AddScript($scanWorker.ToString()).AddArgument($rutas).AddArgument((Join-Path $PSScriptRoot 'HDZ-Core.ps1'))
     $script:scanPS = $ps
     $script:scanAsync = $ps.BeginInvoke()
     $script:scanGenLanzado = $script:scanGen
@@ -8954,6 +9156,22 @@ function Iniciar-Montaje($scope) {
         if ($undTodos.Count -gt 0) { $cfg.IdiomasUndPistas = @($undTodos) }          # reemplaza al global
         if ($mapaSU.Count -gt 0)  { $cfg.SubsUnicosPorArchivo = $mapaSU }
     }
+    # Subtítulos: tipo por pista (elegido o detectado) e idioma deducido del texto (castellano /
+    # latino) en las pistas que el usuario no ha corregido a mano.
+    $filasScanSubs = @(@($script:ultimoScan) + @($script:remixScanCrudo) | Where-Object { $_ })
+    $tiposMotor = Get-HdzTiposSubsParaMotor $filasScanSubs   # ya devuelve un array (sin aplanar)
+    if ($tiposMotor.Count -gt 0) { $cfg.TiposSubsPistas = $tiposMotor }
+    $idiomasPista = @($cfg.IdiomasUndPistas | Where-Object { $_ })
+    $yaIdioma = @{}; foreach ($e in $idiomasPista) { $yaIdioma["$($e.Archivo)|$($e.Id)|$($e.Tipo)"] = $true }
+    foreach ($f in $filasScanSubs) { foreach ($s in @($f.Subs)) {
+        if (-not $s.LangAuto) { continue }
+        $idS = if ($null -ne $s.TrackId) { $s.TrackId } else { $s.Index }
+        $kS = "$($s.Ruta)|$idS|Sub"
+        if ($yaIdioma.ContainsKey($kS) -or $script:idiomasManuales.ContainsKey($kS)) { continue }
+        $yaIdioma[$kS] = $true
+        $idiomasPista += [ordered]@{ Archivo = "$($s.Ruta)"; Id = $idS; Tipo = 'Sub'; Idioma = "$($s.LangAuto)" }
+    } }
+    if ($idiomasPista.Count -gt 0) { $cfg.IdiomasUndPistas = @($idiomasPista) }
 
     # ¿Qué películas (grupos) hay que lanzar, según el ámbito? Cada grupo = 1 trabajo independiente.
     $het = (("$(Get-ChipValor 'modoLote')") -eq "HETEROGENEO") -and (@($script:tabsProy).Count -gt 0)
@@ -9352,6 +9570,7 @@ function Reset-Todo {
     $script:timerIdiomasManuales.Stop()
     try { Detener-Bdinfo } catch {}
     $script:idiomasManuales = @{}
+    $script:tiposSubManuales = @{}
     $script:remixPresentationKey = $null
     $script:remixPresentation = @()
     if ($script:remixPairsPanel) { $script:remixPairsPanel.Children.Clear() }
@@ -10426,7 +10645,7 @@ function Componer-EstadoAgente {
         audioTracksSupported = $true
         audioTracks = @($script:audioTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
         subTracksSupported = $true
-        subTracks = @($script:subTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked}})
+        subTracks = @($script:subTrackRows | ForEach-Object {@{archivo=$_.Archivo;id=$_.Id;index=$_.Index;etiqueta=$_.Etiqueta;sel=[bool]$_.Choice.IsChecked;tipo="$($_.TipoSub)";origenTipo=(Get-OrigenTipoSubGui $_.Pista)}})
         conversionesAudioVisible = ("$($ui.cardConvAudio.Visibility)" -eq "Visible")
         defAudioVisible = ("$($ui.cardDefAudio.Visibility)" -eq "Visible")
         undAudioVisible = ("$($ui.cardUndAudio.Visibility)" -eq "Visible")
@@ -10658,6 +10877,9 @@ function Aplicar-ComandoAgente($c) {
             }
             "set_sub_track" {
                 foreach($row in @($script:subTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTrackSelected 'Sub' $row ([bool]$c.value);break}}
+            }
+            "set_sub_type" {
+                foreach($row in @($script:subTrackRows)){if($row.Archivo -eq "$($c.archivo)" -and "$($row.Id)" -eq "$($c.id)"){Set-HdzTipoSubFila $row "$($c.value)";break}}
             }
             "set_audio_lang" {
                 $cod = "$($c.code)"

@@ -66,6 +66,13 @@ try {
     Assert (@($script:chipsTiposSub | Where-Object IsChecked).Count -eq 3) 'Los tipos no empiezan todos marcados'
     $state = Componer-EstadoAgente | ConvertFrom-Json
     Assert ($state.tiposSubsVisible -and @($state.tiposSubs).Count -eq 3) 'La web no recibe el selector de tipos'
+    # La GUI ya ve el SDH sin marca por su texto (5 primeros minutos) y lo propone en la lista.
+    $sdhSinMarca = @($rows[0].Subs)[5]
+    Assert ($sdhSinMarca.TipoAuto -eq 'SDH' -and $sdhSinMarca.TipoFuente -eq 'contenido') "La GUI no detecta el SDH sin marca: $($sdhSinMarca.TipoAuto)/$($sdhSinMarca.TipoFuente)"
+    Assert (@($script:subTrackRows)[5].TipoSub -eq 'SDH') 'La lista no propone SDH para el sub sin marca'
+    # A partir de aquí se comprueba la detección PROPIA del motor (cuando la GUI no pudo leer el texto):
+    # se quitan las decisiones por contenido de la GUI para que no viajen en TiposSubsPistas.
+    foreach ($s in @($rows[0].Subs)) { if ($s.TipoFuente -eq 'contenido') { $s.TipoFuente = '' } }
 
     $ui.txtTitulo.Text = 'Subtipos Audit'; $ui.txtAno.Text = '2026'
     $ui.swSerie.IsChecked = $false

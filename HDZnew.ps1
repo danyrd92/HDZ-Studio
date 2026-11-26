@@ -364,6 +364,23 @@ if ($vCfgUndPistas) {
         }
     }
 }
+# Tipo de cada subtítulo decidido en la GUI (detectado o elegido a mano): clave "<ruta>|<id>"
+# (los externos llevan id 0) -> Completos / Forzados / SDH. Manda sobre las heurísticas del motor.
+$global:tiposSubGui = @{}
+foreach ($p in @(Get-CfgGui "TiposSubsPistas")) {
+    if ($p -and $p.Archivo -and $null -ne $p.Id -and "$($p.Tipo)" -in @('Completos', 'Forzados', 'SDH')) {
+        try { $global:tiposSubGui["$([IO.Path]::GetFullPath("$($p.Archivo)").ToLowerInvariant())|$($p.Id)"] = "$($p.Tipo)" } catch {}
+    }
+}
+function Get-TipoSubGuiMotor($sub) {
+    if ($global:tiposSubGui.Count -eq 0) { return $null }
+    $ruta = if ($sub.Origen -eq 'Externo') { "$($sub.ID)" } else { "$($sub.ArchivoFuenteMkv)" }
+    $id = if ($sub.Origen -eq 'Externo') { 0 } else { $sub.ID }
+    if (-not $ruta) { return $null }
+    try { $k = "$([IO.Path]::GetFullPath($ruta).ToLowerInvariant())|$id" } catch { return $null }
+    if ($global:tiposSubGui.ContainsKey($k)) { return $global:tiposSubGui[$k] }
+    return $null
+}
 
 # --- LOGGING PERSISTENTE (D3) ---
 # Los logs se guardan SIEMPRE en la carpeta del proyecto (logs\ junto al script), no en la
@@ -1750,6 +1767,12 @@ function Resolve-SubsExternosForzados($rutasArchivosMkv, $prefijoArchivo, $decis
         }
         $kExt = "EXT|$($c.NombreExterno)"
         if ($decisiones.ContainsKey($kExt)) { continue }   # ya decidido
+        # Tipo elegido (o detectado) en la lista de subtítulos de la GUI: no se pregunta.
+        $tGuiExt = Get-TipoSubGuiMotor ([pscustomobject]@{ Origen = 'Externo'; ID = (Join-Path $rutaCarpeta $c.NombreExterno) })
+        if ($tGuiExt) {
+            $decisiones[$kExt] = if ($tGuiExt -eq 'Forzados') { "Forzado" } else { "Completo" }
+            continue
+        }
 
         # Decisión pre-elegida en la GUI: por sub (idioma+formato), con respaldo global.
         $cfgSubUnico = Get-DecisionSubGui $c.CodLang $c.FmtSimple
@@ -1786,33 +1809,24 @@ function Resolve-SubsExternosForzados($rutasArchivosMkv, $prefijoArchivo, $decis
 # (mkvmerge -J / ServiceKind=HI de mediainfo), el Title o el nombre del archivo, y por último el
 # contenido: un SDH describe sonidos ([música], ♪...) en muchas líneas; un completo normal, en casi ninguna.
 $patronTituloSdh = '(?i)(\bSDH\b|\bCC\b|\bHoH\b|sordos|hearing|malentendant)|(?-i:\bHI\b)'   # HI en mayúsculas: "hi" es hindi
-function Get-ProporcionSonidoSrt([string]$texto) {
-    $bloques = @($texto -split '\r?\n\s*\r?\n' | Where-Object { $_ -match '-->' })
-    if ($bloques.Count -eq 0) { return 0 }
-    $conSonido = @($bloques | Where-Object {
-        $lineas = (($_ -split '\r?\n') | Where-Object { $_ -notmatch '-->' -and $_ -notmatch '^\s*\d+\s*$' }) -join ' '
-        $lineas -match '\[[^\]]+\]|\([^\)]{3,}\)|♪'
-    }).Count
-    return $conSonido / $bloques.Count
-}
 function Set-FlagSdh($listaSubs) {
     if (-not $listaSubs -or $listaSubs.Count -eq 0) { return }
     foreach ($s in $listaSubs) {
-        $s | Add-Member -NotePropertyName "EsSDH" -NotePropertyValue ((-not $s.IsForced) -and [bool]$s.SdhFlag) -Force
+        $esSdh = (-not $s.IsForced) -and [bool]$s.SdhFlag
+        if ($s.PSObject.Properties.Name -contains 'TipoGui' -and $s.TipoGui) { $esSdh = ($s.TipoGui -eq 'SDH') }
+        $s | Add-Member -NotePropertyName "EsSDH" -NotePropertyValue $esSdh -Force
     }
-    # Contenido: solo en grupos (idioma, texto plano) con 2+ completos sin señal, que es donde un SDH
-    # sin marcar se confunde con el completo normal. Basta con los primeros 10 minutos: ffmpeg los
-    # saca de una pasada por MKV de origen y el vídeo copiado a null le marca dónde parar (sin él lee
-    # el archivo entero). Si ffmpeg falla, mkvextract del sub completo.
-    $candidatos = @{}
+    # Contenido: cualquier completo de texto sin señal (también si es el único de su idioma) y sin
+    # tipo decidido en la GUI. De los internos basta con los primeros 10 minutos: ffmpeg los saca de
+    # una pasada por MKV de origen y el vídeo copiado a null le marca dónde parar (sin él lee el
+    # archivo entero). Si ffmpeg falla, mkvextract del sub completo. Los externos se leen enteros.
+    $aMedir = @()
     foreach ($s in $listaSubs) {
         if ($s.IsForced -or $s.EsSDH) { continue }
-        if ("$($s.Format)" -notmatch '(?i)srt|subrip|utf-?8|text') { continue }
-        $k = "$($s.CodLang)"
-        if (-not $candidatos.ContainsKey($k)) { $candidatos[$k] = @() }
-        $candidatos[$k] += $s
+        if ($s.PSObject.Properties.Name -contains 'TipoGui' -and $s.TipoGui) { continue }
+        if ("$($s.Format)" -notmatch '(?i)srt|subrip|utf-?8|text|ass|ssa') { continue }
+        $aMedir += $s
     }
-    $aMedir = @($candidatos.Values | Where-Object { @($_).Count -gt 1 } | ForEach-Object { $_ })
     if ($aMedir.Count -eq 0) { return }
     $temporales = @()
     try {
@@ -1837,10 +1851,11 @@ function Set-FlagSdh($listaSubs) {
         foreach ($s in $aMedir) {
             $ruta = if ($s.Origen -eq 'Interno') { $s.RutaTextoSdh } else { "$($s.ID)" }
             if (-not $ruta -or -not (Test-Path -LiteralPath $ruta)) { continue }
-            $prop = Get-ProporcionSonidoSrt (Get-Content -LiteralPath $ruta -Raw -Encoding UTF8)
-            if ($prop -ge 0.2) {
+            # Misma detección que la GUI (HDZ-Core): sonidos descritos, corchetes o nombres de quien habla.
+            $info = Get-HdzInfoTextoSub (Get-Content -LiteralPath $ruta -Raw -Encoding UTF8) 0
+            if ($info.Tipo -eq 'SDH') {
                 $s.EsSDH = $true
-                Write-Host "       -> Sub $($s.NomLang) ID=$($s.ID) marcado SDH por contenido ($([math]::Round($prop * 100))% de líneas con sonidos)" -ForegroundColor DarkGray
+                Write-Host "       -> Sub $($s.NomLang) ID=$(if ($s.Origen -eq 'Externo') { Split-Path "$($s.ID)" -Leaf } else { $s.ID }) marcado SDH por contenido ($([math]::Round($info.Sonido * 100))% de líneas con sonidos, $([math]::Round($info.Descripciones * 100))% con descripciones)" -ForegroundColor DarkGray
             }
         }
     } finally {
@@ -3475,9 +3490,16 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
             continue 
         }
 
+        # Subtítulo externo desmarcado en la lista de pistas de la GUI (ruta del archivo, id 0).
+        if ($tipoPista -eq "Sub" -and -not (Test-HdzSubTrackKept $ext.FullName 0)) {
+            Write-Host "   [GUI] Subtítulo externo '$($ext.Name)' desmarcado: no entra." -ForegroundColor DarkGray
+            continue
+        }
         $langCode = if ($pExt) { $pExt.Language } else { "" }
         $llaveMemoria = "Externo_$($ext.FullName)"
-        if ($memoriaIdiomas.ContainsKey($llaveMemoria)) { $langCode = $memoriaIdiomas[$llaveMemoria] } 
+        $idiomaGuiExt = if ($tipoPista -eq "Sub") { $global:undPistasGui["$($ext.FullName)|0|Sub"] } else { $null }
+        if ($idiomaGuiExt) { $langCode = Get-LanguageCode "$idiomaGuiExt" "" }
+        elseif ($memoriaIdiomas.ContainsKey($llaveMemoria)) { $langCode = $memoriaIdiomas[$llaveMemoria] }
         elseif ([string]::IsNullOrWhiteSpace($langCode) -or $langCode -eq "und") {
             if     ($ext.Name -match "(?i)(?<![a-z])(latino|latam|lat)(?![a-z])")           { $langCode = "es-419" }
             elseif ($ext.Name -match "(?i)(?<![a-z])(spa|es|castellano|cast)(?![a-z])")     { $langCode = "es" }
@@ -3629,6 +3651,15 @@ function Format-Audios($audios) {
 # Ordena subtítulos detectando forzados con flag de mediainfo + heurística (Bug 8)
 function Format-Subs($subs, $rutaMkvOrigen = $null, $decisionesSubUnico = $null) {
     Set-FlagForzados $subs $rutaMkvOrigen $decisionesSubUnico
+    # Tipo decidido en la GUI (detectado al analizar o elegido a mano): manda sobre las heurísticas.
+    foreach ($s in @($subs)) {
+        $tGui = Get-TipoSubGuiMotor $s
+        $s | Add-Member -NotePropertyName "TipoGui" -NotePropertyValue $tGui -Force
+        if ($tGui) {
+            $s.IsForced = ($tGui -eq 'Forzados')
+            Write-Host "       -> Sub $($s.NomLang) ID=$(if ($s.Origen -eq 'Externo') { Split-Path "$($s.ID)" -Leaf } else { $s.ID }): $tGui (GUI)" -ForegroundColor DarkGray
+        }
+    }
     Set-FlagSdh $subs
     $subsF = @(); $orden = 0
     foreach ($s in $subs) {

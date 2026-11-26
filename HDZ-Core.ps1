@@ -186,3 +186,81 @@ function Assert-HdzRemixDurations([string]$Video, [string[]]$Sources) {
         elseif ([math]::Abs($seconds - $reference) -gt [math]::Max(3, $reference * 0.001)) { throw "Las versiones de la remezcla tienen duraciones diferentes: '$(Split-Path $file -Leaf)' ($seconds s frente a $reference s). Revisa que sean el mismo montaje; no se ha cambiado ningún original." }
     }
 }
+
+# --- Subtítulos de texto: tipo (completo / forzado / SDH) y variante del español por el contenido ---
+# La GUI lo usa al analizar (para proponer el tipo y el idioma de cada pista) y el motor cuando monta
+# sin decisión de la GUI. Funciones puras: reciben el texto ya leído.
+function Get-HdzBloquesSub([string]$Texto) {
+    if (-not $Texto) { return @() }
+    if ($Texto -match '(?m)^\[Events\]') {
+        # ASS/SSA: el texto es el décimo campo de cada «Dialogue:»; fuera etiquetas {\...} y \N.
+        return @([regex]::Matches($Texto, '(?m)^Dialogue:(?:[^,\r\n]*,){9}(.*)$') | ForEach-Object {
+            (($_.Groups[1].Value -replace '\{[^}]*\}', '') -replace '\[Nn]', ' ').Trim()
+        } | Where-Object { $_ })
+    }
+    return @($Texto -split '\r?\n\s*\r?\n' | Where-Object { $_ -match '-->' } | ForEach-Object {
+        ((($_ -split '\r?\n') | Where-Object { $_ -notmatch '-->' -and $_ -notmatch '^\s*\d+\s*$' }) -join ' ').Trim()
+    } | Where-Object { $_ })
+}
+# Variante del español: los castellanos tutean en plural (vosotros, «habláis»), los latinos usan
+# «ustedes» y su propio vocabulario. Devuelve 'es', 'es-419' o $null si el texto no lo deja claro.
+function Get-HdzVarianteEspanol([string[]]$Bloques) {
+    $t = ' ' + ((@($Bloques) -join ' ').ToLowerInvariant()) + ' '
+    if ($t.Length -lt 200) { return $null }
+    $castFuerte = [regex]::Matches($t, '(?<![\p{L}])(vosotr[oa]s|vuestr[oa]s?|os\s+(?:lo|la|los|las|he|ha|has|hemos|hab[eé]is|vais|voy|dejo|digo|quiero|juro)|(?!diecis|veintis)\p{L}{2,}(?:[aá]is|[eé]is)(?=[^\p{L}]))(?![\p{L}])').Count
+    $castDebil = [regex]::Matches($t, '(?<![\p{L}])(vale[,.!?¡¿]|t[ií][oa][,.!?]|ordenador|m[oó]vil|zumo|gilipollas|guay|mola|coche|patata|tronco[,.!?])').Count
+    $lat = [regex]::Matches($t, '(?<![\p{L}])(ustedes|carro|computadora|celular|jugo|manejar|lind[oa]s?|ch[eé]vere|ahorita|enojad[oa]s?|ac[aá](?=[^\p{L}])|platicar|rentar|boleto|g[uü]ey|chamac[oa]s?|mesero|pararse|apur[aá]te|qu[eé]\s+onda)(?![\p{L}])').Count
+    # «coche», «vale»... también se oyen en partes de Latinoamérica (y en traducciones neutras): pesan poco.
+    $cast = 2 * $castFuerte + 0.5 * $castDebil
+    # «vosotros/habláis» no existe en latino: con pocas apariciones ya decide.
+    if ($castFuerte -ge 3 -and $cast -ge $lat) { return 'es' }
+    if ($lat -ge 3 -and $lat -ge 2.5 * [math]::Max(1, $cast)) { return 'es-419' }
+    if ($cast -ge 4 -and $cast -ge 1.5 * $lat) { return 'es' }
+    return $null
+}
+# $Minutos: duración del vídeo completo (0 si el texto es solo una muestra: entonces no se decide
+# «forzado» por densidad). $EsEspanol: calcula también la variante.
+function Get-HdzInfoTextoSub([string]$Texto, [double]$Minutos = 0, [switch]$EsEspanol) {
+    $bloques = @(Get-HdzBloquesSub $Texto)
+    $n = $bloques.Count
+    $r = [ordered]@{ Bloques = $n; Sonido = 0.0; Descripciones = 0.0; Tipo = $null; Variante = $null }
+    if ($n -eq 0) { return [pscustomobject]$r }
+    # SDH: describe sonidos ([APLAUSOS], (risas)) o nombra a quien habla («HANNAH: ...»). Un completo
+    # normal casi nunca lleva corchetes; las notas musicales (♪) solas no bastan, salen en canciones.
+    $desc = @($bloques | Where-Object { $_ -match '\[[^\]]{2,}\]|\([^\)]{3,}\)' }).Count
+    $son = @($bloques | Where-Object { $_ -match '\[[^\]]+\]|\([^\)]{3,}\)|\u266A' }).Count
+    $hablante = @($bloques | Where-Object { $_ -cmatch '^\s*-?\s*\p{Lu}[\p{Lu}\s\.]{1,24}:\s' }).Count
+    $r.Sonido = [math]::Round($son / $n, 3); $r.Descripciones = [math]::Round($desc / $n, 3)
+    if ($Minutos -ge 10 -and $n -lt 150 -and ($n / $Minutos) -lt 1.0) { $r.Tipo = 'Forzados' }
+    elseif ($r.Sonido -ge 0.2 -or $desc -ge 10 -or ($desc -ge 5 -and $r.Descripciones -ge 0.03) -or ($hablante -ge 5 -and ($hablante / $n) -ge 0.03)) { $r.Tipo = 'SDH' }
+    elseif ($n -ge 30) { $r.Tipo = 'Completos' }
+    if ($EsEspanol -and $r.Tipo -ne 'Forzados') { $r.Variante = Get-HdzVarianteEspanol $bloques }
+    return [pscustomobject]$r
+}
+# Idioma de un subtítulo externo por su nombre («Peli.es.srt», «Peli.latino.srt», «Peli_sub_3_spa.srt»).
+function Get-HdzIdiomaNombreSub([string]$Nombre) {
+    $base = [IO.Path]::GetFileNameWithoutExtension($Nombre)
+    if ($base -match '(?i)_sub_\d+_([a-z]{2,3})$') { $c = $Matches[1].ToLowerInvariant() }
+    elseif ($base -match '(?i)(?<![a-z])(latino|latam|lat|es-419|es-la|es-mx)(?![a-z])') { return 'es-419' }
+    elseif ($base -match '(?i)(?<![a-z])(castellano|cast|es-es)(?![a-z])') { return 'es' }
+    else {
+        # La etiqueta de idioma va al final («…Love It.es.cc»): se busca desde la extensión hacia
+        # atrás, para que una palabra del título («It», «De») no se tome por el idioma.
+        $c = $null
+        $trozos = @($base -split '[\._\s-]+' | Where-Object { $_ })
+        for ($i = $trozos.Count - 1; $i -ge 1; $i--) {
+            if ($trozos[$i] -match '^(?i)(spa|es|eng|en|fre|fra|fr|ger|deu|de|ita|it|por|pt|jpn|ja|chi|zho|zh|kor|ko|cat|ca|eus|eu|glg|gl)$') { $c = $trozos[$i].ToLowerInvariant(); break }
+        }
+        if (-not $c) { return 'und' }
+    }
+    switch ($c) { { $_ -in 'spa','es' } { 'es' } { $_ -in 'eng','en' } { 'eng' } default { Convert-HdzLanguage $c } }
+}
+# Castellano / latino / otro a partir del código y el título de una pista (igual que ConvCanon de la GUI
+# para el español; el resto de idiomas, en su código de tres letras).
+function ConvertTo-HdzIdiomaSubCanon($lang, $title = "") {
+    $l = Convert-HdzLanguage "$lang"
+    if ([string]::IsNullOrWhiteSpace($l) -or $l -eq "und") { return "und" }
+    if ($l -match "^es-(419|mx|ar|co|cl|pe|ve|la|us)$" -or $l -eq "lat") { return "es-419" }
+    if ($l -in @("es", "spa", "cas") -or $l -match "^es-") { if ("$title" -match "(?i)latino|latinoam|latam|hispanoam") { return "es-419" }; return "es" }
+    return $l
+}
