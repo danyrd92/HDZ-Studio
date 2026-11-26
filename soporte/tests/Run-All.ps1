@@ -34,6 +34,7 @@ foreach($test in @('Test-Media.ps1','Test-Plataformas.ps1','Test-Hybrid.ps1','Te
 if($IncludeMontaje){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1');if($LASTEXITCODE -ne 0){throw 'Falló el montaje completo'}}
 if($IncludeMontaje){foreach($format in @('480i','576i')){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1') -VideoFormat $format;if($LASTEXITCODE -ne 0){throw "Falló el montaje SD $format"}}}
 if($IncludeMontaje){foreach($mode in @('INDIVIDUAL','PACK','AMBOS')){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-Montaje.ps1') -CaptureFailure -TorrentMode $mode;if($LASTEXITCODE -ne 0){throw "Las capturas bloquean el torrent $mode"}}}
+if($IncludeMontaje){& pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-MontajeSrtPorCapitulo.ps1');if($LASTEXITCODE -ne 0){throw 'Los SRT de un capítulo se mezclan con los de otros'}}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-TrackLanguages.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló la corrección de idiomas por pista'}
 & pwsh -NoProfile -STA -File (Join-Path $PSScriptRoot 'Test-SubtitleTypes.ps1'); if($LASTEXITCODE -ne 0){throw 'Falló el selector de tipos de subtítulos (SDH y duplicados)'}
 & node (Join-Path $PSScriptRoot 'test_web_languages.cjs'); if($LASTEXITCODE -ne 0){throw 'Falló la corrección de idiomas web'}

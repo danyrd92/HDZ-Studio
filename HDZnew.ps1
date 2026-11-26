@@ -3439,6 +3439,27 @@ function Build-PistasBrutas($origenesPistas, $esHibrido, $memoriaIdiomas, $decis
             return $true
         })
     }
+    # Externos sueltos (SRT, audios...) que el usuario deja con el nombre de cada capítulo
+    # ("Serie_S02E02_Titulo.es.srt"): cada uno pertenece al vídeo de la carpeta cuyo nombre es el
+    # prefijo MÁS LARGO del suyo (así "Ep1" no se queda los de "Ep10"). Solo entran los que son
+    # de los vídeos de este montaje, o los que no son de ningún vídeo (p. ej. "subs.es.srt" junto
+    # a una sola película). Sin esto, en una serie cada capítulo recibía los SRT de todos y la
+    # dedup se quedaba con los del primero.
+    $basesVideosCarpeta = @(Get-ChildItem -LiteralPath $rutaCarpeta -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -match "(?i)^\.(mkv|mp4|ts)$" -and $_.Name -notmatch "_FINAL" -and $_.Name -notmatch "(?i)^Ensamblaje_" } |
+        ForEach-Object { $_.BaseName })
+    if ($basesVideosCarpeta.Count -gt 1) {
+        $basesPropias = @($listaArchivos | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension("$_") })
+        if ($prefijoSrtPropio) { $basesPropias += $prefijoSrtPropio }
+        $archivosExternos = @($archivosExternos | Where-Object {
+            $nomExt = $_.Name
+            $dueno = $basesVideosCarpeta | Where-Object { $nomExt.StartsWith("$_", [StringComparison]::OrdinalIgnoreCase) } |
+                Sort-Object Length -Descending | Select-Object -First 1
+            if (-not $dueno -or ($basesPropias -contains $dueno)) { return $true }
+            Write-DiagLinea "  [externos] '$nomExt' es de '$dueno', no de este montaje: se ignora."
+            return $false
+        })
+    }
     # NOTA: en AMBAS opciones (CONSERVAR_PGS y ELIMINAR_PGS) los SRT convertidos SÍ entran al MKV.
     # La diferencia entre opciones es si se conservan o no los PGS INTERNOS del MKV, lo cual se
     # gestiona fuera (filtro de pistas internas tipo PGS según $decisionPGS).
